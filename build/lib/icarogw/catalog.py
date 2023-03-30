@@ -10,7 +10,8 @@ from tqdm import tqdm
 LOWERL=np.nan_to_num(-np.inf)
 
 def user_normal(x,mu,sigma):
-    ''' A utility function meant only for this module. It returns a normalized gaussian distribution
+    ''' 
+    A utility function meant only for this module. It returns a normalized gaussian distribution
     
     Parameters
     ----------
@@ -20,18 +21,22 @@ def user_normal(x,mu,sigma):
     Returns
     -------
     Values
+    
     '''
     return xp.power(2*xp.pi*(sigma**2),-0.5)*xp.exp(-0.5*xp.power((x-mu)/sigma,2.))
 
 def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,ptype='uniform'):
-    ''' A utility function meant only for this module. Calculates the EM likelihood in redshift times a uniform in comoving volume prior
+    ''' 
+    A utility function meant only for this module. Calculates the EM likelihood in redshift times a uniform in comoving volume prior
     
     Parameters
     ----------
     z: xp.array
         Values at which to evaluate the EM likelihood times the prior. This is usually and array that starts from 0 and goes to zcut
-    zobs, sigmaobs: Floats
-        Central value of the galaxy redshift and its sigma. Note if flat EM likelihood sigma is the half-widht of the box distribution.
+    zobs: float 
+        Central value of the galaxy redshift
+    sigmaobs: float
+        Std of galaxy redshift localization. Note if flat EM likelihood sigma is the half-widht of the box distribution.
     cosmology: Class
         Cosmology class from icarogw
     Numsigma: float
@@ -42,6 +47,7 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
     Returns
     -------
     Values of the EM likelihood times the prior evaluated on z
+    
     '''
     
     # Lower limit for the integration. A galaxy must be at a positive redshift
@@ -101,7 +107,7 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
     
 def generate_fake_catalog(zmin,zmax,sigmaz,maglim,band,cosmology,outname='fake_cat.hdf5'):
     '''
-    Generates the
+    Generates a fake catalog
     
     Parameters
     ----------
@@ -148,11 +154,31 @@ def generate_fake_catalog(zmin,zmax,sigmaz,maglim,band,cosmology,outname='fake_c
     return output_dict
 
 class galaxy_catalog(object):
+    '''
+    A class to handle galaxy catalogs. This class creates a hdf5 file containing all the necessary informations.
+    '''
+    
     
     def __init__(self):
         pass
     
     def create_hdf5(self,filename,cat_data,band,nside):
+        '''
+        Creates the HDF5 file
+
+        Parameters
+        ----------
+        filename: string
+            HDF5 file name to create
+        cat_data: dictionary
+            Dictionary of arrays containings for each galaxy 'ra': right ascensions in rad, 'dec': declination in radians
+            'z': galaxy redshift, 'sigmaz': redshift uncertainty (can not be zero), 'm': apparent magnitude.
+        band: string
+            Band to use for the background corrections, need to be compatible with apparent magnitude. Bands available
+            'K', 'W1', 'bJ'
+        nside: int
+            Nside to use for the healpy pixelization
+        '''
         
         # This for loop removes the galaxies with NaNs or inf as entries 
         for key in list(cat_data.keys()):
@@ -180,6 +206,18 @@ class galaxy_catalog(object):
         self.calc_kcorr=kcorr(self.hdf5pointer['catalog'].attrs['band'])
     
     def load_hdf5(self,filename,cosmo_ref=None,epsilon=None):
+        '''
+        Loads the catalog HDF5 file
+        
+        Parameters
+        ----------
+        filename: string
+            Name of the catalgo HDF5 file to load.
+        cosmo_ref: class 
+            Cosmology class used to create the catalog
+        epsilon: float
+            Luminosity weight index used to create the galaxy density interpolant
+        '''
         
         self.hdf5pointer = h5py.File(filename,'r')
         self.sch_fun=galaxy_MF(band=self.hdf5pointer['catalog'].attrs['band'])
@@ -227,8 +265,18 @@ class galaxy_catalog(object):
         except:
             print('interpolant not loaded')
     
-    def calculate_mthr(self,mthr_percentile=50,nside_mthr=None):        
+    def calculate_mthr(self,mthr_percentile=50,nside_mthr=None):
+        '''
+        Calculates the apparent magnitude threshold as a function of the sky pixel.
+        The apparent magnitude threshold is defined from the inverse CDF of galaxies reported in each pixel.
         
+        Parameters
+        ----------
+        mthr_percentile: float
+            Percentile to use to calculate the apparent magnitude threshold
+        nside_mthr: int 
+            Nside to compute threshold, it should be higher or equal than the one used to pixelise galaxies.
+        '''
         
         if nside_mthr is None:
             nside_mthr = int(self.hdf5pointer['catalog'].attrs['nside'])
@@ -320,7 +368,8 @@ class galaxy_catalog(object):
             Redshift
         radec_indices: xp.array
             Healpy indices
-        cosmology: cosmology class
+        cosmology: class 
+            cosmology class
         dl: xp.array
             dl values already calculated
         
@@ -345,7 +394,8 @@ class galaxy_catalog(object):
         
         Parameters
         ----------
-        cosmo_ref: Cosmology used to compute the differential of comoving volume (normalized)
+        cosmo_ref: class 
+            Cosmology used to compute the differential of comoving volume (normalized)
         epsilon: float
             Luminosity weight
         Nres: int 
@@ -448,7 +498,7 @@ class galaxy_catalog(object):
             interpo = 0.
             
             for gal in gal_index:
-                # List of galaxy catalog density in increasing order per pixel bin
+                # List of galaxy catalog density in increasing order per pixel. This corresponds to Eq. 2.35 on the overleaf document
                 Mv=m2M(cat_data['m'][idx_in_range[gal]],cosmo_ref.z2dl(z_grid),self.calc_kcorr(z_grid))               
                 interpo+=absM_rate.evaluate(self.sch_fun,Mv)*EM_likelihood_prior_differential_volume(z_grid,
                                                             cat_data['z'][idx_in_range[gal]],cat_data['sigmaz'][idx_in_range[gal]],cosmo_ref
@@ -470,7 +520,8 @@ class galaxy_catalog(object):
             Redshift array
         skypos: xp.array
             Array containing the healpix indeces where to evaluate the interpolant
-        cosmology: cosmology class to use for the computation
+        cosmology: class
+            cosmology class to use for the computation
         dl: xp.array
             Luminosity distance in Mpc
         average: bool
@@ -498,7 +549,7 @@ class galaxy_catalog(object):
             gcpart=xp.interp(z,self.z_grid,self.dNgal_dzdOm_sky_mean,left=0.,right=0.)
         else:        
             gcpart=interpn((self.z_grid,self.pixel_grid),self.dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
-                                fill_value=0.,method='linear')
+                                fill_value=0.,method='linear') # If a posterior samples fall outside, then you return 0
         
         bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array)*cosmology.dVc_by_dzdOmega_at_z(z)
         
@@ -508,6 +559,28 @@ class galaxy_catalog(object):
         '''
         This method checks the comoving volume distribution built from the catalog. It is basically a complementary check to the galaxy schecther function
         distribution
+        
+        Parameters
+        ----------
+        z: xp.array
+            Array of redshifts where to evaluate the effective galaxy density
+        radec_indices: xp.array
+            Array of pixels on which you wish to average the galaxy density
+        cosmology: class
+            cosmology class to use
+            
+        Returns
+        -------
+        gcp: xp.array
+            Effective galaxy density from the catalog
+        bgp: xp.array
+            Effective galaxy density from the background correction
+        inco: xp.array
+            Incompliteness array
+        fig: object
+            Handle to the figure object
+        ax: object
+            Handle to the axis object
         '''
         
         gcp,bgp,inco=xp.zeros([len(z),len(radec_indices_list)]),xp.zeros([len(z),len(radec_indices_list)]),xp.zeros([len(z),len(radec_indices_list)])

@@ -21,6 +21,18 @@ class base_cosmology(object):
         
         self.log10_z_gpu=xp.log10(self.z_gpu)
         
+    def _checkz(self,z):
+        smin,smax=z.min(),z.max()
+        if (smin<1e-6) | (smax>self.zmax):
+            raise ValueError('Redshift provided not in range 1e-6<z<{:.2f}, zmin = {:f}, zmax = {:f}'.format(smin,smax))
+            
+    def _checkdl(self,dl):
+        dlmin,dlmax=dl.min(),dl.max()
+        dlmingrid,dlmaxgrid=xp.power(10.,self.log10_dl_at_z.min()),xp.power(10.,self.log10_dl_at_z.max())
+
+        if (dlmin<dlmingrid) | (dlmax>dlmaxgrid):
+            raise ValueError('Luminosity provided not in range {:f}<dl<{:f} Mpc, dlmin = {:f} Mpc, dlmax = {:f} Mpc'.format(dlmingrid,dlmaxgrid,
+                                                                                                                           dlmin,dlmax))
     def z2dl(self,z):
         '''
         Converts redshift to luminosity distance
@@ -35,6 +47,7 @@ class base_cosmology(object):
         dl: xp.array
             luminosity distance in Mpc
         ''' 
+        self._checkz(z)
         origin=z.shape
         ravelled=xp.ravel(xp.log10(z))
         interpo=xp.interp(ravelled,self.log10_z_gpu,self.log10_dl_at_z)
@@ -54,6 +67,7 @@ class base_cosmology(object):
         dl: xp.array
             luminosity distance in Mpc
         ''' 
+        self._checkz(z)
         origin=z.shape
         ravelled=xp.ravel(xp.log10(z))
         interpo=xp.interp(ravelled,self.log10_z_gpu,self.log10_Vc)
@@ -74,6 +88,7 @@ class base_cosmology(object):
         z: xp.array
             redshift
         '''
+        self._checkdl(dl)
         origin=dl.shape
         ravelled=xp.ravel(xp.log10(dl))
         interpo=xp.interp(ravelled,self.log10_dl_at_z,self.log10_z_gpu)
@@ -93,6 +108,7 @@ class base_cosmology(object):
         dVc_by_dzdOmega: xp.array
             comoving volume per sterdian at a given redshift in Gpc3std-1
         '''
+        self._checkz(z)
         origin=z.shape
         ravelled=xp.ravel(xp.log10(z))
         interpo=xp.interp(ravelled,self.log10_z_gpu,self.log10_dVc_dzdOmega)
@@ -112,6 +128,7 @@ class base_cosmology(object):
         ddl_by_dz: xp.array
             differential of the luminosity distance in Mpc
         '''
+        self._checkz(z)
         origin=z.shape
         ravelled=xp.ravel(xp.log10(z))
         interpo=xp.interp(ravelled,self.log10_z_gpu,self.log10_ddl_by_dz)
@@ -133,6 +150,7 @@ class base_cosmology(object):
         z_samples: xp.array
             Distribution in z uniform in comoving volume
         '''
+        self._checkz(np.array([zmin,zmax]))
         zproxy=xp.linspace(zmin,zmax,10000)
         prob=self.dVc_by_dzdOmega_at_z(zproxy)
         cdf=xp.cumsum(prob)/prob.sum()
@@ -412,6 +430,7 @@ class galaxy_MF(object):
         
     def background_effective_galaxy_density(self,Mthr):
         '''Returns the effective galaxy density, i.e. dN_{gal,eff}/dVc, the effective number is given by the luminosity weights.
+        This is Eq. 2.37 on the Overleaf documentation
         
         Parameters
         ----------
@@ -421,6 +440,7 @@ class galaxy_MF(object):
         
         origin=Mthr.shape
         ravelled=xp.ravel(self.Mstarobs-Mthr)
+        # Schecter function is 0 outside intervals that's why we set limit on boundaries 
         outp=self.phistarobs*xp.interp(ravelled,self.xvector_interpolant,self.effective_density_interpolant
                            ,left=self.effective_density_interpolant[0],right=self.effective_density_interpolant[-1])
         return xp.reshape(outp,origin)
@@ -464,13 +484,13 @@ class kcorr(object):
             k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
         return k_corr
         
-
 class basic_redshift_rate(object):
-    '''Super class for the redshift rate
+    '''
+    Super class for the redshift rate
     '''
     def evaluate(self,z):
         ''' Returns the rate
-        
+
         Parameters
         ----------
         z: xp.array

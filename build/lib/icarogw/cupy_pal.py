@@ -6,7 +6,7 @@ try:
             import cupy as xp
             import numpy as np
             from cupy import trapz
-            from cupyx.scipy.special import erf, beta, betainc, gamma# noqa
+            from cupyx.scipy.special import erf, beta, betainc, gamma, logsumexp# noqa
             from cupyx.scipy.interpolate import interpn
             CUPY_LOADED = True
             print('CUPY LOADED')
@@ -14,7 +14,7 @@ try:
             import numpy as xp
             import numpy as np
             from numpy import trapz
-            from scipy.special import erf, beta, betainc, gamma # noqa
+            from scipy.special import erf, beta, betainc, gamma, logsumexp # noqa
             from scipy.interpolate import interpn
             CUPY_LOADED = False
             print('CUPY NOT LOADED BACK TO NUMPY')
@@ -22,7 +22,7 @@ try:
         import numpy as xp
         import numpy as np
         from numpy import trapz
-        from scipy.special import erf, beta, betainc, gamma # noqa
+        from scipy.special import erf, beta, betainc, gamma, logsumexp # noqa
         from scipy.interpolate import interpn
         CUPY_LOADED = False
         print('CUPY NOT LOADED')        
@@ -32,7 +32,7 @@ except ImportError:
         import cupy as xp
         import numpy as np
         from cupy import trapz
-        from cupyx.scipy.special import erf, beta, betainc, gamma  # noqa
+        from cupyx.scipy.special import erf, beta, betainc, gamma, logsumexp  # noqa
         from cupyx.scipy.interpolate import interpn
         CUPY_LOADED = True
         print('CUPY LOADED')
@@ -40,7 +40,7 @@ except ImportError:
         import numpy as xp
         import numpy as np
         from numpy import trapz
-        from scipy.special import erf, beta, betainc, gamma # noqa
+        from scipy.special import erf, beta, betainc, gamma, logsumexp # noqa
         from scipy.interpolate import interpn
         CUPY_LOADED = False
         print('CUPY NOT LOADED BACK TO NUMPY')
@@ -109,13 +109,15 @@ def betaln(alpha, beta):
     '''
     Logarithm of the Beta function
     .. math::
-        \ln B(\alpha, \beta) = \frac{\ln\gamma(\alpha)\ln\gamma(\beta)}{\ln\gamma(\alpha + \beta)}
+        \\ln B(\\alpha, \\beta) = \\frac{\\ln\\gamma(\\alpha)\\ln\\gamma(\\beta)}{\\ln\\gamma(\\alpha + \\beta)}
+
     Parameters
     ----------
     alpha: float
-        The Beta alpha parameter (:math:`\alpha`)
+        The Beta alpha parameter (:math:`\\alpha`)
     beta: float
-        The Beta beta parameter (:math:`\beta`)
+        The Beta beta parameter (:math:`\\beta`)
+    
     Returns
     -------
     ln_beta: float, array-like

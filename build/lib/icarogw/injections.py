@@ -53,9 +53,11 @@ class injections(object):
         self.prior_original=cp2np(self.prior_original)
         self.prior=cp2np(self.prior)
         
-    def effective_detection_number(self,weights):
-        mean = xp.sum(weights)/self.ntotal
-        var = xp.sum(weights**2)/(self.ntotal**2)-(mean**2)/self.ntotal
+    def effective_injections_number(self):
+        ''' Get the effetive number of injections
+        '''
+        mean = xp.exp(logsumexp(self.log_weights))/self.ntotal
+        var = xp.exp(logsumexp(2*self.log_weights))/(self.ntotal**2)-(mean**2)/self.ntotal
         return (mean**2)/var
     
     def pixelize(self,nside):
@@ -71,9 +73,47 @@ class injections(object):
             self.numpyfy()
             
     def update_weights(self,rate_wrapper):
-        self.weights = xp.exp(rate_wrapper.log_rate_injections(self.prior,**{key:self.injections_data[key] for key in self.injections_data.keys()}))
-        self.pseudo_rate = xp.sum(self.weights)/self.ntotal
+        '''
+        This method updates the weights associated to each injection and calculates the detected CBC rate per year in detector frame
+        
+        Parameters
+        ----------
+        
+        rate_wrapper: class
+            Rate wrapper from the wrapper.py module, initialized with your desired population model.
+        '''
+        
+        self.log_weights = rate_wrapper.log_rate_injections(self.prior,**{key:self.injections_data[key] for key in self.injections_data.keys()})
+        self.pseudo_rate = xp.exp(logsumexp(self.log_weights))/self.ntotal # Eq. 1.5 on the overleaf documentation
         
     def expected_number_detections(self):
+        '''
+        This method calculates the expected number of CBC detectable in a given time. It uses the Tobs initialized for the injections class
+        '''
+        
         return self.Tobs*self.pseudo_rate
+    
+    def return_reweighted_injections(self,Nsamp,replace=True):
+        '''
+        Return a set of injections detected by reweighting with the loaded rate model
+        
+        Parameters
+        ----------
+        
+        Nsamp: int
+            Samples to generate
+        replace: bool
+            Replace the injections with a copy once drawn
+            
+        Returns
+        -------
+        Dictionary of reweighted injections
+        '''
+        prob = xp.exp(self.log_weights)
+        prob/=prob.sum()
+        idx = xp.random.choice(len(self.prior),replace=replace,p=prob)
+        return {key:self.injections_data[key][idx] for key in list(self.injections_data.keys())}
+        
+        
+        
  

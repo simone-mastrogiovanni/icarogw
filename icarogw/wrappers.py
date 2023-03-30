@@ -48,11 +48,11 @@ class CBC_vanilla_EM_counterpart(object):
         else:
             self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters + ['R0']
             
-        self.GW_parameters = ['mass_1', 'mass_2', 'luminosity_distance','z_EM']
+        self.event_parameters = ['mass_1', 'mass_2', 'luminosity_distance','z_EM']
         
         if self.sw is not None:
             self.population_parameters = self.population_parameters+self.sw.population_parameters
-            self.GW_parameters = self.GW_parameters + self.sw.GW_parameters
+            self.event_parameters = self.event_parameters + self.sw.event_parameters
             
     def update(self,**kwargs):
         '''
@@ -80,9 +80,9 @@ class CBC_vanilla_EM_counterpart(object):
         Parameters
         ----------
         prior: array
-            Prior written in terms of the variables identified by self.GW_parameters
+            Prior written in terms of the variables identified by self.event_parameters
         kwargs: flags
-            The kwargs are identified by self.GW_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
         if len(kwargs['mass_1'].shape) != 2:
@@ -96,19 +96,19 @@ class CBC_vanilla_EM_counterpart(object):
         -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
         
         if self.sw is not None:
-            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.GW_parameters})
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
         
         n_ev = kwargs['mass_1'].shape[0]
-        log_weights = xp.empty(kwargs['z_EM'].shape)
+        lwtot = xp.empty(kwargs['z_EM'].shape)
         for i in range(n_ev): 
             ww = xp.exp(log_weights[i,:])
-            kde_fit = gaussian_kde(z[i,:],weights=ww)
-            log_weights[i,:] = np.log(xp.sum(ww)/kwargs['mass_1'].shape[1])+kde_fit.logpdf(kwargs['z_EM'][i,:])
+            kde_fit = gaussian_kde(z[i,:],weights=ww/ww.sum())   
+            lwtot[i,:] = logsumexp(log_weights[i,:])-xp.log(kwargs['mass_1'].shape[1])+kde_fit.logpdf(kwargs['z_EM'][i,:])
 
         if not self.scale_free:
-            log_out = log_weights + xp.log(self.R0)
+            log_out = lwtot + xp.log(self.R0)
         else:
-            log_out = log_weights
+            log_out = lwtot
             
         return log_out
     
@@ -119,9 +119,9 @@ class CBC_vanilla_EM_counterpart(object):
         Parameters
         ----------
         prior: array
-            Prior written in terms of the variables identified by self.GW_parameters
+            Prior written in terms of the variables identified by self.event_parameters
         kwargs: flags
-            The kwargs are identified by self.GW_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
@@ -132,7 +132,7 @@ class CBC_vanilla_EM_counterpart(object):
         -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
         
         if self.sw is not None:
-            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.GW_parameters})
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.R0)
@@ -179,11 +179,11 @@ class CBC_vanilla_rate(object):
         else:
             self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters + ['R0']
             
-        self.GW_parameters = ['mass_1', 'mass_2', 'luminosity_distance']
+        self.event_parameters = ['mass_1', 'mass_2', 'luminosity_distance']
         
         if self.sw is not None:
             self.population_parameters = self.population_parameters+self.sw.population_parameters
-            self.GW_parameters = self.GW_parameters + self.sw.GW_parameters
+            self.event_parameters = self.event_parameters + self.sw.event_parameters
             
     def update(self,**kwargs):
         '''
@@ -211,9 +211,9 @@ class CBC_vanilla_rate(object):
         Parameters
         ----------
         prior: array
-            Prior written in terms of the variables identified by self.GW_parameters
+            Prior written in terms of the variables identified by self.event_parameters
         kwargs: flags
-            The kwargs are identified by self.GW_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
@@ -224,7 +224,7 @@ class CBC_vanilla_rate(object):
         -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
         
         if self.sw is not None:
-            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.GW_parameters})
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.R0)
@@ -240,9 +240,9 @@ class CBC_vanilla_rate(object):
         Parameters
         ----------
         prior: array
-            Prior written in terms of the variables identified by self.GW_parameters
+            Prior written in terms of the variables identified by self.event_parameters
         kwargs: flags
-            The kwargs are identified by self.GW_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
@@ -253,7 +253,7 @@ class CBC_vanilla_rate(object):
         -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
         
         if self.sw is not None:
-            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.GW_parameters})
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.R0)
@@ -306,11 +306,11 @@ class CBC_catalog_vanilla_rate(object):
         else:
             self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters + ['Rgal']
             
-        self.GW_parameters = ['mass_1', 'mass_2', 'luminosity_distance','sky_indices']
+        self.event_parameters = ['mass_1', 'mass_2', 'luminosity_distance','sky_indices']
         
         if self.sw is not None:
             self.population_parameters = self.population_parameters+self.sw.population_parameters
-            self.GW_parameters = self.GW_parameters + self.sw.GW_parameters
+            self.event_parameters = self.event_parameters + self.sw.event_parameters
             
     def update(self,**kwargs):
         '''
@@ -338,9 +338,9 @@ class CBC_catalog_vanilla_rate(object):
         Parameters
         ----------
         prior: array
-            Prior written in terms of the variables identified by self.GW_parameters
+            Prior written in terms of the variables identified by self.event_parameters
         kwargs: flags
-            The kwargs are identified by self.GW_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology)
@@ -355,7 +355,7 @@ class CBC_catalog_vanilla_rate(object):
         -xp.log1p(z)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log(prior)
         
         if self.sw is not None:
-            log_weights+=self.spin_wrap.log_pdf(**{key:self.posterior_parallel[key] for key in self.sw.GW_parameters})
+            log_weights+=self.spin_wrap.log_pdf(**{key:self.posterior_parallel[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.Rgal)
@@ -371,9 +371,9 @@ class CBC_catalog_vanilla_rate(object):
         Parameters
         ----------
         prior: array
-            Prior written in terms of the variables identified by self.GW_parameters
+            Prior written in terms of the variables identified by self.event_parameters
         kwargs: flags
-            The kwargs are identified by self.GW_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology)
@@ -388,7 +388,7 @@ class CBC_catalog_vanilla_rate(object):
         -xp.log1p(z)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log(prior)
         
         if self.sw is not None:
-            log_weights+=self.spin_wrap.log_pdf(**{key:self.posterior_parallel[key] for key in self.sw.GW_parameters})
+            log_weights+=self.spin_wrap.log_pdf(**{key:self.posterior_parallel[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.Rgal)
@@ -608,7 +608,7 @@ class massprior_MultiPeak_NSBH(source_mass_default):
 class spinprior_default(object):
     def __init__(self):
         self.population_parameters=['alpha_chi','beta_chi','sigma_t','csi_spin']
-        self.GW_parameters=['chi_1','chi_2','cos_t_1','cos_t_2']
+        self.event_parameters=['chi_1','chi_2','cos_t_1','cos_t_2']
         self.name='DEFAULT'
 
     def update(self,**kwargs):
@@ -627,7 +627,7 @@ class spinprior_default(object):
 class spinprior_gaussian(object):
     def __init__(self):
         self.population_parameters=['mu_chi_eff','sigma_chi_eff','mu_chi_p','sigma_chi_p','rho']
-        self.GW_parameters=['chi_eff','chi_p']
+        self.event_parameters=['chi_eff','chi_p']
         self.name='GAUSSIAN'
     def update(self,**kwargs):
         self.pdf_evaluator=Bivariate2DGaussian(x1min=-1.,x1max=1.,x1mean=kwargs['mu_chi_eff'],

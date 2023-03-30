@@ -35,10 +35,14 @@ def Di(z):
     Wrapper for the scipy implmentation of Spence's function.
     Note that we adhere to the Mathematica convention as detailed in:
     https://reference.wolfram.com/language/ref/PolyLog.html
-    Inputs
-    z: A (possibly complex) scalar or array
+    
+    Parameters
+    ----------
+    z: complex scalar or array
+  
     Returns
-    Array equivalent to PolyLog[2,z], as defined by Mathematica
+    -------
+        Array equivalent to PolyLog[2,z], as defined by Mathematica
     '''
 
     return PL(1.-z+0j)
@@ -50,11 +54,18 @@ def chi_effective_prior_from_aligned_spins(q,aMax,xs):
     
     Function defining the conditional priors p(chi_eff|q) corresponding to
     uniform, aligned component spin priors.
-    Inputs
-    q: Mass ratio value (according to the convention q<1)
-    aMax: Maximum allowed dimensionless component spin magnitude
-    xs: Chi_effective value or values at which we wish to compute prior
-    Returns:
+    
+    Parameters
+    ----------
+    q: np.array
+        Mass ratio value (according to the convention q<1)
+    aMax: float
+        Maximum allowed dimensionless component spin magnitude
+    xs: np.array
+        Chi_effective value or values at which we wish to compute prior
+  
+    Returns
+    -------
     Array of prior values
     '''
 
@@ -89,11 +100,18 @@ def chi_effective_prior_from_isotropic_spins(q,aMax,xs):
     
     Function defining the conditional priors p(chi_eff|q) corresponding to
     uniform, isotropic component spin priors.
-    Inputs
-    q: Mass ratio value (according to the convention q<1)
-    aMax: Maximum allowed dimensionless component spin magnitude
-    xs: Chi_effective value or values at which we wish to compute prior
-    Returns:
+    
+    Parameters
+    ----------
+    q: np.array
+        Mass ratio value (according to the convention q<1)
+    aMax: float
+        Maximum allowed dimensionless component spin magnitude
+    xs: np.array
+        Chi_effective value or values at which we wish to compute prior
+    
+    Returns
+    -------
     Array of prior values
     '''
 
@@ -188,11 +206,18 @@ def chi_p_prior_from_isotropic_spins(q,aMax,xs):
     
     Function defining the conditional priors p(chi_p|q) corresponding to
     uniform, isotropic component spin priors.
-    Inputs
-    q: Mass ratio value (according to the convention q<1)
-    aMax: Maximum allowed dimensionless component spin magnitude
-    xs: Chi_p value or values at which we wish to compute prior
+
+    Parameters
+    ----------
+    q: np.array
+        Mass ratio value (according to the convention q<1)
+    aMax: float
+        Maximum allowed dimensionless component spin magnitude
+    xs: np.arry
+        Chi_p value or values at which we wish to compute prior
+    
     Returns:
+    --------
     Array of prior values
     '''
 
@@ -232,14 +257,24 @@ def joint_prior_from_isotropic_spins(q,aMax,xeffs,xps,ndraws=10000,bw_method='sc
     Derivation of equations can be found in arxiv:2104.09508
     
     Function to calculate the conditional priors p(xp|xeff,q) on a set of {xp,xeff,q} posterior samples.
-    INPUTS
-    q: Mass ratio
-    aMax: Maximimum spin magnitude considered
-    xeffs: Effective inspiral spin samples
-    xps: Effective precessing spin values
-    ndraws: Number of draws from the component spin priors used in numerically building interpolant
-    RETURNS
-    p_chi_p: Array of priors on xp, conditioned on given effective inspiral spins and mass ratios
+    
+    Parameters
+    ----------
+    q: np.array
+        Mass ratio
+    aMax: float
+        Maximimum spin magnitude considered
+    xeffs: np.array
+        Effective inspiral spin samples
+    xps: np.array
+        Effective precessing spin values
+    ndraws: int
+        Number of draws from the component spin priors used in numerically building interpolant
+    
+    Returns
+    -------
+    
+    Array of priors on xp, conditioned on given effective inspiral spins and mass ratios
     '''
 
     # Convert to arrays for safety
@@ -264,14 +299,23 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
     
     Function to calculate the conditional prior p(xp|xeff,q) on a single {xp,xeff,q} posterior sample.
     Called by `joint_prior_from_isotropic_spins`.
-    INPUTS
-    q: Single posterior mass ratio sample
-    aMax: Maximimum spin magnitude considered
-    xeff: Single effective inspiral spin sample
-    xp: Single effective precessing spin value
-    ndraws: Number of draws from the component spin priors used in numerically building interpolant
-    RETURNS
-    p_chi_p: Prior on xp, conditioned on given effective inspiral spin and mass ratio
+    
+    Parameters
+    ----------
+    q: np.array
+        Single posterior mass ratio sample
+    aMax: float
+        Maximimum spin magnitude considered
+    xeff: np.array
+        Single effective inspiral spin sample
+    xp: np.array
+        Single effective precessing spin value
+    ndraws: int
+        Number of draws from the component spin priors used in numerically building interpolant
+    
+    Returns
+    -------
+    Prior on xp, conditioned on given effective inspiral spin and mass ratio
     '''
 
     # Draw random spin magnitudes.
@@ -333,6 +377,10 @@ def chi_eff_from_spins(chi1, chi2, cos1, cos2, q):
     cos1: cosine of the primary tilt angle
     cos2: cosine of the secondary tilt angle
     q: mass ratio   \propto (m2/m1)
+    
+    Returns
+    -------
+    chi effective
     '''
 
     to_ret = (chi1*cos1 + q*chi2*cos2)/(1.+q)
@@ -350,6 +398,10 @@ def chi_p_from_spins(chi1, chi2, cos1, cos2, q):
     cos1: cosine of the primary tilt angle
     cos2: cosine of the secondary tilt angle
     q: mass ratio   \propto (m2/m1)
+    
+    Returns
+    -------
+    chi p
     '''
     
     sin1 = np.sqrt(1.-cos1**2)
@@ -452,6 +504,7 @@ def indices2radec(indices,nside):
     Parameters
     ----------
     indices: np.array
+        Healpy indices
     nside: int
         nside for healpy
     

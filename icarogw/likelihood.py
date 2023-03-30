@@ -30,36 +30,15 @@ class hierarchical_likelihood(bilby.Likelihood):
         self.injections.cupyfy()
         self.neffPE=neffPE
         self.rate_model=rate_model
+        self.posterior_samples_dict=posterior_samples_dict
         
+        self.posterior_samples_dict.build_parallel_posterior(nparallel=nparallel)
         
-        # Saves the minimum number of samples to use per event
-        nsamps=np.array([posterior_samples_dict[key].nsamples for key in posterior_samples_dict.keys()])
-        if nparallel is None:
-            nparallel=np.min(nsamps)
-        else:
-            nparallel=np.min(np.hstack([nsamps,nparallel]))
-        self.nparallel=np2cp(nparallel)
-            
-        n_ev=len(posterior_samples_dict)
-        llev=list(posterior_samples_dict.keys())
-        print('Using {:d} samples from each {:d} posteriors'.format(self.nparallel,n_ev))
-        self.n_ev=n_ev
         if neffINJ is None:
-            self.neffINJ=4*self.n_ev
+            self.neffINJ=4*self.posterior_samples_dict.n_ev
         else:
             self.neffINJ=neffINJ
-        self.posterior_parallel={key:xp.empty([n_ev,nparallel],
-                                              dtype=posterior_samples_dict[llev[0]].posterior_data[key].dtype) for key in self.rate_model.GW_parameters+['prior']}
-
-        # Saves the posterior samples in a dictionary containing events on rows and posterior samples on columns
-        for i,event in enumerate(list(posterior_samples_dict.keys())):
-            posterior_samples_dict[event].cupyfy()
-            len_single = posterior_samples_dict[event].nsamples
-            rand_perm = xp.random.permutation(len_single)
-            for key in self.posterior_parallel.keys():
-                self.posterior_parallel[key][i,:]=posterior_samples_dict[event].posterior_data[key][rand_perm[:self.nparallel]]
-            posterior_samples_dict[event].numpyfy()
-                
+            
         super().__init__(parameters={ll: None for ll in self.rate_model.population_parameters})
                 
     def log_likelihood(self):
@@ -67,31 +46,31 @@ class hierarchical_likelihood(bilby.Likelihood):
         Evaluates and return the log-likelihood
         '''
         
+        #Update the rate model with the population parameters
         self.rate_model.update(**{key:self.parameters[key] for key in self.rate_model.population_parameters})
         # Update the sensitivity estimation with the new model
-        self.injections.update_weights(self.rate_model)            
-        Neff=self.injections.effective_detection_number(self.injections.weights)
+        self.injections.update_weights(self.rate_model)
+        Neff=self.injections.effective_injections_number()
         # If the injections are not enough return 0, you cannot go to that point. This is done because the number of injections that you have
         # are not enough to calculate the selection effect
         if (Neff<self.neffINJ) | (Neff==0.):
             return float(xp.nan_to_num(-xp.inf))
-            
-        integ=xp.exp(self.rate_model.log_rate_PE(self.posterior_parallel['prior'],**{key:self.posterior_parallel[key] for key in self.rate_model.GW_parameters}))
         
-        # Check for the number of effective sample (Eq. 2.58-2.59 document)
-        sum_weights=xp.sum(integ,axis=1)/self.nparallel
-        sum_weights_squared=xp.sum(xp.power(integ/self.nparallel,2.),axis=1)
-        Neff_vect=xp.power(sum_weights,2.)/sum_weights_squared        
-        Neff_vect[xp.isnan(Neff_vect)]=0.
-        if xp.any(Neff_vect<self.neffPE):
+        # Update the weights on the PE
+        self.posterior_samples_dict.update_weights(self.rate_model)
+        if xp.any(self.posterior_samples_dict.get_effective_number_of_PE()<self.neffPE):
             return float(xp.nan_to_num(-xp.inf))
-
+        
+        integ=self.posterior_samples_dict.log_weights # Extract a matrix N_ev X N_samples of log weights
+             
         # Combine all the terms  
         if self.rate_model.scale_free:
-            log_likeli = xp.sum(xp.log(sum_weights))-self.n_ev*xp.log(self.injections.pseudo_rate)
+            # Log likelihood for scale free model, Eq. 1.3 on the document
+            log_likeli = xp.sum(xp.log(self.posterior_samples_dict.sum_weights))-self.posterior_samples_dict.n_ev*xp.log(self.injections.pseudo_rate)
         else:
             Nexp=self.injections.expected_number_detections()
-            log_likeli = -Nexp + self.n_ev*xp.log(self.injections.Tobs)+xp.sum(xp.log(sum_weights))
+            # Log likelihood for  the model, Eq. 1.1 on the document
+            log_likeli = -Nexp + self.posterior_samples_dict.n_ev*xp.log(self.injections.Tobs)+xp.sum(xp.log(self.posterior_samples_dict.sum_weights))
         
         # Controls on the value of the log-likelihood. If the log-likelihood is -inf, then set it to the smallest
         # python valye 1e-309
@@ -103,5 +82,52 @@ class hierarchical_likelihood(bilby.Likelihood):
         else:
             log_likeli = float(xp.nan_to_num(log_likeli))
             
-        return log_likeli
+        return cp2np(log_likeli)
+                
+
+class hierarchical_likelihood_noevents(bilby.Likelihood):
+    def __init__(self, injections, rate_model):
+        '''
+        Base class for an hierachical liklihood. It just saves all the input requirements for a general hierarchical analysis
+        
+        Parameters
+        ----------
+        posterior_samples_dict: dict
+            Dictionary containing the posterior samples class
+        injections: class
+            Injection class from its module 
+        rate_model: class
+            Rate model to compute the CBC rate per year at the detector, taken from the wrapper module.
+        '''
+        
+        # Saves injections in a cupyfied format
+        self.injections=injections
+        self.injections.cupyfy()
+        self.rate_model=rate_model
+        super().__init__(parameters={ll: None for ll in self.rate_model.population_parameters})
+                
+    def log_likelihood(self):
+        '''
+        Evaluates and return the log-likelihood
+        '''
+        #Update the rate model with the population parameters
+        self.rate_model.update(**{key:self.parameters[key] for key in self.rate_model.population_parameters})
+        # Update the sensitivity estimation with the new model
+        self.injections.update_weights(self.rate_model)
+        
+        Nexp=self.injections.expected_number_detections()
+        # Log likelihood for  the model, Eq. 1.1 on the document
+        log_likeli = -Nexp 
+        
+        # Controls on the value of the log-likelihood. If the log-likelihood is -inf, then set it to the smallest
+        # python valye 1e-309
+        if log_likeli == xp.inf:
+            raise ValueError('LOG-likelihood must be smaller than infinite')
+
+        if xp.isnan(log_likeli):
+            log_likeli = float(xp.nan_to_num(-xp.inf))
+        else:
+            log_likeli = float(xp.nan_to_num(log_likeli))
+            
+        return cp2np(log_likeli)
                 

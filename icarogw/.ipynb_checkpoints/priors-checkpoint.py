@@ -69,6 +69,7 @@ def _S_factor(mass, mmin,delta_m):
     effe_prime = xp.ones_like(mass)
 
     # Defines the f function as in Eq. B7 of https://arxiv.org/pdf/2010.14533.pdf
+    # This line might raise a warnig for exp orverflow, however this is not important as it enters at denominator
     effe_prime[select_window] = xp.exp(xp.nan_to_num((delta_m/mprime[select_window])+(delta_m/(mprime[select_window]-delta_m))))
     to_ret = 1./(effe_prime+1)
     to_ret[select_zero]=0.
@@ -252,6 +253,8 @@ class conditional_2dimpdf(object):
         -------
         log_pdf: xp.array
         '''
+        # This line might create some nan since p(m2|m1) = p(m2)/CDF_m2(m1) = 0/0 if m2 and m1 < mmin.
+        # This nan is eliminated with the _check_bound_pdf
         y=self.pdf1.log_pdf(x1)+self.pdf2.log_pdf(x2)-self.pdf2.log_cdf(x1)
         y=self._check_bound_pdf(x1,x2,y)
         return y 
@@ -338,6 +341,7 @@ class SmoothedProb(basic_1dimpdf):
         '''
         # Return the window function
         window = _S_factor(x, self.bottom,self.bottom_smooth)
+        # The line below might raise warnings for log(0), however python is able to handle it.
         prob_ret =self.origin_prob.log_pdf(x)+xp.log(window)-xp.log(self.norm)
         return prob_ret
 
@@ -362,6 +366,7 @@ class SmoothedProb(basic_1dimpdf):
         toret[ravelled<self.bottom] = 0.        
         toret[(ravelled>=self.bottom) & (ravelled<=(self.bottom+self.bottom_smooth))] = xp.interp(ravelled[(ravelled>=self.bottom) & (ravelled<=(self.bottom+self.bottom_smooth))]
                            ,(self.x_eval[:-1:]+self.x_eval[1::])*0.5,self.cdf_numeric)
+        # The line below might contain some log 0, which is automatically accounted for in python
         toret[ravelled>=(self.bottom+self.bottom_smooth)]=(self.integral_now+self.origin_prob.cdf(
         ravelled[ravelled>=(self.bottom+self.bottom_smooth)])-self.origin_prob.cdf(xp.array([self.bottom+self.bottom_smooth])))/self.norm
         

@@ -42,6 +42,7 @@ def z_to_dl(z):
     '''
     Convert a redshift value into a luminosity distance value.
     The Planck15 cosmology is used here. (but can be changed)
+    
     Parameters:
     ----------
     z : float or array
@@ -56,6 +57,7 @@ def dl_to_z(z):
     '''
     Convert a dL value into a redshift value.
     The Planck15 cosmology is used here. (but can be changed)
+    
     Parameters:
     ----------
     dL : float or array
@@ -210,11 +212,7 @@ def generate_mass_inj(Nsamp,mass_model,dic_param):
     '''
     Generate Samples of m1s and m2s the chosen mass_model and compute the prior associated in 
     the source frame!
-    Models available :
-        PowerLaw
-        PowerLawPeak
-        MultiPeak
-    
+    Models available : PowerLaw, PowerLawPeak, MultiPeak
     Parameters
     ----------
     Nsamp : integer
@@ -268,7 +266,7 @@ def snr_samples_det(m1,m2,dL,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):
     Parameters:
     ----------
     rho_s : float
-         Reference value of the SNR 
+        Reference value of the SNR 
     dL_s : float
         Reference value of the luminosity distance in [Gpc]
     Md_s : float
@@ -278,6 +276,7 @@ def snr_samples_det(m1,m2,dL,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):
     dL: float or array  
         Luminosity distance 
     theta : float or array
+        Projection factor
     '''
 
     Md = chirp_mass(m1,m2)

@@ -498,7 +498,7 @@ class galaxy_catalog(object):
             interpo = 0.
             
             for gal in gal_index:
-                # List of galaxy catalog density in increasing order per pixel bin
+                # List of galaxy catalog density in increasing order per pixel. This corresponds to Eq. 2.35 on the overleaf document
                 Mv=m2M(cat_data['m'][idx_in_range[gal]],cosmo_ref.z2dl(z_grid),self.calc_kcorr(z_grid))               
                 interpo+=absM_rate.evaluate(self.sch_fun,Mv)*EM_likelihood_prior_differential_volume(z_grid,
                                                             cat_data['z'][idx_in_range[gal]],cat_data['sigmaz'][idx_in_range[gal]],cosmo_ref
@@ -549,7 +549,7 @@ class galaxy_catalog(object):
             gcpart=xp.interp(z,self.z_grid,self.dNgal_dzdOm_sky_mean,left=0.,right=0.)
         else:        
             gcpart=interpn((self.z_grid,self.pixel_grid),self.dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
-                                fill_value=0.,method='linear')
+                                fill_value=0.,method='linear') # If a posterior samples fall outside, then you return 0
         
         bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array)*cosmology.dVc_by_dzdOmega_at_z(z)
         
