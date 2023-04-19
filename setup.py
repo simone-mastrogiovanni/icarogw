@@ -1,25 +1,21 @@
 import setuptools
 
-with open("README.md", "r") as fh:
+with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-
-from setuptools import find_packages
-
 setuptools.setup(
-    name="icarogw", # Replace with your own username
-    version="2.0.0",
-    author="Simone Mastrogiovanni",
-    author_email="mastrogiovanni.simo@gmail.com",
-    description="A package for gravitational waves population inference with galaxy catalogs",
+    name='icarogw',
+    version='2.0.0',
+    author='Simone Mastrogiovanni',
+    author_email='simone.mastrogiovanni@ligo.org',
+    description='A python package for inference of population properties of noisy, heterogeneous and incomplete observations',
     long_description=long_description,
     long_description_content_type="text/markdown",
-    #url="gihub hutl",
-    packages=setuptools.find_packages(),
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-    ],
-    python_requires='>=3.6',
+    url='https://github.com/simone-mastrogiovanni/icarogw',
+    license='GNU GPLv3',
+    python_requires='>=3.8',
+    packages=['icarogw'],
+    install_requires=['bilby>=2.1.0','healpy>=1.16.2','mpmath>=1.3.0'],
+    extras_require={
+        'cuda': ['cupy']}
 )

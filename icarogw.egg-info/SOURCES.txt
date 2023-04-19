@@ -15,4 +15,5 @@ icarogw/wrappers.py
 icarogw.egg-info/PKG-INFO
 icarogw.egg-info/SOURCES.txt
 icarogw.egg-info/dependency_links.txt
+icarogw.egg-info/requires.txt
 icarogw.egg-info/top_level.txt

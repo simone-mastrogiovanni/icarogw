@@ -1,21 +1,21 @@
 Metadata-Version: 2.1
 Name: icarogw
 Version: 2.0.0
-Summary: A package for gravitational waves population inference with galaxy catalogs
+Summary: A python package for inference of population properties of noisy, heterogeneous and incomplete observations
+Home-page: https://github.com/simone-mastrogiovanni/icarogw
 Author: Simone Mastrogiovanni
-Author-email: mastrogiovanni.simo@gmail.com
-Classifier: Programming Language :: Python :: 3
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Operating System :: OS Independent
-Requires-Python: >=3.6
+Author-email: simone.mastrogiovanni@ligo.org
+License: GNU GPLv3
+Requires-Python: >=3.8
 Description-Content-Type: text/markdown
+Provides-Extra: cuda
 
 # icarogw 2.0 Developers branch
 
 ## Installation
 
 * Clone this repository
-* Run the command `conda env create -f env_creator.yml ` to install the package with conda
+* Run the command `conda env create -f env_creator.yml ` if you are on linux or   `conda env create -f env_creator_mac.yml ` if you are on MAC OS  to install the package with conda.
 * Run `conda activate icarogw2.0` to switch to the environment.
 
 It is possible that you machine does not support CUDA. In this case, the code will not install CUDA and CUPY but should still be able to run. Please let me know if you encouter any difficulty and the installation is broken.
