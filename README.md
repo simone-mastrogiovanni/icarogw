@@ -3,7 +3,7 @@
 ## Installation
 
 * Clone this repository
-* Run the command `conda env create -f env_creator.yml ` to install the package with conda
+* Run the command `conda env create -f env_creator.yml ` if you are on linux or   `conda env create -f env_creator_mac.yml ` if you are on MAC OS  to install the package with conda.
 * Run `conda activate icarogw2.0` to switch to the environment.
 
 It is possible that you machine does not support CUDA. In this case, the code will not install CUDA and CUPY but should still be able to run. Please let me know if you encouter any difficulty and the installation is broken.

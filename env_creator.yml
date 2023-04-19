@@ -174,4 +174,3 @@ dependencies:
       - y-py==0.5.5
       - ypy-websocket==0.8.2
       - zipp==3.12.0
-prefix: /home/simone/anaconda3/envs/icarogw2.0
