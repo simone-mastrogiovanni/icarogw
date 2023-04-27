@@ -1,3 +1,5 @@
+![icarogw2.0](/docs/logo.png)
+
 # icarogw 2.0 Developers branch
 
 ## Installation
