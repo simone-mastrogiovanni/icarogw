@@ -15,7 +15,5 @@ setuptools.setup(
     license='GNU GPLv3',
     python_requires='>=3.8',
     packages=['icarogw'],
-    install_requires=['bilby>=2.1.0','healpy>=1.16.2','mpmath>=1.3.0'],
-    extras_require={
-        'cuda': ['cupy>=12.0']}
+    install_requires=['bilby>=2.1.0','healpy>=1.16.2','mpmath>=1.3.0']
 )
