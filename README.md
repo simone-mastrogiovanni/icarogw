@@ -4,11 +4,22 @@
 
 ## Installation
 
-* Clone this repository
-* Run the command `conda env create -f env_creator.yml ` if you are on linux or   `conda env create -f env_creator_mac.yml ` if you are on MAC OS  to install the package with conda.
-* Run `conda activate icarogw2.0` to switch to the environment.
+Simply run
 
-It is possible that you machine does not support CUDA. In this case, the code will not install CUDA and CUPY but should still be able to run. Please let me know if you encouter any difficulty and the installation is broken.
+```
+pip install git+https://github.com/simone-mastrogiovanni/icarogw.git
+```
+
+To install the latest version of icarogw
+
+
+### Installing the GPU CUDA version
+
+To use the GPU/CUDA version you need to install cupy. After your installation is complete, just run
+
+```
+conda install -c conda-forge cupy==12.0
+```
 
 ## Some details
 
