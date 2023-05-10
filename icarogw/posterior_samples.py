@@ -33,7 +33,7 @@ class posterior_samples_catalog(object):
         else:
             nparallel=np.min(np.hstack([nsamps,nparallel]))
         
-        self.nparallel=np2cp(nparallel)
+        self.nparallel=nparallel
         llev=list(self.posterior_samples_dict.keys()) # Name of events
         print('Using {:d} samples from each {:d} posteriors'.format(self.nparallel,self.n_ev))
         

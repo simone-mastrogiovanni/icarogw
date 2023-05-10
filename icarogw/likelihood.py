@@ -82,7 +82,7 @@ class hierarchical_likelihood(bilby.Likelihood):
         else:
             log_likeli = float(xp.nan_to_num(log_likeli))
             
-        return cp2np(log_likeli)
+        return float(cp2np(log_likeli))
                 
 
 class hierarchical_likelihood_noevents(bilby.Likelihood):
@@ -129,5 +129,5 @@ class hierarchical_likelihood_noevents(bilby.Likelihood):
         else:
             log_likeli = float(xp.nan_to_num(log_likeli))
             
-        return cp2np(log_likeli)
+        return float(cp2np(log_likeli))
                 
