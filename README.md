@@ -1,5 +1,9 @@
 ![icarogw2.0](/docs/logo.png)
 
+Special thanks LIGO-Virgo-KAGRA / Aaron Geller / Northwestern who made possible the cool logo with the masses in the [Stellar graveyard](https://media.ligo.northwestern.edu/gallery/mass-plot)
+
+
+
 # icarogw 2.0 Developers branch
 
 ## Installation
@@ -33,4 +37,5 @@ if you do not want to use the GPU. IF you want to use the GPU, remember to use c
 
 ## Example and Notebooks
 
-There is a notebook called `stable_tests.ipynb`, where you will find how to call many commands. We also have [this repository](https://git.ligo.org/simone.mastrogiovanni/icarogw_catalog_tests) with additional notebooks, where we are collecting tests for the review. There is also a [living presentation](https://docs.google.com/presentation/d/14OgAo1Uj7NvnIGRfVTWMYJ7JDebn9Ns5ex6EIGPlbj4/edit?usp=sharing) where we are collecting some details and commands of the code.
+There is a notebook called `stable_tests.ipynb`, where you will find how to call many commands. We also have [this repository](https://git.ligo.org/simone.mastrogiovanni/icarogw_catalog_tests) with additional notebooks, where we are collecting tests for the review. There is also a Zenodo data distribution where you can download [example tutorials](https://zenodo.org/record/7846415#.ZG0BetJBxQo).
+
