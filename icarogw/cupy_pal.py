@@ -64,11 +64,6 @@ else:
         return array
 
     
-import itertools
-    
-
-
-
 def find_histoplace(arr,edges, clean_outliers=False):
     '''
 
