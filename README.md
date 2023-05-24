@@ -37,5 +37,5 @@ if you do not want to use the GPU. IF you want to use the GPU, remember to use c
 
 ## Example and Notebooks
 
-There is a notebook called `stable_tests.ipynb`, where you will find how to call many commands. We also have [this repository](https://git.ligo.org/simone.mastrogiovanni/icarogw_catalog_tests) with additional notebooks, where we are collecting tests for the review. There is also a Zenodo data distribution where you can download [example tutorials](https://zenodo.org/record/7846415#.ZG0BetJBxQo).
+There is also a Zenodo data distribution where you can download [example tutorials](https://zenodo.org/record/7846415#.ZG0BetJBxQo).
 
