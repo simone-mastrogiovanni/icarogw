@@ -33,7 +33,7 @@ class posterior_samples_catalog(object):
         else:
             nparallel=np.min(np.hstack([nsamps,nparallel]))
         
-        self.nparallel=np2cp(nparallel)
+        self.nparallel=nparallel
         llev=list(self.posterior_samples_dict.keys()) # Name of events
         print('Using {:d} samples from each {:d} posteriors'.format(self.nparallel,self.n_ev))
         
@@ -60,7 +60,7 @@ class posterior_samples_catalog(object):
             Rate wrapper from the wrapper.py module, initialized with your desired population model.
         '''
         
-        self.log_weights = rate_wrapper.log_rate_PE(self.posterior_parallel['prior'],**{key:self.posterior_parallel[key] for key in rate_wrapper.event_parameters_PE})
+        self.log_weights = rate_wrapper.log_rate_PE(self.posterior_parallel['prior'],**{key:self.posterior_parallel[key] for key in rate_wrapper.PEs_parameters})
         self.sum_weights=xp.exp(logsumexp(self.log_weights,axis=1))/self.nparallel
         self.sum_weights_squared= xp.exp(logsumexp(2*self.log_weights,axis=1))/xp.power(self.nparallel,2.)
         
@@ -186,13 +186,14 @@ class posterior_samples(object):
         Dictionary containing the reweighted PE
         '''
         
-        logw = rate_wrapper.log_rate_PE(self.posterior_parallel['prior'],**{key:self.posterior_data[key] for key in rate_wrapper.event_parameters_PE})
+        logw = rate_wrapper.log_rate_PE(**{key:self.posterior_data[key] for key in self.posterior_data.keys()})
         prob = xp.exp(logw)
         prob/=prob.sum()
         idx = xp.random.choice(len(self.posterior_data['prior']),replace=replace,p=prob)
         return {key:self.posterior_data[key][idx] for key in list(self.posterior_data.keys())}
         
-        
+
+
         
         
         

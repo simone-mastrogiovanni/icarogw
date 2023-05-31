@@ -46,6 +46,8 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw',memory=10000,cpus=1,disk=10000):
             f.write('request_disk ='+str(disk)+'\n')    
             f.write('output = '+home_folder+fname+'.stdout\n')
             f.write('error = '+home_folder+fname+'.stderr\n')
+            f.write('log = '+home_folder+fname+'.log\n')
+            f.write('Requirements = TARGET.Dual =!= True\n')
             f.write('queue\n')
             f.close()
             _os.system('chmod a+x '+home_folder+'*.sh')

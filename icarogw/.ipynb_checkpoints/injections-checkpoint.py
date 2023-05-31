@@ -83,7 +83,7 @@ class injections(object):
             Rate wrapper from the wrapper.py module, initialized with your desired population model.
         '''
         
-        self.log_weights = rate_wrapper.log_rate_injections(self.prior,**{key:self.injections_data[key] for key in rate_wrapper.event_parameters_injections})
+        self.log_weights = rate_wrapper.log_rate_injections(self.prior,**{key:self.injections_data[key] for key in rate_wrapper.injections_parameters})
         self.pseudo_rate = xp.exp(logsumexp(self.log_weights))/self.ntotal # Eq. 1.5 on the overleaf documentation
         
     def expected_number_detections(self):

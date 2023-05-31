@@ -24,7 +24,7 @@ class base_cosmology(object):
     def _checkz(self,z):
         smin,smax=z.min(),z.max()
         if (smin<1e-6) | (smax>self.zmax):
-            raise ValueError('Redshift provided not in range 1e-6<z<{:.2f}, zmin = {:f}, zmax = {:f}'.format(smin,smax))
+            raise ValueError('Redshift provided not in range 1e-6<z<{:.2f}, zmin = {:f}, zmax = {:f}'.format(self.zmax,smin,smax))
             
     def _checkdl(self,dl):
         dlmin,dlmax=dl.min(),dl.max()

@@ -3,6 +3,121 @@ import healpy as hp
 from scipy.stats import gaussian_kde
 from scipy.special import spence as PL
 from tqdm import tqdm
+from ligo.skymap.io.fits import read_sky_map
+
+import astropy_healpix as ah
+from astropy import units as u
+
+
+class ligo_skymap(object):
+    
+    def __init__(self,skymapname):
+        '''
+        A class to store ligo.skymaps objects
+        '''
+        self.table = read_sky_map(skymapname,distances=True,moc=True)
+        self.intersected = False
+
+    def intersect_EM_PE(self,ra,dec):
+
+        if not self.intersected:
+            ra*=u.rad
+            dec*=u.rad
+    
+            # Taken from https://emfollow.docs.ligo.org/userguide/tutorial/multiorder_skymaps.html#probability-density-at-a-known-position
+            level, ipix = ah.uniq_to_level_ipix(self.table['UNIQ'])
+            px_area = ah.nside_to_pixel_area(ah.level_to_nside(level)).value # Pixel area in steradians
+            nside = ah.level_to_nside(level)
+    
+            match_ipix = xp.zeros(len(ra),dtype=int)
+            for i in range(len(ra)):
+                mm = ah.lonlat_to_healpix(ra[i], dec[i], nside, order='nested') # Pixels corresponding to provided ra and dec
+                ipp = np.flatnonzero(ipix == mm)[0]
+                match_ipix[i] = ipix[ipp] # Pixel that 
+     
+            self.dl_means = xp.zeros(len(match_ipix))
+            self.dl_sigmas = xp.zeros(len(match_ipix))
+            self.sky_prob_rad2 = xp.zeros(len(match_ipix))
+            self.pixels_area = xp.zeros(len(match_ipix))
+    
+            for i,pix in enumerate(match_ipix):
+                idx = xp.where(ipix == pix)[0][0]
+                self.dl_means[i] = self.table['DISTMU'][idx]
+                self.dl_sigmas[i] = self.table['DISTSIGMA'][idx]
+                self.sky_prob_rad2[i] = self.table['PROBDENSITY'][idx]
+                self.pixels_area = px_area[i]
+                
+            self.intersected = True
+        else:
+            pass
+        
+    def evaluate_3D_posterior_intersected(self,dl):
+        pdl_radec = xp.power(2*xp.pi*(self.dl_sigmas**2.),-2.)*xp.exp(-0.5*xp.power((dl-self.dl_means)/self.dl_sigmas,2.))
+        prob = self.sky_prob_rad2 * pdl_radec    
+        return prob
+    
+    def evaluate_3D_likelihood_intersected(self,dl):
+        # The prior on the sky is 1/pixels_area (that is divided), the other term is the dl2 prior
+        return self.evaluate_3D_posterior_intersected(dl)*self.pixels_area/xp.power(dl,2.)
+    
+    def evaluate_3D_posterior_likelihood(self,dl,ra,dec):
+        
+        ra*=u.rad
+        dec*=u.rad
+        
+        # Taken from https://emfollow.docs.ligo.org/userguide/tutorial/multiorder_skymaps.html#probability-density-at-a-known-position
+        level, ipix = ah.uniq_to_level_ipix(self.table['UNIQ'])
+        px_area = ah.nside_to_pixel_area(ah.level_to_nside(level)).value # Pixel area in steradians
+        nside = ah.level_to_nside(level)
+        
+        match_ipix = xp.zeros(len(ra),dtype=int)
+        for i in range(len(ra)):
+            mm = ah.lonlat_to_healpix(ra[i], dec[i], nside, order='nested') # Pixels corresponding to provided ra and dec
+            ipp = np.flatnonzero(ipix == mm)[0]
+            match_ipix[i] = ipix[ipp] # Pixel that 
+
+        dl_means = xp.zeros(len(match_ipix))
+        dl_sigmas = xp.zeros(len(match_ipix))
+        sky_prob_rad2 = xp.zeros(len(match_ipix))
+        pixels_area = xp.zeros(len(match_ipix))
+
+        for i,pix in enumerate(match_ipix):
+            idx = xp.where(ipix == pix)[0][0]
+            dl_means[i] = self.table['DISTMU'][idx]
+            dl_sigmas[i] = self.table['DISTSIGMA'][idx]
+            sky_prob_rad2[i] = self.table['PROBDENSITY'][idx]
+            pixels_area = px_area[i]
+            
+        pdl_radec = xp.power(2*xp.pi*(dl_sigmas**2.),-2.)*xp.exp(-0.5*xp.power((dl-dl_means)/dl_sigmas,2.))
+        prob = sky_prob_rad2 * pdl_radec 
+        
+        return prob, prob*pixels_area/xp.power(dl,2.)
+        
+    def sample_3d_space(self,Nsamp):
+        
+        level, ipix = ah.uniq_to_level_ipix(self.table['UNIQ'])
+        nside = ah.level_to_nside(level)    
+        px_area = ah.nside_to_pixel_area(ah.level_to_nside(level)).value # Pixel area in steradians
+        prob = self.table['PROBDENSITY']*px_area
+        prob/=prob.sum()
+        idx = xp.random.choice(len(ipix),size=Nsamp,replace=True,p=prob) 
+        ra, dec = ah.healpix_to_lonlat(ipix[idx], nside[idx], order='nested')
+        dl = xp.zeros(len(ra))
+        
+        match_ipix = ipix[idx]
+       
+        for i,pix in enumerate(match_ipix):
+            idx = xp.where(ipix == pix)[0]
+            dl_mean = self.table['DISTMU'][idx].value
+            dl_sigma = self.table['DISTSIGMA'][idx].value
+
+            dldraw = -1
+            while dldraw<=0:
+                dldraw = xp.random.randn(1)*dl_sigma+dl_mean
+            dl[i] = dldraw
+        
+        return dl, ra.rad, dec.rad
+
 
 def cartestianspins2chis(s1x,s1y,s1z,s2x,s2y,s2z,q):
     '''

@@ -8,17 +8,34 @@ Author-email: simone.mastrogiovanni@ligo.org
 License: GNU GPLv3
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
-Provides-Extra: cuda
+License-File: LICENSE
+
+![icarogw2.0](/docs/logo.png)
+
+Special thanks LIGO-Virgo-KAGRA / Aaron Geller / Northwestern who made possible the cool logo with the masses in the [Stellar graveyard](https://media.ligo.northwestern.edu/gallery/mass-plot)
+
+[![DOI](https://zenodo.org/badge/615814860.svg)](https://zenodo.org/badge/latestdoi/615814860)
 
 # icarogw 2.0 Developers branch
 
 ## Installation
 
-* Clone this repository
-* Run the command `conda env create -f env_creator.yml ` if you are on linux or   `conda env create -f env_creator_mac.yml ` if you are on MAC OS  to install the package with conda.
-* Run `conda activate icarogw2.0` to switch to the environment.
+Simply run
 
-It is possible that you machine does not support CUDA. In this case, the code will not install CUDA and CUPY but should still be able to run. Please let me know if you encouter any difficulty and the installation is broken.
+```
+pip install git+https://github.com/simone-mastrogiovanni/icarogw.git
+```
+
+To install the latest version of icarogw
+
+
+### Installing the GPU CUDA version
+
+To use the GPU/CUDA version you need to install cupy. After your installation is complete, just run
+
+```
+conda install -c conda-forge cupy==12.0
+```
 
 ## Some details
 
@@ -32,4 +49,5 @@ if you do not want to use the GPU. IF you want to use the GPU, remember to use c
 
 ## Example and Notebooks
 
-There is a notebook called `stable_tests.ipynb`, where you will find how to call many commands. We also have [this repository](https://git.ligo.org/simone.mastrogiovanni/icarogw_catalog_tests) with additional notebooks, where we are collecting tests for the review. There is also a [living presentation](https://docs.google.com/presentation/d/14OgAo1Uj7NvnIGRfVTWMYJ7JDebn9Ns5ex6EIGPlbj4/edit?usp=sharing) where we are collecting some details and commands of the code.
+There is also a Zenodo data distribution where you can download [example tutorials](https://zenodo.org/record/7846415#.ZG0BetJBxQo).
+

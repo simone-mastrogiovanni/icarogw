@@ -455,7 +455,7 @@ class BetaDistribution(basic_1dimpdf):
     
     def __init__(self,alpha,beta):
         '''
-        Class for a Truncated powerlaw probability
+        Class for a Beta distribution probability
         
         Parameters
         ----------
@@ -499,6 +499,57 @@ class BetaDistribution(basic_1dimpdf):
         '''
         toret = xp.log(betainc(self.alpha,self.beta,x))
         return toret
+        
+        
+class TruncatedBetaDistribution(basic_1dimpdf):
+    
+    def __init__(self,alpha,beta,maximum):
+        '''
+        Class for a Truncated Beta distribution probability
+        
+        Parameters
+        ----------
+        minbeta,maxbeta: float
+            Minimum, Maximum of the beta distribution, they must be in 0,max
+        alpha, beta: Parameters for the beta distribution
+        '''
+        super().__init__(0.,maximum)
+        self.alpha, self.beta, self.maximum = alpha, beta, maximum
+        # Get the norm  (as described in https://en.wikipedia.org/wiki/Beta_distribution)
+        self.norm_fact = get_beta_norm(self.alpha, self.beta)*betainc(self.alpha,self.beta,self.maximum)
+        
+    def _log_pdf(self,x):
+        '''
+        Evaluates the log_pdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_pdf
+        
+        Returns
+        -------
+        log_pdf: xp.array
+        '''
+        toret=(self.alpha-1.)*xp.log(x)+(self.beta-1.)*xp.log1p(-x)-xp.log(self.norm_fact)
+        return toret
+    
+    def _log_cdf(self,x):
+        '''
+        Evaluates the log_cdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_cdf
+        
+        Returns
+        -------
+        log_cdf: xp.array
+        '''
+        toret = xp.log(betainc(self.alpha,self.beta,x)/betainc(self.alpha,self.beta,self.maximum))
+        return toret
+        
 
 def get_gaussian_norm(ming,maxg,meang,sigmag):
     '''
