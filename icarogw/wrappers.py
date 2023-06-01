@@ -869,29 +869,28 @@ class spinprior_gaussian(object):
         
 class spinprior_ECOs(object):
     def __init__(self):
-        self.population_parameters=['alpha_chi','beta_chi','eps', 'R', 'f_eco', 'sigma']
+        self.population_parameters=['alpha_chi','beta_chi','eps', 'f_eco', 'sigma_chi_ECO']
         self.event_parameters=['chi_1','chi_2'] 
         self.name='DEFAULT'
         
-    def get_chi_crit(self, eps, R):
-        return 0.5
+    def get_chi_crit(self, eps):
+        q = 1. # Value for polar perturbations, more conservative
+        return xp.pi*(1.+q)/(2*xp.abs(xp.log10(eps)))
 
     def update(self,**kwargs):
         self.alpha_chi = kwargs['alpha_chi']
         self.beta_chi = kwargs['beta_chi']
         self.eps = kwargs['eps']
-        self.R = kwargs['R']
         self.f_eco = kwargs['f_eco']
-        self.sigma = kwargs['sigma']
-        self.chi_crit = self.get_chi_crit(self.eps,self.R)
-        #self.aligned_pdf = TruncatedGaussian(1.,kwargs['sigma_t'],-1.,1.)
+        self.sigma = kwargs['sigma_chi_ECO']
+        self.chi_crit = self.get_chi_crit(self.eps)
         if (self.alpha_chi <= 1) | (self.beta_chi <= 1) :
             raise ValueError('Alpha and Beta must be > 1') 
             
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
         self.truncatedbeta_pdf = TruncatedBetaDistribution(self.alpha_chi,self.beta_chi,self.chi_crit)
         self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., 1.)
-        self.lambda_eco = 1-self.beta_pdf.cdf(xp.array([self.get_chi_crit(self.eps, self.R)]))[0]
+        self.lambda_eco = 1-self.beta_pdf.cdf(xp.array([self.get_chi_crit(self.eps)]))[0]
         
         
     def pdf(self,chi_1,chi_2):
