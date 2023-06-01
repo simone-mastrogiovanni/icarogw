@@ -253,7 +253,7 @@ class galaxy_catalog(object):
             self.dNgal_dzdOm_vals = np2cp(self.dNgal_dzdOm_vals)
 
             self.dNgal_dzdOm_vals[xp.isnan(self.dNgal_dzdOm_vals)] = -xp.inf
-            self.dNgal_dzdOm_vals = xp.exp(xp.float64(self.dNgal_dzdOm_vals))
+            self.dNgal_dzdOm_vals = xp.exp(self.dNgal_dzdOm_vals.astype(float))
 
             self.dNgal_dzdOm_sky_mean = xp.mean(self.dNgal_dzdOm_vals,axis=1)
             self.z_grid = np2cp(interpogroup['z_grid'][:])
