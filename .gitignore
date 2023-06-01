@@ -2,3 +2,4 @@ build/*
 dist/*
 icarogw.egg-info
 .ipynb_checkpoints
+icarogw/.ipynb_checkpoints
