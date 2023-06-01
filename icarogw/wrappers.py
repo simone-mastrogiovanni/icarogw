@@ -872,7 +872,7 @@ class spinprior_gaussian(object):
         
 class spinprior_ECOs(object):
     def __init__(self):
-        self.population_parameters=['alpha_chi','beta_chi','eps', 'R', 'f_eco', 'sigma']
+        self.population_parameters=['alpha_chi','beta_chi','eps', 'f_eco', 'sigma_chi_ECO']
         self.event_parameters=['chi_1','chi_2'] 
         self.name='DEFAULT'
         
@@ -886,7 +886,7 @@ class spinprior_ECOs(object):
         self.eps = kwargs['eps']
         self.R = kwargs['R']
         self.f_eco = kwargs['f_eco']
-        self.sigma = kwargs['sigma']
+        self.sigma = kwargs['sigma_chi_ECO']
         self.chi_crit = self.get_chi_crit(self.eps)
         #self.aligned_pdf = TruncatedGaussian(1.,kwargs['sigma_t'],-1.,1.)
         if (self.alpha_chi <= 1) | (self.beta_chi <= 1) :
