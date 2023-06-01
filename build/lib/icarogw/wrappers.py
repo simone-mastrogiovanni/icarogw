@@ -12,6 +12,19 @@ from astropy.cosmology import FlatLambdaCDM, FlatwCDM
 class CBC_catalog_vanilla_rate_skymap(object):
     
     def __init__(self,catalog,cosmology_wrapper,rate_wrapper, average=False,scale_free=False):
+        '''
+        A wrapper for the CBC rate model that make use of of just the luminosity distance and position of GW events.
+        Useful if you generate PE from skymaps
+
+        Parameters
+        ----------
+        catalog: object
+            icarogw catalog class containing the preprocessed galaxy catalog
+        cosmology_wrapper: object
+            Cosmology wrapper from icarogw
+        rate_wrapper: object
+            Merger rate wrapper from icarogw
+        '''
         
         self.catalog = catalog
         self.cw = cosmology_wrapper
@@ -105,8 +118,24 @@ class CBC_catalog_vanilla_rate_skymap(object):
         return log_out
 
 class CBC_low_latency_skymap_EM_counterpart(object):
-    
     def __init__(self,cosmology_wrapper,rate_wrapper, list_of_skymaps,scale_free=False):
+
+        '''
+        A wrapper for the CBC rate model that make use of LVK low latency skymaps and EM counterparts.
+        Posterior samples are going to be possible EM counterparts (1 for each event). These EM PEs
+        are then combined with the GW skymap
+
+        Parameters
+        ----------
+        cosmology_wrapper: object
+            Cosmology wrapper from icarogw
+        rate_wrapper: object
+            Merger rate wrapper from icarogw
+        list_of_skymaps: object
+            A list of icarogw skymaps objects, order must be compatible with catalog of EM counterparts passed in posterior sampels
+        scale_free: True
+            Scale free model or not
+        '''
         
         self.cw = cosmology_wrapper
         self.rw = rate_wrapper
@@ -847,8 +876,9 @@ class spinprior_ECOs(object):
         self.event_parameters=['chi_1','chi_2'] 
         self.name='DEFAULT'
         
-    def get_chi_crit(self, eps, R):
-        return 0.5
+    def get_chi_crit(self, eps):
+        q = 1. # Value for polar perturbations, more conservative
+        return xp.pi*(1.+q)/(2*xp.abs(xp.log10(eps)))
 
     def update(self,**kwargs):
         self.alpha_chi = kwargs['alpha_chi']
@@ -857,7 +887,7 @@ class spinprior_ECOs(object):
         self.R = kwargs['R']
         self.f_eco = kwargs['f_eco']
         self.sigma = kwargs['sigma']
-        self.chi_crit = self.get_chi_crit(self.eps,self.R)
+        self.chi_crit = self.get_chi_crit(self.eps)
         #self.aligned_pdf = TruncatedGaussian(1.,kwargs['sigma_t'],-1.,1.)
         if (self.alpha_chi <= 1) | (self.beta_chi <= 1) :
             raise ValueError('Alpha and Beta must be > 1') 
@@ -865,7 +895,7 @@ class spinprior_ECOs(object):
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
         self.truncatedbeta_pdf = TruncatedBetaDistribution(self.alpha_chi,self.beta_chi,self.chi_crit)
         self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., 1.)
-        self.lambda_eco = 1-self.beta_pdf.cdf(xp.array([self.get_chi_crit(self.eps, self.R)]))[0]
+        self.lambda_eco = 1-self.beta_pdf.cdf(xp.array([self.get_chi_crit(self.eps)]))[0]
         
         
     def pdf(self,chi_1,chi_2):

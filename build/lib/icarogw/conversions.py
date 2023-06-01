@@ -14,11 +14,29 @@ class ligo_skymap(object):
     def __init__(self,skymapname):
         '''
         A class to store ligo.skymaps objects
+
+        Parameters
+        ----------
+
+        skymapname: string
+            path to the fits or fits.gz file released       
         '''
+        
         self.table = read_sky_map(skymapname,distances=True,moc=True)
         self.intersected = False
-
+        
     def intersect_EM_PE(self,ra,dec):
+        '''
+        Given a list or RA and DEC, it extracts from the skymap the associated distance and sky position probabilities
+        Required for methods evaluate_3D_posterior_intersected and evaluate_3D_likelihood_intersected
+
+        Parameters
+        ----------
+        ra: xp.array
+            Right ascension in radians
+        dec: xp.array
+            Declination in radians
+        '''
 
         if not self.intersected:
             ra*=u.rad
@@ -52,15 +70,56 @@ class ligo_skymap(object):
             pass
         
     def evaluate_3D_posterior_intersected(self,dl):
+        '''
+        Returns the localization probability p(dL,RA,DEC)=p(RA,DEC)p(dL|RA,DEC). Requires intersect_EM_PE to be run before
+
+        Parameters
+        ----------
+        dl: xp.array
+            Luminosity distance in Mpc
+
+        Returns
+        -------
+        p(dL,RA,DEC)
+        '''
         pdl_radec = xp.power(2*xp.pi*(self.dl_sigmas**2.),-2.)*xp.exp(-0.5*xp.power((dl-self.dl_means)/self.dl_sigmas,2.))
         prob = self.sky_prob_rad2 * pdl_radec    
         return prob
     
     def evaluate_3D_likelihood_intersected(self,dl):
+        '''
+        Returns the localization likelihood p(dL,RA,DEC)=p(RA,DEC)p(dL|RA,DEC)/prior(RA,DEC,dl). Requires intersect_EM_PE to be run before.
+        the prior on dl is assumed to be dl^2 while the prior on the pixel is the inverse of its area (isotropic).
+
+        Parameters
+        ----------
+        dl: xp.array
+            Luminosity distance in Mpc
+
+        Returns
+        -------
+        Sky likelihood
+        '''
         # The prior on the sky is 1/pixels_area (that is divided), the other term is the dl2 prior
         return self.evaluate_3D_posterior_intersected(dl)*self.pixels_area/xp.power(dl,2.)
     
     def evaluate_3D_posterior_likelihood(self,dl,ra,dec):
+        '''
+        Returns the localization posterior and likelihood.
+        
+        Parameters
+        ----------
+        dl: xp.array
+            Luminosity distance in Mpc
+        ra: xp.array
+            Right ascension radians
+        dec: xp.array
+            Declination radians
+
+        Returns
+        -------
+        Posterior in [Mpc-1 sr-1] and likelihood.
+        '''
         
         ra*=u.rad
         dec*=u.rad
@@ -94,6 +153,23 @@ class ligo_skymap(object):
         return prob, prob*pixels_area/xp.power(dl,2.)
         
     def sample_3d_space(self,Nsamp):
+        '''
+        Given the skymap, sample RA, DEC and dL from it.
+
+        Parameters
+        ----------
+        Nsamp: int
+            Number of samples to generate
+
+        Returns
+        -------
+        dl: xp.array
+            Luminosity distance in Mpc
+        ra: xp.array
+            Right ascension in radians
+        dec: xp.array
+            Declination in radians
+        '''
         
         level, ipix = ah.uniq_to_level_ipix(self.table['UNIQ'])
         nside = ah.level_to_nside(level)    
@@ -116,7 +192,7 @@ class ligo_skymap(object):
                 dldraw = xp.random.randn(1)*dl_sigma+dl_mean
             dl[i] = dldraw
         
-        return dl, ra.rad, dec.rad
+        return dl, np2cp(ra.rad), np2cp(dec.rad)
 
 
 def cartestianspins2chis(s1x,s1y,s1z,s2x,s2y,s2z,q):
