@@ -1,0 +1,3 @@
+build/*
+dist/*
+icarogw.egg-info

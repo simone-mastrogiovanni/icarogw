@@ -1,4 +1,0 @@
-bilby>=2.1.0
-healpy>=1.16.2
-mpmath>=1.3.0
-ligo.skymap>=1.0.7
