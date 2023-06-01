@@ -884,11 +884,9 @@ class spinprior_ECOs(object):
         self.alpha_chi = kwargs['alpha_chi']
         self.beta_chi = kwargs['beta_chi']
         self.eps = kwargs['eps']
-        self.R = kwargs['R']
         self.f_eco = kwargs['f_eco']
         self.sigma = kwargs['sigma_chi_ECO']
         self.chi_crit = self.get_chi_crit(self.eps)
-        #self.aligned_pdf = TruncatedGaussian(1.,kwargs['sigma_t'],-1.,1.)
         if (self.alpha_chi <= 1) | (self.beta_chi <= 1) :
             raise ValueError('Alpha and Beta must be > 1') 
             
