@@ -274,7 +274,8 @@ class CBC_vanilla_EM_counterpart(object):
             event_parameters = event_parameters + self.sw.event_parameters
 
         self.PEs_parameters = event_parameters.copy()
-        self.injections_parameters = event_parameters.copy().remove('z_EM')
+        self.injections_parameters = event_parameters.copy()
+        self.injections_parameters.remove('z_EM')
             
     def update(self,**kwargs):
         '''
