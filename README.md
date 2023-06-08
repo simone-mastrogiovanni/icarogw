@@ -22,14 +22,14 @@ To install the latest version of icarogw
 To use the GPU/CUDA version you need to install cupy. After your installation is complete, just run
 
 ```
-conda install -c conda-forge cupy==12.0
+# CUDA 11 installation
+# Note: wheels only available on linux.
+pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
 ## Some details
 
-When you are using icarogw2.0, you can put inside your working folder a file called `config.py` containing
-
-```latex
+```
 CUPY=False
 ```
 
