@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .jax_pal import *
 from .cosmology import astropycosmology
 from .wrappers import massprior_PowerLawPeak
 from .wrappers import *
@@ -12,13 +12,13 @@ def chirp_mass_det(m1,m2,z):
     Fonction qui calcule la chirp mass d'un systeme binaire à partir de m1 et m2 (en Msol) 
     dans le detector frame. (facteur m_d = (1+z)*m_s)
     '''
-    return (np.power(m1*m2,3/5)/np.power(m1+m2,1/5))*(1+z)
+    return (onp.power(m1*m2,3/5)/onp.power(m1+m2,1/5))*(1+z)
 
 def chirp_mass(m1,m2):
     '''
     Fonction qui calcule la chirp mass d'un systeme binaire à partir de m1 et m2 (en Msol)
     '''
-    return np.power(m1*m2,3/5)/np.power(m1+m2,1/5)
+    return onp.power(m1*m2,3/5)/onp.power(m1+m2,1/5)
 
 def mass_ratio(m1,m2):
     '''
@@ -76,7 +76,7 @@ def dVc_dz(z):
     cosmo.build_cosmology(Planck15)
     
     # differential of comov volume in Gpc3
-    to_ret = cosmo.dVc_by_dzdOmega_at_z(z)*4*np.pi  
+    to_ret = cosmo.dVc_by_dzdOmega_at_z(z)*4*onp.pi  
     
     return to_ret
 
@@ -87,13 +87,13 @@ def rvs_theta(Nsamp,a,b):
     By default, the full range is [0,1.4]
     
     '''
-    cdf_theta = np.loadtxt("/Users/pierra/Desktop/These_ip2i/Cosmology_researches/icaroGW/icarogw_2/Sub_pop_BBH_ananalysis/data/Pw_three.dat")
+    cdf_theta = onp.loadtxt("/Users/pierra/Desktop/These_ip2i/Cosmology_researches/icaroGW/icarogw_2/Sub_pop_BBH_ananalysis/data/Pw_three.dat")
     cdf_theta[:,1] =cdf_theta[:,1]/cdf_theta[:,1].max() 
     cdf_theta_func = interpolate.interp1d(cdf_theta[:,0],cdf_theta[:,1]) 
     inv_cdf_theta_func = interpolate.interp1d(cdf_theta[:,1],cdf_theta[:,0]) 
     
     
-    unif_samples = np.random.random(Nsamp)*(cdf_theta_func(b)-cdf_theta_func(a)) + cdf_theta_func(a)
+    unif_samples = onp.random.random(Nsamp)*(cdf_theta_func(b)-cdf_theta_func(a)) + cdf_theta_func(a)
     theta = inv_cdf_theta_func(unif_samples)
     
     return theta
@@ -104,7 +104,7 @@ def dVc_dz_reweight(m1,m2,z):
     Returns the reweighted quantities
     '''
     weight = dVc_dz(z)*1/(1+z)
-    idx_resampling = np.random.choice(len(weight),replace=True,size=len(m1),p=weight/weight.sum())
+    idx_resampling = onp.random.choice(len(weight),replace=True,size=len(m1),p=weight/weight.sum())
     m1 = m1[idx_resampling]
     m2 = m2[idx_resampling]
     z = z[idx_resampling]
@@ -138,12 +138,12 @@ def snr_samples(m1,m2,z,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):
     
     if theta is None : 
         theta = rvs_theta(Nsamp=len(m1),a=0,b=1.4)
-        rand_theta = np.random.choice(theta,len(m1))
+        rand_theta = onp.random.choice(theta,len(m1))
         theta = rand_theta
     
-    rho_true = rho_s*theta*np.power(Md/Md_s,5/6)*((dL_s*1000)/dL)
+    rho_true = rho_s*theta*onp.power(Md/Md_s,5/6)*((dL_s*1000)/dL)
     rho_det_squarred = stats.ncx2.rvs(2*numdet,rho_true**2,size=len(rho_true))
-    rho_det = np.power(rho_det_squarred,1/2)
+    rho_det = onp.power(rho_det_squarred,1/2)
     
     return rho_true , theta, rho_det    
 
@@ -152,7 +152,7 @@ def chirp_mass_noise(Md,rho_obs):
     Return the dected values of the chirp mass.
     Likelihood model based on Annexe B : https://arxiv.org/pdf/2103.14663.pdf
     '''
-    Md_obs = np.random.randn(len(rho_obs))*(10**(-3))*Md*10/rho_obs + Md
+    Md_obs = onp.random.randn(len(rho_obs))*(10**(-3))*Md*10/rho_obs + Md
     return Md_obs 
 
 def mass_ratio_noise(q, rho_obs):
@@ -160,7 +160,7 @@ def mass_ratio_noise(q, rho_obs):
     Return the dected values of the mass ratio.
     Likelihood model based on Annexe B : https://arxiv.org/pdf/2103.14663.pdf
     '''
-    q_obs = np.random.randn(len(rho_obs))*0.25*q*10/rho_obs + q
+    q_obs = onp.random.randn(len(rho_obs))*0.25*q*10/rho_obs + q
     return q_obs
 
 def theta_noise(theta, rho_obs):
@@ -169,7 +169,7 @@ def theta_noise(theta, rho_obs):
     Likelihood model based on Annexe B : https://arxiv.org/pdf/2103.14663.pdf
     '''
     
-    theta_obs = np.random.randn(len(rho_obs))*0.3*10/rho_obs + theta
+    theta_obs = onp.random.randn(len(rho_obs))*0.3*10/rho_obs + theta
     return theta_obs
 
 def noise(Md,q,theta,rho_obs):
@@ -192,7 +192,7 @@ def snr_and_freq_cut(m1,m2,z,snr,snrthr=12,fgw_cut=15):
     '''
     
     freq_GW_astro = f_GW(m1,m2,z)
-    indices = np.where((snr>=snrthr) & (freq_GW_astro>fgw_cut))[0]
+    indices = onp.where((snr>=snrthr) & (freq_GW_astro>fgw_cut))[0]
 
     return indices
 
@@ -201,7 +201,7 @@ def likelihood_evaluation(rhos,qs,Mds,thetas,rho_obs,q_obs,Md_obs,theta_obs,numd
     Compute the total likelihood of : the snr, the chirp mass, the mass ratio and theta
     All variables with an 's' at the end are the one we evaluate the likelihood at according to the '_obs' one.
     '''
-    likelihood_tot = stats.ncx2.pdf(rho_obs**2., 2*numdet, np.power(rhos,2.))\
+    likelihood_tot = stats.ncx2.pdf(rho_obs**2., 2*numdet, onp.power(rhos,2.))\
         *stats.norm.pdf(q_obs, qs, 0.25*qs*10/rho_obs)\
         *stats.norm.pdf(Md_obs, Mds, 10**(-3)*Mds*10/rho_obs)\
         *stats.norm.pdf(theta_obs, thetas, 0.3*10/rho_obs)
@@ -252,7 +252,7 @@ def generate_dL_inj(Nsamp,zmax):
     p(dL) \propto a*dL^(a-1) , with (a-1) =2
     '''   
 
-    beta = z_to_dl(np.array(zmax))
+    beta = z_to_dl(onp.array(zmax))
     dL_sample = stats.powerlaw.rvs(a=3,loc=0.1,scale=beta-10., size=Nsamp)
     pdf = stats.powerlaw.pdf(dL_sample, 3, loc=0.1, scale=beta-10.)
     
@@ -283,12 +283,12 @@ def snr_samples_det(m1,m2,dL,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):
    
     if theta is None : 
         theta = rvs_theta(Nsamp=len(m1),a=0,b=1.4)
-        rand_theta = np.random.choice(theta,len(m1))
+        rand_theta = onp.random.choice(theta,len(m1))
         theta = rand_theta
     
-    rho_true = rho_s*theta*np.power(Md/Md_s,5/6)*((dL_s*1000)/dL)
+    rho_true = rho_s*theta*onp.power(Md/Md_s,5/6)*((dL_s*1000)/dL)
     rho_det_squarred = stats.ncx2.rvs(2*numdet,rho_true**2,size=len(rho_true))
-    rho_det = np.power(rho_det_squarred,1/2)
+    rho_det = onp.power(rho_det_squarred,1/2)
     
     return rho_true , theta, rho_det
 
@@ -370,7 +370,7 @@ def PE_quick_generation_samples(m1,m2,z,theta,idx,rho_obs,q_obs,Md_obs,theta_obs
 
     '''
     
-    idx = np.random.choice(idx,size=Ninj)
+    idx = onp.random.choice(idx,size=Ninj)
     dict1 = {}
     dict2 = {}
     
@@ -379,17 +379,17 @@ def PE_quick_generation_samples(m1,m2,z,theta,idx,rho_obs,q_obs,Md_obs,theta_obs
         
         # Draw trials solution for the masses and the distance : m1s, m2s dLs (uniformly)
         uncmass=1.1*0.7/(rho_obs[i]/8.)
-        m1s = np.random.uniform(np.max([(1-uncmass)*m1[i],0.1]), (1+uncmass)*m1[i], size= Ngen)
-        m2s = np.random.uniform(np.max([(1-uncmass)*m2[i],0.1]), (1+uncmass)*m2[i], size= Ngen)
-        swap = np.where(m1s<m2s)[0]
+        m1s = onp.random.uniform(onp.max([(1-uncmass)*m1[i],0.1]), (1+uncmass)*m1[i], size= Ngen)
+        m2s = onp.random.uniform(onp.max([(1-uncmass)*m2[i],0.1]), (1+uncmass)*m2[i], size= Ngen)
+        swap = onp.where(m1s<m2s)[0]
         m1s[swap],m2s[swap]=m2s[swap],m1s[swap]
         
         uncdL=3*1.2/(rho_obs[i]/8.)
-        dLs = np.random.uniform(np.max([(1-uncdL)*z_to_dl(z)[i],1.]),(1+uncdL)*z_to_dl(z)[i],size=Ngen)
+        dLs = onp.random.uniform(onp.max([(1-uncdL)*z_to_dl(z)[i],1.]),(1+uncdL)*z_to_dl(z)[i],size=Ngen)
         zs = dl_to_z(dLs)
               
         #unctheta=15*4e-1/rho_obs[i]
-        thetas = np.random.uniform(0,1.4,size=Ngen)
+        thetas = onp.random.uniform(0,1.4,size=Ngen)
         
         qs = mass_ratio(m1s,m2s)
         Mds = chirp_mass_det(m1s,m2s,zs)
@@ -404,7 +404,7 @@ def PE_quick_generation_samples(m1,m2,z,theta,idx,rho_obs,q_obs,Md_obs,theta_obs
         
         # Importance sampling
         proba = likelihood_tot/likelihood_tot.sum()
-        idx_resampling = np.random.choice(Ngen,replace=True,size=Nsamp,p=proba)
+        idx_resampling = onp.random.choice(Ngen,replace=True,size=Nsamp,p=proba)
         
         dict1[str(i)] = {'m1s_samp':m1s[idx_resampling],'m2s_samp':m2s[idx_resampling],
                          'zmerge_samples':zs[idx_resampling],'m1d_samples':m1s[idx_resampling]*(1+zs[idx_resampling]),
@@ -482,7 +482,7 @@ def injection_set_generator(Ninj,Ntot,mass_model,dic_param,zmax=5.,snrthr=12,fgw
 
     # Concatenate and downselect event to Ninj wanted
     for keys in true_param.keys():
-        true_param[keys] = np.concatenate(true_param[keys],axis=0)
+        true_param[keys] = onp.concatenate(true_param[keys],axis=0)
 
     Ndet_inj=len(true_param['m1s'])
     Ntot_gen = Ntot*c

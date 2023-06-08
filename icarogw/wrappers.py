@@ -1,8 +1,7 @@
-from .cupy_pal import *
+from .jax_pal import *
 from .cosmology import *
 from .conversions import detector2source_jacobian, detector2source
 from .priors import *
-from scipy.stats import gaussian_kde
 import copy
 
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
@@ -89,24 +88,24 @@ class CBC_vanilla_EM_counterpart(object):
             raise ValueError('The EM counterpart rate wants N_ev x N_samples arrays')
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
-        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
+        log_dVc_dz=jnp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*jnp.pi)
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
         log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
-        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
+        -jnp.log(prior)-jnp.log(detector2source_jacobian(z,self.cw.cosmology))-jnp.log1p(z)
         
         if self.sw is not None:
             log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
         
         n_ev = kwargs['mass_1'].shape[0]
-        lwtot = xp.empty(kwargs['z_EM'].shape)
+        lwtot = jnp.empty(kwargs['z_EM'].shape)
         for i in range(n_ev): 
-            ww = xp.exp(log_weights[i,:])
+            ww = jnp.exp(log_weights[i,:])
             kde_fit = gaussian_kde(z[i,:],weights=ww/ww.sum())   
-            lwtot[i,:] = logsumexp(log_weights[i,:])-xp.log(kwargs['mass_1'].shape[1])+kde_fit.logpdf(kwargs['z_EM'][i,:])
+            lwtot[i,:] = logsumexp(log_weights[i,:])-jnp.log(kwargs['mass_1'].shape[1])+kde_fit.logpdf(kwargs['z_EM'][i,:])
 
         if not self.scale_free:
-            log_out = lwtot + xp.log(self.R0)
+            log_out = lwtot + jnp.log(self.R0)
         else:
             log_out = lwtot
             
@@ -125,17 +124,17 @@ class CBC_vanilla_EM_counterpart(object):
         '''
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
-        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
+        log_dVc_dz=jnp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*jnp.pi)
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
         log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
-        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
+        -jnp.log(prior)-jnp.log(detector2source_jacobian(z,self.cw.cosmology))-jnp.log1p(z)
         
         if self.sw is not None:
             log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
-            log_out = log_weights + xp.log(self.R0)
+            log_out = log_weights + jnp.log(self.R0)
         else:
             log_out = log_weights
             
@@ -217,17 +216,17 @@ class CBC_vanilla_rate(object):
         '''
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
-        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
+        log_dVc_dz=jnp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*jnp.pi)
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
         log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
-        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
+        -jnp.log(prior)-jnp.log(detector2source_jacobian(z,self.cw.cosmology))-jnp.log1p(z)
         
         if self.sw is not None:
             log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
-            log_out = log_weights + xp.log(self.R0)
+            log_out = log_weights + jnp.log(self.R0)
         else:
             log_out = log_weights
             
@@ -246,17 +245,17 @@ class CBC_vanilla_rate(object):
         '''
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
-        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
+        log_dVc_dz=jnp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*jnp.pi)
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
         log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
-        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
+        -jnp.log(prior)-jnp.log(detector2source_jacobian(z,self.cw.cosmology))-jnp.log1p(z)
         
         if self.sw is not None:
             log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
-            log_out = log_weights + xp.log(self.R0)
+            log_out = log_weights + jnp.log(self.R0)
         else:
             log_out = log_weights
             
@@ -351,14 +350,14 @@ class CBC_catalog_vanilla_rate(object):
         dNgaleff=dNgal_cat+dNgal_bg
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
-        log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+xp.log(dNgaleff) \
-        -xp.log1p(z)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log(prior)
+        log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+jnp.log(dNgaleff) \
+        -jnp.log1p(z)-jnp.log(detector2source_jacobian(z,self.cw.cosmology))-jnp.log(prior)
         
         if self.sw is not None:
             log_weights+=self.spin_wrap.log_pdf(**{key:self.posterior_parallel[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
-            log_out = log_weights + xp.log(self.Rgal)
+            log_out = log_weights + jnp.log(self.Rgal)
         else:
             log_out = log_weights
             
@@ -384,14 +383,14 @@ class CBC_catalog_vanilla_rate(object):
         dNgaleff=dNgal_cat+dNgal_bg
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
-        log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+xp.log(dNgaleff) \
-        -xp.log1p(z)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log(prior)
+        log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+jnp.log(dNgaleff) \
+        -jnp.log1p(z)-jnp.log(detector2source_jacobian(z,self.cw.cosmology))-jnp.log(prior)
         
         if self.sw is not None:
             log_weights+=self.spin_wrap.log_pdf(**{key:self.posterior_parallel[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
-            log_out = log_weights + xp.log(self.Rgal)
+            log_out = log_weights + jnp.log(self.Rgal)
         else:
             log_out = log_weights
             
@@ -620,9 +619,9 @@ class spinprior_default(object):
             raise ValueError('Alpha and Beta must be > 1') 
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
     def log_pdf(self,chi_1,chi_2,cos_t_1,cos_t_2):
-        return self.beta_pdf.log_pdf(chi_1)+self.beta_pdf.log_pdf(chi_2)+xp.log(self.csi_spin*self.aligned_pdf.pdf(cos_t_1)+(1.-self.csi_spin)*0.5)+xp.log(self.csi_spin*self.aligned_pdf.pdf(cos_t_2)+(1.-self.csi_spin)*0.5)
+        return self.beta_pdf.log_pdf(chi_1)+self.beta_pdf.log_pdf(chi_2)+jnp.log(self.csi_spin*self.aligned_pdf.pdf(cos_t_1)+(1.-self.csi_spin)*0.5)+jnp.log(self.csi_spin*self.aligned_pdf.pdf(cos_t_2)+(1.-self.csi_spin)*0.5)
     def pdf(self,chi_1,chi_2,cos_t_1,cos_t_2):
-        return xp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2))
+        return jnp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2))
     
 class spinprior_gaussian(object):
     def __init__(self):
@@ -637,7 +636,7 @@ class spinprior_gaussian(object):
     def log_pdf(self,chi_eff,chi_p):
         return self.pdf_evaluator.log_pdf(chi_eff,chi_p)
     def pdf(self,chi_eff,chi_p):
-        return xp.exp(self.log_pdf(chi_eff,chi_p))
+        return jnp.exp(self.log_pdf(chi_eff,chi_p))
         
         
         
@@ -666,7 +665,7 @@ class spinprior_ECOs(object):
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
         self.truncatedbeta_pdf = TruncatedBetaDistribution(self.alpha_chi,self.beta_chi,self.chi_crit)
         self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., 1.)
-        self.lambda_eco = 1-self.beta_pdf.cdf(xp.array([self.get_chi_crit(self.eps, self.R)]))[0]
+        self.lambda_eco = 1-self.beta_pdf.cdf(jnp.array([self.get_chi_crit(self.eps, self.R)]))[0]
         
         
     def pdf(self,chi_1,chi_2):
@@ -676,7 +675,7 @@ class spinprior_ECOs(object):
         
         
     def log_pdf(self,chi_1,chi_2):
-        return xp.log(self.pdf(chi_1,chi_2))
+        return jnp.log(self.pdf(chi_1,chi_2))
     
 ################ END: Small wrappers used in support of the main wrappers above ###################
 

@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .jax_pal import *
 from .conversions import *
 from .wrappers import *
 import copy
@@ -54,35 +54,35 @@ class hierarchical_likelihood(bilby.Likelihood):
         # If the injections are not enough return 0, you cannot go to that point. This is done because the number of injections that you have
         # are not enough to calculate the selection effect
         if (Neff<self.neffINJ) | (Neff==0.):
-            return float(xp.nan_to_num(-xp.inf))
+            return float(jnp.nan_to_num(-jnp.inf))
         
         # Update the weights on the PE
         self.posterior_samples_dict.update_weights(self.rate_model)
-        if xp.any(self.posterior_samples_dict.get_effective_number_of_PE()<self.neffPE):
-            return float(xp.nan_to_num(-xp.inf))
+        if jnp.any(self.posterior_samples_dict.get_effective_number_of_PE()<self.neffPE):
+            return float(jnp.nan_to_num(-jnp.inf))
         
         integ=self.posterior_samples_dict.log_weights # Extract a matrix N_ev X N_samples of log weights
              
         # Combine all the terms  
         if self.rate_model.scale_free:
             # Log likelihood for scale free model, Eq. 1.3 on the document
-            log_likeli = xp.sum(xp.log(self.posterior_samples_dict.sum_weights))-self.posterior_samples_dict.n_ev*xp.log(self.injections.pseudo_rate)
+            log_likeli = jnp.sum(jnp.log(self.posterior_samples_dict.sum_weights))-self.posterior_samples_dict.n_ev*jnp.log(self.injections.pseudo_rate)
         else:
             Nexp=self.injections.expected_number_detections()
             # Log likelihood for  the model, Eq. 1.1 on the document
-            log_likeli = -Nexp + self.posterior_samples_dict.n_ev*xp.log(self.injections.Tobs)+xp.sum(xp.log(self.posterior_samples_dict.sum_weights))
+            log_likeli = -Nexp + self.posterior_samples_dict.n_ev*jnp.log(self.injections.Tobs)+jnp.sum(jnp.log(self.posterior_samples_dict.sum_weights))
         
         # Controls on the value of the log-likelihood. If the log-likelihood is -inf, then set it to the smallest
         # python valye 1e-309
-        if log_likeli == xp.inf:
+        if log_likeli == jnp.inf:
             raise ValueError('LOG-likelihood must be smaller than infinite')
 
-        if xp.isnan(log_likeli):
-            log_likeli = float(xp.nan_to_num(-xp.inf))
+        if jnp.isnan(log_likeli):
+            log_likeli = float(jnp.nan_to_num(-jnp.inf))
         else:
-            log_likeli = float(xp.nan_to_num(log_likeli))
+            log_likeli = float(jnp.nan_to_num(log_likeli))
             
-        return float(cp2np(log_likeli))
+        return float(jnp2onp(log_likeli))
                 
 
 class hierarchical_likelihood_noevents(bilby.Likelihood):
@@ -121,13 +121,13 @@ class hierarchical_likelihood_noevents(bilby.Likelihood):
         
         # Controls on the value of the log-likelihood. If the log-likelihood is -inf, then set it to the smallest
         # python valye 1e-309
-        if log_likeli == xp.inf:
+        if log_likeli == jnp.inf:
             raise ValueError('LOG-likelihood must be smaller than infinite')
 
-        if xp.isnan(log_likeli):
-            log_likeli = float(xp.nan_to_num(-xp.inf))
+        if jnp.isnan(log_likeli):
+            log_likeli = float(jnp.nan_to_num(-jnp.inf))
         else:
-            log_likeli = float(xp.nan_to_num(log_likeli))
+            log_likeli = float(jnp.nan_to_num(log_likeli))
             
-        return float(cp2np(log_likeli))
+        return float(jnp2onp(log_likeli))
                 

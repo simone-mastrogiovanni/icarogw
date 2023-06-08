@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .jax_pal import *
 from .conversions import radec2indeces
 
 
@@ -27,27 +27,30 @@ class posterior_samples_catalog(object):
             Number of posterior samples to select, if None it will select the maximum common number
         '''
         # Saves the minimum number of samples to use per event
-        nsamps=np.array([self.posterior_samples_dict[key].nsamples for key in self.posterior_samples_dict.keys()])
+        nsamps=onp.array([self.posterior_samples_dict[key].nsamples for key in self.posterior_samples_dict.keys()])
         if nparallel is None:
-            nparallel=np.min(nsamps)
+            nparallel=onp.min(nsamps)
         else:
-            nparallel=np.min(np.hstack([nsamps,nparallel]))
+            nparallel=onp.min(onp.hstack([nsamps,nparallel]))
         
         self.nparallel=nparallel
         llev=list(self.posterior_samples_dict.keys()) # Name of events
         print('Using {:d} samples from each {:d} posteriors'.format(self.nparallel,self.n_ev))
         
-        self.posterior_parallel={key:xp.empty([self.n_ev,self.nparallel],
+        self.posterior_parallel={key:onp.empty([self.n_ev,self.nparallel],
                                               dtype=self.posterior_samples_dict[llev[0]].posterior_data[key].dtype) for key in self.posterior_samples_dict[llev[0]].posterior_data.keys()}
 
         # Saves the posterior samples in a dictionary containing events on rows and posterior samples on columns
         for i,event in enumerate(list(self.posterior_samples_dict.keys())):
             self.posterior_samples_dict[event].cupyfy()
             len_single = self.posterior_samples_dict[event].nsamples
-            rand_perm = xp.random.permutation(len_single)
+            rand_perm = onp.random.permutation(len_single)
             for key in self.posterior_parallel.keys():
-                self.posterior_parallel[key][i,:]=self.posterior_samples_dict[event].posterior_data[key][rand_perm[:self.nparallel]]
+                self.posterior_parallel[key][i,:]=jnp2onp(self.posterior_samples_dict[event].posterior_data[key])[rand_perm[:self.nparallel]]
             self.posterior_samples_dict[event].numpyfy()
+
+        for key in self.posterior_parallel.keys():
+            self.posterior_parallel[key]=onp2jnp(self.posterior_parallel[key])
             
     def update_weights(self,rate_wrapper):
         '''
@@ -61,8 +64,8 @@ class posterior_samples_catalog(object):
         '''
         
         self.log_weights = rate_wrapper.log_rate_PE(**{key:self.posterior_parallel[key] for key in self.posterior_parallel.keys()})
-        self.sum_weights=xp.exp(logsumexp(self.log_weights,axis=1))/self.nparallel
-        self.sum_weights_squared= xp.exp(logsumexp(2*self.log_weights,axis=1))/xp.power(self.nparallel,2.)
+        self.sum_weights=jnp.exp(logsumexp(self.log_weights,axis=1))/self.nparallel
+        self.sum_weights_squared= jnp.exp(logsumexp(2*self.log_weights,axis=1))/jnp.power(self.nparallel,2.)
         
     def get_effective_number_of_PE(self):
         '''
@@ -71,8 +74,8 @@ class posterior_samples_catalog(object):
         
         # Check for the number of effective sample (Eq. 2.73 document)
         
-        Neff_vect=xp.power(self.sum_weights,2.)/self.sum_weights_squared        
-        Neff_vect[xp.isnan(Neff_vect)]=0.
+        Neff_vect=jnp.power(self.sum_weights,2.)/self.sum_weights_squared        
+        Neff_vect[jnp.isnan(Neff_vect)]=0.
         return Neff_vect
     
     def pixelize(self,nside):
@@ -115,9 +118,9 @@ class posterior_samples(object):
         
         Parameters
         ----------
-        posterior_dict: np.array
+        posterior_dict: onp.array
             Dictionary of posterior samples
-        prior: np.array
+        prior: onp.array
             Prior to use in order to reweight posterior samples written in the same variables that you provide, e.g. if you provide d_l and m1d, then p(d_l,m1d)
         '''
         self.posterior_data={key: posterior_dict[key] for key in posterior_dict.keys()}
@@ -138,11 +141,11 @@ class posterior_samples(object):
         
     def cupyfy(self):
         ''' Converts all the posterior samples to cupy'''
-        self.posterior_data={key:np2cp(self.posterior_data[key]) for key in self.posterior_data}
+        self.posterior_data={key:onp2jnp(self.posterior_data[key]) for key in self.posterior_data}
         
     def numpyfy(self):
         ''' Converts all the posterior samples to numpy'''
-        self.posterior_data={key:cp2np(self.posterior_data[key]) for key in self.posterior_data}
+        self.posterior_data={key:jnp2onp(self.posterior_data[key]) for key in self.posterior_data}
         
     def add_counterpart(self,z_EM,ra,dec):
         '''
@@ -152,7 +155,7 @@ class posterior_samples(object):
         
         Parameters
         ----------
-        z_EM: xp.array
+        z_EM: jnp.array
             Samples of credible cosmological redshifts inferred from EM counterparts.
             This should already include all the uncertainties, e.g. peculiar motion
         ra: float
@@ -162,7 +165,7 @@ class posterior_samples(object):
         '''
         
         idx = radec2indeces(ra,dec,self.nside)
-        select = xp.where(self.posterior_data['sky_indices']==idx)[0]
+        select = jnp.where(self.posterior_data['sky_indices']==idx)[0]
         print('There are {:d} samples in the EM counterpart direction'.format(len(select)))
         self.posterior_data={key: self.posterior_data[key] for key in self.posterior_data.keys()}
         self.posterior_data['z_EM'] = z_EM
@@ -187,9 +190,9 @@ class posterior_samples(object):
         '''
         
         logw = rate_wrapper.log_rate_PE(**{key:self.posterior_data[key] for key in self.posterior_data.keys()})
-        prob = xp.exp(logw)
+        prob = jnp.exp(logw)
         prob/=prob.sum()
-        idx = xp.random.choice(len(self.posterior_data['prior']),replace=replace,p=prob)
+        idx = jnp.random.choice(len(self.posterior_data['prior']),replace=replace,p=prob)
         return {key:self.posterior_data[key][idx] for key in list(self.posterior_data.keys())}
         
         

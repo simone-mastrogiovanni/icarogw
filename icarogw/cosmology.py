@@ -1,6 +1,6 @@
-from .cupy_pal import *
-from scipy.integrate import cumtrapz
+from .jax_pal import *
 import mpmath
+from scipy.integrate import cumtrapz
 
 COST_C= 299792.458 # Speed of light in km/s
 
@@ -16,10 +16,10 @@ class base_cosmology(object):
             initialize the cosmology up to zmax
         '''
         self.zmax=zmax
-        self.z_cpu=np.logspace(-6,np.log10(self.zmax),2500)
-        self.z_gpu=xp.logspace(-6,np.log10(self.zmax),2500)
+        self.z_cpu=onp.logspace(-6,onp.log10(self.zmax),2500)
+        self.z_gpu=jnp.logspace(-6,onp.log10(self.zmax),2500)
         
-        self.log10_z_gpu=xp.log10(self.z_gpu)
+        self.log10_z_gpu=jnp.log10(self.z_gpu)
         
     def _checkz(self,z):
         smin,smax=z.min(),z.max()
@@ -28,7 +28,7 @@ class base_cosmology(object):
             
     def _checkdl(self,dl):
         dlmin,dlmax=dl.min(),dl.max()
-        dlmingrid,dlmaxgrid=xp.power(10.,self.log10_dl_at_z.min()),xp.power(10.,self.log10_dl_at_z.max())
+        dlmingrid,dlmaxgrid=jnp.power(10.,self.log10_dl_at_z.min()),jnp.power(10.,self.log10_dl_at_z.max())
 
         if (dlmin<dlmingrid) | (dlmax>dlmaxgrid):
             raise ValueError('Luminosity provided not in range {:f}<dl<{:f} Mpc, dlmin = {:f} Mpc, dlmax = {:f} Mpc'.format(dlmingrid,dlmaxgrid,
@@ -39,19 +39,19 @@ class base_cosmology(object):
         
         Parameters
         ----------
-        z: xp.array
+        z: jnp.array
             Redshift
         
         Reutrns
         -------
-        dl: xp.array
+        dl: jnp.array
             luminosity distance in Mpc
         ''' 
         self._checkz(z)
         origin=z.shape
-        ravelled=xp.ravel(xp.log10(z))
-        interpo=xp.interp(ravelled,self.log10_z_gpu,self.log10_dl_at_z)
-        return xp.reshape(10**interpo,origin)
+        ravelled=jnp.ravel(jnp.log10(z))
+        interpo=jnp.interp(ravelled,self.log10_z_gpu,self.log10_dl_at_z)
+        return jnp.reshape(10**interpo,origin)
     
     def z2Vc(self,z):
         '''
@@ -59,19 +59,19 @@ class base_cosmology(object):
         
         Parameters
         ----------
-        z: xp.array
+        z: jnp.array
             Redshift
         
         Reutrns
         -------
-        dl: xp.array
+        dl: jnp.array
             luminosity distance in Mpc
         ''' 
         self._checkz(z)
         origin=z.shape
-        ravelled=xp.ravel(xp.log10(z))
-        interpo=xp.interp(ravelled,self.log10_z_gpu,self.log10_Vc)
-        return xp.reshape(10**interpo,origin)
+        ravelled=jnp.ravel(jnp.log10(z))
+        interpo=jnp.interp(ravelled,self.log10_z_gpu,self.log10_Vc)
+        return jnp.reshape(10**interpo,origin)
         
         
     def dl2z(self,dl):
@@ -80,19 +80,19 @@ class base_cosmology(object):
         
         Parameters
         ----------
-        dl: xp.array
+        dl: jnp.array
             luminosity distance in Mpc
         
         Reutrns
         -------
-        z: xp.array
+        z: jnp.array
             redshift
         '''
         self._checkdl(dl)
         origin=dl.shape
-        ravelled=xp.ravel(xp.log10(dl))
-        interpo=xp.interp(ravelled,self.log10_dl_at_z,self.log10_z_gpu)
-        return xp.reshape(10**interpo,origin)
+        ravelled=jnp.ravel(jnp.log10(dl))
+        interpo=jnp.interp(ravelled,self.log10_dl_at_z,self.log10_z_gpu)
+        return jnp.reshape(10**interpo,origin)
     
     def dVc_by_dzdOmega_at_z(self,z):
         '''
@@ -100,19 +100,19 @@ class base_cosmology(object):
         
         Parameters
         ----------
-        z: xp.array
+        z: jnp.array
             Redshift
         
         Reutrns
         -------
-        dVc_by_dzdOmega: xp.array
+        dVc_by_dzdOmega: jnp.array
             comoving volume per sterdian at a given redshift in Gpc3std-1
         '''
         self._checkz(z)
         origin=z.shape
-        ravelled=xp.ravel(xp.log10(z))
-        interpo=xp.interp(ravelled,self.log10_z_gpu,self.log10_dVc_dzdOmega)
-        return xp.reshape(10**interpo,origin)
+        ravelled=jnp.ravel(jnp.log10(z))
+        interpo=jnp.interp(ravelled,self.log10_z_gpu,self.log10_dVc_dzdOmega)
+        return jnp.reshape(10**interpo,origin)
     
     def ddl_by_dz_at_z(self,z):
         '''
@@ -120,19 +120,19 @@ class base_cosmology(object):
         
         Parameters
         ----------
-        z: xp.array
+        z: jnp.array
             Redshift
         
         Reutrns
         -------
-        ddl_by_dz: xp.array
+        ddl_by_dz: jnp.array
             differential of the luminosity distance in Mpc
         '''
         self._checkz(z)
         origin=z.shape
-        ravelled=xp.ravel(xp.log10(z))
-        interpo=xp.interp(ravelled,self.log10_z_gpu,self.log10_ddl_by_dz)
-        return xp.reshape(10**interpo,origin)
+        ravelled=jnp.ravel(jnp.log10(z))
+        interpo=jnp.interp(ravelled,self.log10_z_gpu,self.log10_ddl_by_dz)
+        return jnp.reshape(10**interpo,origin)
     
     def sample_comoving_volume(self,Nsamp,zmin,zmax):
         '''
@@ -147,16 +147,16 @@ class base_cosmology(object):
         
         Reutrns
         -------
-        z_samples: xp.array
+        z_samples: jnp.array
             Distribution in z uniform in comoving volume
         '''
-        self._checkz(np.array([zmin,zmax]))
-        zproxy=xp.linspace(zmin,zmax,10000)
+        self._checkz(onp.array([zmin,zmax]))
+        zproxy=jnp.linspace(zmin,zmax,10000)
         prob=self.dVc_by_dzdOmega_at_z(zproxy)
-        cdf=xp.cumsum(prob)/prob.sum()
+        cdf=jnp.cumsum(prob)/prob.sum()
         cdf[0]=0.
-        cdf_samps=xp.random.rand(Nsamp)
-        return xp.interp(cdf_samps,cdf,zproxy)
+        cdf_samps=jnp.random.rand(Nsamp)
+        return jnp.interp(cdf_samps,cdf,zproxy)
     
 
 class astropycosmology(base_cosmology):
@@ -171,10 +171,10 @@ class astropycosmology(base_cosmology):
         '''
         self.astropy_cosmo=astropy_cosmo
         self.little_h=astropy_cosmo.H(0.).value/100.
-        self.log10_dVc_dzdOmega=xp.log10(np2cp(astropy_cosmo.differential_comoving_volume(self.z_cpu).value))-9. # Conversion from Mpc to Gpc
-        self.log10_Vc=xp.log10(np2cp(astropy_cosmo.comoving_volume(self.z_cpu).value))-9. # Conversion to Gpc
-        self.log10_dl_at_z=xp.log10(np2cp(astropy_cosmo.luminosity_distance(self.z_cpu).value))
-        self.log10_ddl_by_dz=xp.log10((xp.power(10.,self.log10_dl_at_z)/(1.+self.z_gpu))+COST_C*(1.+self.z_gpu)/np2cp(astropy_cosmo.H(self.z_cpu).value))
+        self.log10_dVc_dzdOmega=jnp.log10(onp2jnp(astropy_cosmo.differential_comoving_volume(self.z_cpu).value))-9. # Conversion from Mpc to Gpc
+        self.log10_Vc=jnp.log10(onp2jnp(astropy_cosmo.comoving_volume(self.z_cpu).value))-9. # Conversion to Gpc
+        self.log10_dl_at_z=jnp.log10(onp2jnp(astropy_cosmo.luminosity_distance(self.z_cpu).value))
+        self.log10_ddl_by_dz=jnp.log10((jnp.power(10.,self.log10_dl_at_z)/(1.+self.z_gpu))+COST_C*(1.+self.z_gpu)/onp2jnp(astropy_cosmo.H(self.z_cpu).value))
         
         
 class extraD_astropycosmology(astropycosmology):
@@ -191,14 +191,14 @@ class extraD_astropycosmology(astropycosmology):
         '''
         
         super().build_cosmology(astropy_cosmo)
-        dlem = xp.power(10.,self.log10_dl_at_z)
-        dlbydz_em = xp.power(10.,self.log10_ddl_by_dz)
-        self.log10_dl_at_z=xp.log10(dlem*xp.power(1+xp.power(dlem/((1.+self.z_gpu)*Rc),n),(D-4.)/(2*n)))
-        Afa=1.+xp.power(dlem/((1.+self.z_gpu)*Rc),n)
+        dlem = jnp.power(10.,self.log10_dl_at_z)
+        dlbydz_em = jnp.power(10.,self.log10_ddl_by_dz)
+        self.log10_dl_at_z=jnp.log10(dlem*jnp.power(1+jnp.power(dlem/((1.+self.z_gpu)*Rc),n),(D-4.)/(2*n)))
+        Afa=1.+jnp.power(dlem/((1.+self.z_gpu)*Rc),n)
         expo=(D-4.)/(2.*n)
         # We put the absolute value for the Jacobian (because this is needed for probabilities)
-        self.log10_ddl_by_dz=xp.log10(xp.abs(xp.power(Afa,expo)*(dlbydz_em+xp.power(dlem/Rc,n)*(expo*n/Afa)*\
-            (dlbydz_em/xp.power(1.+self.z_gpu,n)-dlem/xp.power(1.+self.z_gpu,n+1.)))))
+        self.log10_ddl_by_dz=jnp.log10(jnp.abs(jnp.power(Afa,expo)*(dlbydz_em+jnp.power(dlem/Rc,n)*(expo*n/Afa)*\
+            (dlbydz_em/jnp.power(1.+self.z_gpu,n)-dlem/jnp.power(1.+self.z_gpu,n+1.)))))
 
 class cM_astropycosmology(astropycosmology):
     def build_cosmology(self,astropy_cosmo,cM):
@@ -214,20 +214,20 @@ class cM_astropycosmology(astropycosmology):
         '''
         
         super().build_cosmology(astropy_cosmo)
-        dlem = xp.power(10.,self.log10_dl_at_z)
-        dlbydz_em = xp.power(10.,self.log10_ddl_by_dz)
+        dlem = jnp.power(10.,self.log10_dl_at_z)
+        dlbydz_em = jnp.power(10.,self.log10_ddl_by_dz)
         # Implementation of the running Planck mass model general case as described in the overleaf https://www.overleaf.com/project/62330c2859bb3c2a5982c2b6
         # Define array for numerical integration
-        ZforI=np.append(self.z_cpu,self.z_cpu[-1]-self.z_cpu[-2])
-        ZforI=np.append(0.,ZforI)
+        ZforI=onp.append(self.z_cpu,self.z_cpu[-1]-self.z_cpu[-2])
+        ZforI=onp.append(0.,ZforI)
         Zhalfbin=(ZforI[:-1:]+ZforI[1::])*0.5
-        Integrandhalfin=1./((1+Zhalfbin)*np.power(astropy_cosmo.efunc(Zhalfbin),2.))
-        Integrand=np2cp(1./((1+self.z_cpu)*np.power(astropy_cosmo.efunc(self.z_cpu),2.)))
-        Integral=np2cp(cumtrapz(Integrandhalfin,Zhalfbin))
-        self.log10_dl_at_z=xp.log10(dlem*xp.exp((0.5*cM)*Integral))
-        exp_factor = xp.exp(0.5*cM*Integral)
+        Integrandhalfin=1./((1+Zhalfbin)*onp.power(astropy_cosmo.efunc(Zhalfbin),2.))
+        Integrand=onp2jnp(1./((1+self.z_cpu)*onp.power(astropy_cosmo.efunc(self.z_cpu),2.)))
+        Integral=onp2jnp(cumtrapz(Integrandhalfin,Zhalfbin))
+        self.log10_dl_at_z=jnp.log10(dlem*jnp.exp((0.5*cM)*Integral))
+        exp_factor = jnp.exp(0.5*cM*Integral)
         # We put the absolute value for the Jacobian (because this is needed for probabilities)
-        self.log10_ddl_by_dz=xp.log10(xp.abs(exp_factor*dlbydz_em+0.5*dlem*cM*exp_factor*Integrand))
+        self.log10_ddl_by_dz=jnp.log10(jnp.abs(exp_factor*dlbydz_em+0.5*dlem*cM*exp_factor*Integrand))
         
         
     
@@ -247,11 +247,11 @@ class Xi0_astropycosmology(astropycosmology):
         '''
         
         super().build_cosmology(astropy_cosmo)
-        dlem = xp.power(10.,self.log10_dl_at_z)
-        dlbydz_em = xp.power(10.,self.log10_ddl_by_dz)
-        self.log10_dl_at_z=xp.log10(dlem*(Xi0+(1.-Xi0)*xp.power(1.+self.z_gpu,-n)))
+        dlem = jnp.power(10.,self.log10_dl_at_z)
+        dlbydz_em = jnp.power(10.,self.log10_ddl_by_dz)
+        self.log10_dl_at_z=jnp.log10(dlem*(Xi0+(1.-Xi0)*jnp.power(1.+self.z_gpu,-n)))
         # We put the absolute value for the Jacobian (because this is needed for probabilities)
-        self.log10_ddl_by_dz=xp.log10(xp.abs(dlbydz_em*(Xi0+(1.-Xi0)*xp.power(1+self.z_gpu,-n))-dlem*(1.-Xi0)*n*xp.power(1+self.z_gpu,-n-1)))
+        self.log10_ddl_by_dz=jnp.log10(jnp.abs(dlbydz_em*(Xi0+(1.-Xi0)*jnp.power(1+self.z_gpu,-n))-dlem*(1.-Xi0)*n*jnp.power(1+self.z_gpu,-n-1)))
         
 class alphalog_astropycosmology(astropycosmology):
     def  build_cosmology(self,astropy_cosmo,alphalog_1, alphalog_2, alphalog_3):
@@ -266,18 +266,18 @@ class alphalog_astropycosmology(astropycosmology):
             Implementation of the logarithm phenomenological dimension model proposed by the CosmologyTGR group
         '''
         super().build_cosmology(astropy_cosmo)
-        dlem = xp.power(10.,self.log10_dl_at_z)
-        dlbydz_em = xp.power(10.,self.log10_ddl_by_dz)
-        self.log10_dl_at_z=xp.log10(dlem*(1.+alphalog_1*xp.log1p(self.z_gpu)+\
-                                alphalog_2*(xp.log1p(self.z_gpu)**2.)+\
-                                alphalog_3*(xp.log1p(self.z_gpu)**3.)))        
-        part1 = dlbydz_em*(1.+alphalog_1*xp.log1p(self.z_gpu)+ \
-                                        alphalog_2*(xp.log1p(self.z_gpu))**2.+\
-                                        alphalog_3*(xp.log1p(self.z_gpu))**3.)
-        part2 = (dlem/(1+self.z_gpu))*(alphalog_1+alphalog_2*2.*xp.log1p(self.z_gpu)+\
-                      alphalog_3*3.*(xp.log1p(self.z_gpu)**2.))
+        dlem = jnp.power(10.,self.log10_dl_at_z)
+        dlbydz_em = jnp.power(10.,self.log10_ddl_by_dz)
+        self.log10_dl_at_z=jnp.log10(dlem*(1.+alphalog_1*jnp.log1p(self.z_gpu)+\
+                                alphalog_2*(jnp.log1p(self.z_gpu)**2.)+\
+                                alphalog_3*(jnp.log1p(self.z_gpu)**3.)))        
+        part1 = dlbydz_em*(1.+alphalog_1*jnp.log1p(self.z_gpu)+ \
+                                        alphalog_2*(jnp.log1p(self.z_gpu))**2.+\
+                                        alphalog_3*(jnp.log1p(self.z_gpu))**3.)
+        part2 = (dlem/(1+self.z_gpu))*(alphalog_1+alphalog_2*2.*jnp.log1p(self.z_gpu)+\
+                      alphalog_3*3.*(jnp.log1p(self.z_gpu)**2.))
         # We put the absolute value for the Jacobian (because this is needed for probabilities)
-        self.log10_ddl_by_dz=xp.log10(xp.abs(part1 + part2))
+        self.log10_ddl_by_dz=jnp.log10(jnp.abs(part1 + part2))
 
     
 class galaxy_MF(object):
@@ -314,13 +314,13 @@ class galaxy_MF(object):
             cosmology class from the cosmology module
         '''
         self.cosmology=cosmology
-        self.Mstarobs=self.Mstar+5*np.log10(cosmology.little_h)
-        self.Mminobs=self.Mmin+5*np.log10(cosmology.little_h)
-        self.Mmaxobs=self.Mmax+5*np.log10(cosmology.little_h)
+        self.Mstarobs=self.Mstar+5*onp.log10(cosmology.little_h)
+        self.Mminobs=self.Mmin+5*onp.log10(cosmology.little_h)
+        self.Mmaxobs=self.Mmax+5*onp.log10(cosmology.little_h)
         
-        self.phistarobs=self.phistar*np.power(cosmology.little_h,3.)
-        xmax=np.power(10.,0.4*(self.Mstarobs-self.Mminobs))
-        xmin=np.power(10.,0.4*(self.Mstarobs-self.Mmaxobs))
+        self.phistarobs=self.phistar*onp.power(cosmology.little_h,3.)
+        xmax=onp.power(10.,0.4*(self.Mstarobs-self.Mminobs))
+        xmin=onp.power(10.,0.4*(self.Mstarobs-self.Mmaxobs))
         # Check if you need to replace this with a numerical integral.
         self.norm=self.phistarobs*float(mpmath.gammainc(self.alpha+1,a=xmin,b=xmax))
 
@@ -330,16 +330,16 @@ class galaxy_MF(object):
         
         Parameters
         ----------
-        M: xp.array
+        M: jnp.array
             Absolute magnitude
             
         Returns
         -------
         log of the Sch function
         '''
-        toret=xp.log(0.4*xp.log(10)*self.phistarobs)+ \
-        ((self.alpha+1)*0.4*(self.Mstarobs-M))*xp.log(10.)-xp.power(10.,0.4*(self.Mstarobs-M))
-        toret[(M<self.Mminobs) | (M>self.Mmaxobs)]=-xp.inf
+        toret=jnp.log(0.4*jnp.log(10)*self.phistarobs)+ \
+        ((self.alpha+1)*0.4*(self.Mstarobs-M))*jnp.log(10.)-jnp.power(10.,0.4*(self.Mstarobs-M))
+        toret[(M<self.Mminobs) | (M>self.Mmaxobs)]=-jnp.inf
         return toret
 
     def log_pdf(self,M):
@@ -348,14 +348,14 @@ class galaxy_MF(object):
         
         Parameters
         ----------
-        M: xp.array
+        M: jnp.array
             Absolute magnitude
             
         Returns
         -------
         log of the Sch function as pdf
         '''
-        return self.log_evaluate(M)-xp.log(self.norm)
+        return self.log_evaluate(M)-jnp.log(self.norm)
 
     def pdf(self,M):
         '''
@@ -363,14 +363,14 @@ class galaxy_MF(object):
         
         Parameters
         ----------
-        M: xp.array
+        M: jnp.array
             Absolute magnitude
             
         Returns
         -------
         log of the Sch as pdf
         '''
-        return xp.exp(self.log_pdf(M))
+        return jnp.exp(self.log_pdf(M))
 
     def evaluate(self,M):
         '''
@@ -378,14 +378,14 @@ class galaxy_MF(object):
         
         Parameters
         ----------
-        M: xp.array
+        M: jnp.array
             Absolute magnitude
             
         Returns
         -------
         Sch function in Gpc-3
         '''
-        return xp.exp(self.log_evaluate(M))
+        return jnp.exp(self.log_evaluate(M))
 
     def sample(self,N):
         '''
@@ -398,13 +398,13 @@ class galaxy_MF(object):
         
         Returns
         -------
-        Samples: xp.array
+        Samples: jnp.array
         '''
-        sarray=xp.linspace(self.Mminobs,self.Mmaxobs,10000)
-        cdfeval=xp.cumsum(self.pdf(sarray))/self.pdf(sarray).sum()
+        sarray=jnp.linspace(self.Mminobs,self.Mmaxobs,10000)
+        cdfeval=jnp.cumsum(self.pdf(sarray))/self.pdf(sarray).sum()
         cdfeval[0]=0.
-        randomcdf=xp.random.rand(N)
-        return xp.interp(randomcdf,cdfeval,sarray,left=self.Mminobs,right=self.Mmaxobs)
+        randomcdf=jnp.random.rand(N)
+        return jnp.interp(randomcdf,cdfeval,sarray,left=self.Mminobs,right=self.Mmaxobs)
     
     def build_effective_number_density_interpolant(self,epsilon):
         '''This method build the number density interpolant. This is defined as the integral from the Schecter function faint end to a value M_thr for the Schechter
@@ -418,15 +418,15 @@ class galaxy_MF(object):
         
         minv,maxv=self.Mmin,self.Mmax
         self.epsilon=epsilon
-        Mvector_interpolant=np.linspace(minv,maxv,100)
-        self.effective_density_interpolant=np.zeros_like(Mvector_interpolant)
-        xmin=np.power(10.,0.4*(self.Mstar-maxv))
+        Mvector_interpolant=onp.linspace(minv,maxv,100)
+        self.effective_density_interpolant=onp.zeros_like(Mvector_interpolant)
+        xmin=onp.power(10.,0.4*(self.Mstar-maxv))
         for i in range(len(Mvector_interpolant)):
-            xmax=np.power(10.,0.4*(self.Mstar-Mvector_interpolant[i]))
+            xmax=onp.power(10.,0.4*(self.Mstar-Mvector_interpolant[i]))
             self.effective_density_interpolant[i]=float(mpmath.gammainc(self.alpha+1+epsilon,a=xmin,b=xmax))
         
-        self.effective_density_interpolant=np2cp(self.effective_density_interpolant)[::-1]
-        self.xvector_interpolant=np2cp(self.Mstar-Mvector_interpolant)[::-1]
+        self.effective_density_interpolant=onp2jnp(self.effective_density_interpolant)[::-1]
+        self.xvector_interpolant=onp2jnp(self.Mstar-Mvector_interpolant)[::-1]
         
     def background_effective_galaxy_density(self,Mthr):
         '''Returns the effective galaxy density, i.e. dN_{gal,eff}/dVc, the effective number is given by the luminosity weights.
@@ -434,16 +434,16 @@ class galaxy_MF(object):
         
         Parameters
         ----------
-        Mthr: xp.array
+        Mthr: jnp.array
             Absolute magnitude threshold (faint) used to compute the integral
         '''
         
         origin=Mthr.shape
-        ravelled=xp.ravel(self.Mstarobs-Mthr)
+        ravelled=jnp.ravel(self.Mstarobs-Mthr)
         # Schecter function is 0 outside intervals that's why we set limit on boundaries 
-        outp=self.phistarobs*xp.interp(ravelled,self.xvector_interpolant,self.effective_density_interpolant
+        outp=self.phistarobs*jnp.interp(ravelled,self.xvector_interpolant,self.effective_density_interpolant
                            ,left=self.effective_density_interpolant[0],right=self.effective_density_interpolant[-1])
-        return xp.reshape(outp,origin)
+        return jnp.reshape(outp,origin)
     
 class kcorr(object):
     def __init__(self,band):
@@ -464,24 +464,22 @@ class kcorr(object):
         
         Parameters
         ----------
-        z: xp.array
+        z: jnp.array
             Redshift
         
         Returns
         -------
-        k_corrections: xp.array
+        k_corrections: jnp.array
         '''
         if self.band == 'W1':
             k_corr = -1*(4.44e-2+2.67*z+1.33*(z**2.)-1.59*(z**3.)) #From Maciej email
         elif self.band == 'K':
             # https://iopscience.iop.org/article/10.1086/322488/pdf 4th page lhs
-            to_ret=-6.0*xp.log10(1+z)
-            to_ret[z>0.3]=-6.0*xp.log10(1+0.3)
-            k_corr=-6.0*xp.log10(1+z)
+            k_corr=-6.0*jnp.log10(1+z)
         elif self.band == 'bJ':
             # Fig 5 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
             # Note that these corrections also includes evolution corrections
-            k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
+            k_corr=(z+6*jnp.power(z,2.))/(1+15.*jnp.power(z,3.))
         return k_corr
         
 class basic_redshift_rate(object):
@@ -493,10 +491,10 @@ class basic_redshift_rate(object):
 
         Parameters
         ----------
-        z: xp.array
+        z: jnp.array
             Redshift  
         '''
-        return xp.exp(self.log_evaluate(z))
+        return jnp.exp(self.log_evaluate(z))
     
 class powerlaw_rate(basic_redshift_rate):
     '''
@@ -505,7 +503,7 @@ class powerlaw_rate(basic_redshift_rate):
     def __init__(self,gamma):
         self.gamma=gamma
     def log_evaluate(self,z):
-        return self.gamma*xp.log1p(z)
+        return self.gamma*jnp.log1p(z)
 
 class md_rate(basic_redshift_rate):
     '''
@@ -516,7 +514,7 @@ class md_rate(basic_redshift_rate):
         self.kappa=kappa
         self.zp=zp
     def log_evaluate(self,z):
-        return xp.log1p(xp.power(1+self.zp,-self.gamma-self.kappa))+self.gamma*xp.log1p(z)-xp.log1p(xp.power((1+z)/(1+self.zp),self.gamma+self.kappa))
+        return jnp.log1p(jnp.power(1+self.zp,-self.gamma-self.kappa))+self.gamma*jnp.log1p(z)-jnp.log1p(jnp.power((1+z)/(1+self.zp),self.gamma+self.kappa))
 
 
     
@@ -529,18 +527,18 @@ class basic_absM_rate(object):
         Parameters
         ----------
         sch: Schechter class
-        M: xp.array
+        M: jnp.array
             Redshift  
         '''
-        return xp.exp(self.log_evaluate(sch,M))
+        return jnp.exp(self.log_evaluate(sch,M))
 
 class log_powerlaw_absM_rate(basic_absM_rate):
     def __init__(self,epsilon):
         self.epsilon=epsilon
     def log_evaluate(self,sch,M):
-        toret= self.epsilon*0.4*(sch.Mstarobs-M)*xp.log(10)
+        toret= self.epsilon*0.4*(sch.Mstarobs-M)*jnp.log(10)
         # Note Galaxies fainter than the Schechter limit are assumed to have CBC rate 0.
         # Note Galaxies brighter are kept even if incosistent with Schechter limit 
-        toret[(M>sch.Mmaxobs)]=-xp.inf
+        toret[(M>sch.Mmaxobs)]=-jnp.inf
         return toret
 

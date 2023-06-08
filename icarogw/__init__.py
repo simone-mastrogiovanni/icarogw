@@ -1,4 +1,4 @@
-from . import cupy_pal
+from . import jax_pal
 from . import catalog
 from . import cosmology
 from . import posterior_samples

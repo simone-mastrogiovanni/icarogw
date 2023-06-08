@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .jax_pal import *
 from .conversions import L2M, M2L
 import copy
 
@@ -8,16 +8,16 @@ def betadistro_muvar2ab(mu,var):
     
     Parameters:
     -----------
-    mu, var: xp.array
+    mu, var: jnp.array
         mean and variance of the beta distribution
     
     Returns:
     --------
-    a,b: xp.array 
+    a,b: jnp.array 
         a and b parameters of the beta distribution
     '''
     
-    a=(((1.-mu)/var)- 1./mu )*xp.power(mu,2.)
+    a=(((1.-mu)/var)- 1./mu )*jnp.power(mu,2.)
     return a,a* (1./mu -1.)
 
 def betadistro_ab2muvar(a,b):
@@ -26,16 +26,16 @@ def betadistro_ab2muvar(a,b):
     
     Parameters:
     -----------
-    a,b: xp.array 
+    a,b: jnp.array 
         a and b parameters of the beta distribution
     
     Returns:
     --------
-    mu, var: xp.array
+    mu, var: jnp.array
         mean and variance of the beta distribution
     '''
     
-    return a/(a+b), a*b/(xp.power(a+b,2.) *(a+b+1.))
+    return a/(a+b), a*b/(jnp.power(a+b,2.) *(a+b+1.))
 
 def _S_factor(mass, mmin,delta_m):
     '''
@@ -43,11 +43,11 @@ def _S_factor(mass, mmin,delta_m):
 
     Parameters
     ----------
-    mass: xp.array or float
+    mass: jnp.array or float
         array of x or masses values
-    mmin: float or xp.array (in this case len(mmin) == len(mass))
+    mmin: float or jnp.array (in this case len(mmin) == len(mass))
         minimum value of window function
-    delta_m: float or xp.array (in this case len(delta_m) == len(mass))
+    delta_m: float or jnp.array (in this case len(delta_m) == len(mass))
         width of the window function
 
     Returns
@@ -55,7 +55,7 @@ def _S_factor(mass, mmin,delta_m):
     Values of the window function
     '''
 
-    to_ret = xp.ones_like(mass)
+    to_ret = jnp.ones_like(mass)
     if delta_m == 0:
         return to_ret
 
@@ -66,14 +66,14 @@ def _S_factor(mass, mmin,delta_m):
     select_one = mass>=(delta_m+mmin)
     select_zero = mass<=mmin
 
-    effe_prime = xp.ones_like(mass)
+    effe_prime = jnp.ones_like(mass)
 
     # Defines the f function as in Eq. B7 of https://arxiv.org/pdf/2010.14533.pdf
     # This line might raise a warnig for exp orverflow, however this is not important as it enters at denominator
-    effe_prime[select_window] = xp.exp(xp.nan_to_num((delta_m/mprime[select_window])+(delta_m/(mprime[select_window]-delta_m))))
+    effe_prime=effe_prime.at[select_window].set(jnp.exp(jnp.nan_to_num((delta_m/mprime[select_window])+(delta_m/(mprime[select_window]-delta_m)))))
     to_ret = 1./(effe_prime+1)
-    to_ret[select_zero]=0.
-    to_ret[select_one]=1.
+    to_ret=to_ret.at[select_zero].set(0.)
+    to_ret=to_ret.at[select_one].set(1.)
     return to_ret
 
 class basic_1dimpdf(object):
@@ -92,20 +92,20 @@ class basic_1dimpdf(object):
         
     def _check_bound_pdf(self,x,y):
         '''
-        Check if x is between the pdf boundaries and set y to -xp.inf where x is outside
+        Check if x is between the pdf boundaries and set y to -jnp.inf where x is outside
         
         Parameters
         ----------
-        x,y: xp.array
+        x,y: jnp.array
             Array where the log pdf is evaluated and values of the log pdf
         
         Returns
         -------
-        log pdf values: xp.array
-            log pdf values updates to -xp.inf outside the boundaries
+        log pdf values: jnp.array
+            log pdf values updates to -jnp.inf outside the boundaries
             
         '''
-        y[(x<self.minval) | (x>self.maxval)]=-xp.inf
+        y=y.at[(x<self.minval) | (x>self.maxval)].set(-jnp.inf)
         return y
     
     def _check_bound_cdf(self,x,y):
@@ -114,16 +114,17 @@ class basic_1dimpdf(object):
         
         Parameters
         ----------
-        x,y: xp.array
+        x,y: jnp.array
             Array where the log cdf is evaluated and values of the log cdf
         
         Returns
         -------
-        log cdf values: xp.array
+        log cdf values: jnp.array
             log cdf values updates to 0 and 1 outside the boundaries
             
         '''
-        y[x<self.minval],y[x>self.maxval]=-xp.inf,0.
+        y=y.at[x<self.minval].set(-jnp.inf)
+        y=y.at[x>self.maxval].set(0.)
         return y
     
     def log_pdf(self,x):
@@ -132,12 +133,12 @@ class basic_1dimpdf(object):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
         y=self._log_pdf(x)
         y=self._check_bound_pdf(x,y)
@@ -149,12 +150,12 @@ class basic_1dimpdf(object):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
         y=self._log_cdf(x)
         y=self._check_bound_cdf(x,y)
@@ -166,14 +167,14 @@ class basic_1dimpdf(object):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the pdf
         
         Returns
         -------
-        pdf: xp.array
+        pdf: jnp.array
         '''
-        return xp.exp(self.log_pdf(x))
+        return jnp.exp(self.log_pdf(x))
     
     def cdf(self,x):
         '''
@@ -181,14 +182,14 @@ class basic_1dimpdf(object):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the cdf
         
         Returns
         -------
-        cdf: xp.array
+        cdf: jnp.array
         '''
-        return xp.exp(self.log_cdf(x))
+        return jnp.exp(self.log_cdf(x))
     
     def sample(self,N):
         '''
@@ -201,12 +202,12 @@ class basic_1dimpdf(object):
         
         Returns
         -------
-        Samples: xp.array
+        Samples: jnp.array
         '''
-        sarray=xp.linspace(self.minval,self.maxval,10000)
+        sarray=jnp.linspace(self.minval,self.maxval,10000)
         cdfeval=self.cdf(sarray)
-        randomcdf=xp.random.rand(N)
-        return xp.interp(randomcdf,cdfeval,sarray)
+        randomcdf=jnp.random.rand(N)
+        return jnp.interp(randomcdf,cdfeval,sarray)
 
 class conditional_2dimpdf(object):
     
@@ -224,20 +225,20 @@ class conditional_2dimpdf(object):
         
     def _check_bound_pdf(self,x1,x2,y):
         '''
-        Check if x1 and x2 are between the pdf boundaries and set y to -xp.inf where x1<x2 is outside
+        Check if x1 and x2 are between the pdf boundaries and set y to -jnp.inf where x1<x2 is outside
         
         Parameters
         ----------
-        x1,x2,y: xp.array
+        x1,x2,y: jnp.array
             Array where the log pdf is evaluated and values of the log pdf
         
         Returns
         -------
-        log pdf values: xp.array
-            log pdf values updated to -xp.inf outside the boundaries
+        log pdf values: jnp.array
+            log pdf values updated to -jnp.inf outside the boundaries
             
         '''
-        y[(x1<x2) | xp.isnan(y)]=-xp.inf
+        y=y.at[(x1<x2) | jnp.isnan(y)].set(-jnp.inf)
         return y
     
     def log_pdf(self,x1,x2):
@@ -246,12 +247,12 @@ class conditional_2dimpdf(object):
         
         Parameters
         ----------
-        x1,x2: xp.array
+        x1,x2: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
         # This line might create some nan since p(m2|m1) = p(m2)/CDF_m2(m1) = 0/0 if m2 and m1 < mmin.
         # This nan is eliminated with the _check_bound_pdf
@@ -265,14 +266,14 @@ class conditional_2dimpdf(object):
         
         Parameters
         ----------
-        x1,x2: xp.array
+        x1,x2: jnp.array
             where to evaluate the pdf
         
         Returns
         -------
-        pdf: xp.array
+        pdf: jnp.array
         '''
-        return xp.exp(self.log_pdf(x1,x2))
+        return jnp.exp(self.log_pdf(x1,x2))
     
     def sample(self,N):
         '''
@@ -285,17 +286,17 @@ class conditional_2dimpdf(object):
         
         Returns
         -------
-        Samples: xp.array
+        Samples: jnp.array
         '''
-        sarray1=xp.linspace(self.pdf1.minval,self.pdf1.maxval,10000)
+        sarray1=jnp.linspace(self.pdf1.minval,self.pdf1.maxval,10000)
         cdfeval1=self.pdf1.cdf(sarray1)
-        randomcdf1=xp.random.rand(N)
+        randomcdf1=jnp.random.rand(N)
 
-        sarray2=xp.linspace(self.pdf2.minval,self.pdf2.maxval,10000)
+        sarray2=jnp.linspace(self.pdf2.minval,self.pdf2.maxval,10000)
         cdfeval2=self.pdf2.cdf(sarray2)
-        randomcdf2=xp.random.rand(N)
-        x1samp=xp.interp(randomcdf1,cdfeval1,sarray1)
-        x2samp=xp.interp(randomcdf2*self.pdf2.cdf(x1samp),cdfeval2,sarray2)
+        randomcdf2=jnp.random.rand(N)
+        x1samp=jnp.interp(randomcdf1,cdfeval1,sarray1)
+        x2samp=jnp.interp(randomcdf2*self.pdf2.cdf(x1samp),cdfeval2,sarray2)
         return x1samp,x2samp
 
 class SmoothedProb(basic_1dimpdf):
@@ -314,17 +315,17 @@ class SmoothedProb(basic_1dimpdf):
         super().__init__(originprob.minval,originprob.maxval)
         
         # Find the values of the integrals in the region of the window function before and after the smoothing
-        int_array = xp.linspace(originprob.minval,originprob.minval+bottomsmooth,1000)
-        integral_before = trapz(self.origin_prob.pdf(int_array),int_array)
-        integral_now = trapz(self.origin_prob.pdf(int_array)*_S_factor(int_array, self.bottom,self.bottom_smooth),int_array)
+        int_array = jnp.linspace(originprob.minval,originprob.minval+bottomsmooth,1000)
+        integral_before = jnp.trapz(self.origin_prob.pdf(int_array),int_array)
+        integral_now = jnp.trapz(self.origin_prob.pdf(int_array)*_S_factor(int_array, self.bottom,self.bottom_smooth),int_array)
 
         self.integral_before = integral_before
         self.integral_now = integral_now
         # Renormalize the smoother function.
         self.norm = 1 - integral_before + integral_now
 
-        self.x_eval = xp.linspace(self.bottom,self.bottom+self.bottom_smooth,1000)
-        self.cdf_numeric = xp.cumsum(self.pdf((self.x_eval[:-1:]+self.x_eval[1::])*0.5))*(self.x_eval[1::]-self.x_eval[:-1:])
+        self.x_eval = jnp.linspace(self.bottom,self.bottom+self.bottom_smooth,1000)
+        self.cdf_numeric = jnp.cumsum(self.pdf((self.x_eval[:-1:]+self.x_eval[1::])*0.5))*(self.x_eval[1::]-self.x_eval[:-1:])
         
     def _log_pdf(self,x):
         '''
@@ -332,17 +333,17 @@ class SmoothedProb(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
         # Return the window function
         window = _S_factor(x, self.bottom,self.bottom_smooth)
         # The line below might raise warnings for log(0), however python is able to handle it.
-        prob_ret =self.origin_prob.log_pdf(x)+xp.log(window)-xp.log(self.norm)
+        prob_ret =self.origin_prob.log_pdf(x)+jnp.log(window)-jnp.log(self.norm)
         return prob_ret
 
     def _log_cdf(self,x):
@@ -351,26 +352,27 @@ class SmoothedProb(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
         
         origin=x.shape
-        ravelled=xp.ravel(x)
+        ravelled=jnp.ravel(x)
         
-        toret = xp.ones_like(ravelled)
-        toret[ravelled<self.bottom] = 0.        
-        toret[(ravelled>=self.bottom) & (ravelled<=(self.bottom+self.bottom_smooth))] = xp.interp(ravelled[(ravelled>=self.bottom) & (ravelled<=(self.bottom+self.bottom_smooth))]
-                           ,(self.x_eval[:-1:]+self.x_eval[1::])*0.5,self.cdf_numeric)
+        toret = jnp.ones_like(ravelled)
+        toret=toret.at[ravelled<self.bottom].set(0.)
+
+        toret=toret.at[(ravelled>=self.bottom) & (ravelled<=(self.bottom+self.bottom_smooth))].set(jnp.interp(ravelled[(ravelled>=self.bottom) & (ravelled<=(self.bottom+self.bottom_smooth))]
+                           ,(self.x_eval[:-1:]+self.x_eval[1::])*0.5,self.cdf_numeric))
         # The line below might contain some log 0, which is automatically accounted for in python
-        toret[ravelled>=(self.bottom+self.bottom_smooth)]=(self.integral_now+self.origin_prob.cdf(
-        ravelled[ravelled>=(self.bottom+self.bottom_smooth)])-self.origin_prob.cdf(xp.array([self.bottom+self.bottom_smooth])))/self.norm
-        
-        return xp.log(toret).reshape(origin)
+        toret=toret.at[ravelled>=(self.bottom+self.bottom_smooth)].set((self.integral_now+self.origin_prob.cdf(
+        ravelled[ravelled>=(self.bottom+self.bottom_smooth)])-self.origin_prob.cdf(jnp.array([self.bottom+self.bottom_smooth])))/self.norm)
+
+        return jnp.log(toret).reshape(origin)
 
 def PL_normfact(minpl,maxpl,alpha):
     '''
@@ -381,9 +383,9 @@ def PL_normfact(minpl,maxpl,alpha):
     minpl, maxpl,alpha: Minimum, maximum and power law exponent of the distribution
     '''
     if alpha == -1:
-        norm_fact=xp.log(maxpl/minpl)
+        norm_fact=jnp.log(maxpl/minpl)
     else:
-        norm_fact=(xp.power(maxpl,alpha+1.)-xp.power(minpl,alpha+1))/(alpha+1)
+        norm_fact=(jnp.power(maxpl,alpha+1.)-jnp.power(minpl,alpha+1))/(alpha+1)
     return norm_fact
 
 class PowerLaw(basic_1dimpdf):
@@ -407,14 +409,14 @@ class PowerLaw(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
-        toret=self.alpha*xp.log(x)-xp.log(self.norm_fact)
+        toret=self.alpha*jnp.log(x)-jnp.log(self.norm_fact)
         return toret
     
     def _log_cdf(self,x):
@@ -423,17 +425,17 @@ class PowerLaw(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
         if self.alpha == -1.:
-            toret = xp.log(xp.log(x/self.minval)/self.norm_fact)
+            toret = jnp.log(jnp.log(x/self.minval)/self.norm_fact)
         else:
-            toret =xp.log(((xp.power(x,self.alpha+1)-xp.power(self.minpl,self.alpha+1))/(self.alpha+1))/self.norm_fact)
+            toret =jnp.log(((jnp.power(x,self.alpha+1)-jnp.power(self.minpl,self.alpha+1))/(self.alpha+1))/self.norm_fact)
         return toret
     
 def get_beta_norm(alpha, beta):
@@ -474,14 +476,14 @@ class BetaDistribution(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
-        toret=(self.alpha-1.)*xp.log(x)+(self.beta-1.)*xp.log1p(-x)-xp.log(self.norm_fact)
+        toret=(self.alpha-1.)*jnp.log(x)+(self.beta-1.)*jnp.log1p(-x)-jnp.log(self.norm_fact)
         return toret
     
     def _log_cdf(self,x):
@@ -490,14 +492,14 @@ class BetaDistribution(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
-        toret = xp.log(betainc(self.alpha,self.beta,x))
+        toret = jnp.log(betainc(self.alpha,self.beta,x))
         return toret
         
         
@@ -524,14 +526,14 @@ class TruncatedBetaDistribution(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
-        toret=(self.alpha-1.)*xp.log(x)+(self.beta-1.)*xp.log1p(-x)-xp.log(self.norm_fact)
+        toret=(self.alpha-1.)*jnp.log(x)+(self.beta-1.)*jnp.log1p(-x)-jnp.log(self.norm_fact)
         return toret
     
     def _log_cdf(self,x):
@@ -540,14 +542,14 @@ class TruncatedBetaDistribution(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
-        toret = xp.log(betainc(self.alpha,self.beta,x)/betainc(self.alpha,self.beta,self.maximum))
+        toret = jnp.log(betainc(self.alpha,self.beta,x)/betainc(self.alpha,self.beta,self.maximum))
         return toret
         
 
@@ -560,8 +562,8 @@ def get_gaussian_norm(ming,maxg,meang,sigmag):
     ming, maxg, meang,sigmag: Minimum, maximum, mean and standard deviation of the gaussian distribution
     '''
     
-    max_point = (maxg-meang)/(sigmag*xp.sqrt(2.))
-    min_point = (ming-meang)/(sigmag*xp.sqrt(2.))
+    max_point = (maxg-meang)/(sigmag*jnp.sqrt(2.))
+    min_point = (ming-meang)/(sigmag*jnp.sqrt(2.))
     return 0.5*erf(max_point)-0.5*erf(min_point)
 
 class TruncatedGaussian(basic_1dimpdf):
@@ -585,14 +587,14 @@ class TruncatedGaussian(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
-        toret=-xp.log(self.sigmag)-0.5*xp.log(2*xp.pi)-0.5*xp.power((x-self.meang)/self.sigmag,2.)-xp.log(self.norm_fact)
+        toret=-jnp.log(self.sigmag)-0.5*jnp.log(2*jnp.pi)-0.5*jnp.power((x-self.meang)/self.sigmag,2.)-jnp.log(self.norm_fact)
         return toret
     
     def _log_cdf(self,x):
@@ -601,16 +603,16 @@ class TruncatedGaussian(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
-        max_point = (x-self.meang)/(self.sigmag*xp.sqrt(2.))
-        min_point = (self.ming-self.meang)/(self.sigmag*xp.sqrt(2.))
-        toret = xp.log((0.5*erf(max_point)-0.5*erf(min_point))/self.norm_fact)
+        max_point = (x-self.meang)/(self.sigmag*jnp.sqrt(2.))
+        min_point = (self.ming-self.meang)/(self.sigmag*jnp.sqrt(2.))
+        toret = jnp.log((0.5*erf(max_point)-0.5*erf(min_point))/self.norm_fact)
         return toret
 
 # Overwrite most of the methods of the parent class
@@ -627,24 +629,24 @@ class Bivariate2DGaussian(conditional_2dimpdf):
         
         self.x1min,self.x1max,self.x1mean,self.x2min,self.x2max,self.x2mean=x1min,x1max,x1mean,x2min,x2max,x2mean
         self.x1variance,self.x12covariance,self.x2variance=x1variance,x12covariance,x2variance
-        self.norm_marginal_1=get_gaussian_norm(self.x1min,self.x1max,self.x1mean,xp.sqrt(self.x1variance))
+        self.norm_marginal_1=get_gaussian_norm(self.x1min,self.x1max,self.x1mean,jnp.sqrt(self.x1variance))
         
     def _check_bound_pdf(self,x1,x2,y):
         '''
-        Check if x1 and x2 are between the pdf boundaries nd set y to -xp.inf where x is outside
+        Check if x1 and x2 are between the pdf boundaries nd set y to -jnp.inf where x is outside
         
         Parameters
         ----------
-        x1,x2,y: xp.array
+        x1,x2,y: jnp.array
             Arrays where the log pdf is evaluated and values of the log pdf
         
         Returns
         -------
-        log pdf values: xp.array
-            log pdf values updates to -xp.inf outside the boundaries
+        log pdf values: jnp.array
+            log pdf values updates to -jnp.inf outside the boundaries
             
         '''
-        y[(x1<self.x1min) | (x1>self.x1max) | (x2<self.x2min) | (x2>self.x2max)]=-xp.inf
+        y[(x1<self.x1min) | (x1>self.x1max) | (x2<self.x2min) | (x2>self.x2max)]=-jnp.inf
         return y
     
     def log_pdf(self,x1,x2):
@@ -653,20 +655,20 @@ class Bivariate2DGaussian(conditional_2dimpdf):
         
         Parameters
         ----------
-        x1,x2: xp.array
+        x1,x2: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array 
+        log_pdf: jnp.array 
             formulas from https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Bivariate_case_2
         '''
-        marginal_log=-0.5*xp.log(2*xp.pi*self.x1variance)-0.5*xp.power(x1-self.x1mean,2.)/self.x1variance-xp.log(self.norm_marginal_1)
+        marginal_log=-0.5*jnp.log(2*jnp.pi*self.x1variance)-0.5*jnp.power(x1-self.x1mean,2.)/self.x1variance-jnp.log(self.norm_marginal_1)
         
         conditioned_mean=self.x2mean+(self.x12covariance/self.x1variance)*(x1-self.x1mean)
-        conditioned_variance=self.x2variance-xp.power(self.x12covariance,2.)/self.x1variance
-        norm_conditioned=get_gaussian_norm(self.x2min,self.x2max,conditioned_mean,xp.sqrt(conditioned_variance))
-        conditioned_log=-0.5*xp.log(2*xp.pi*conditioned_variance)-0.5*xp.power(x2-conditioned_mean,2.)/conditioned_variance-xp.log(norm_conditioned)
+        conditioned_variance=self.x2variance-jnp.power(self.x12covariance,2.)/self.x1variance
+        norm_conditioned=get_gaussian_norm(self.x2min,self.x2max,conditioned_mean,jnp.sqrt(conditioned_variance))
+        conditioned_log=-0.5*jnp.log(2*jnp.pi*conditioned_variance)-0.5*jnp.power(x2-conditioned_mean,2.)/conditioned_variance-jnp.log(norm_conditioned)
         y=marginal_log+conditioned_log
         y=self._check_bound_pdf(x1,x2,y)
         return y 
@@ -682,12 +684,12 @@ class Bivariate2DGaussian(conditional_2dimpdf):
         
         Returns
         -------
-        Samples: xp.array
+        Samples: jnp.array
         '''
-        x1samp=xp.random.uniform(self.x1min,self.x1max,size=10000)
-        x2samp=xp.random.uniform(self.x2min,self.x2max,size=10000)
+        x1samp=jnp.random.uniform(self.x1min,self.x1max,size=10000)
+        x2samp=jnp.random.uniform(self.x2min,self.x2max,size=10000)
         pdfeval=self.pdf(x1samp,x2samp)
-        idx=xp.random.choice(len(x1samp),size=N,replace=True,p=pdfeval/pdfeval.sum())
+        idx=jnp.random.choice(len(x1samp),size=N,replace=True,p=pdfeval/pdfeval.sum())
         return x1samp[idx],x2samp[idx]
 
 class PowerLawGaussian(basic_1dimpdf):
@@ -712,14 +714,14 @@ class PowerLawGaussian(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
-        toret=xp.logaddexp(xp.log1p(-self.lambdag)+self.PL.log_pdf(x),xp.log(self.lambdag)+self.TG.log_pdf(x))
+        toret=jnp.logaddexp(jnp.log1p(-self.lambdag)+self.PL.log_pdf(x),jnp.log(self.lambdag)+self.TG.log_pdf(x))
         return toret
     
     def _log_cdf(self,x):
@@ -728,14 +730,14 @@ class PowerLawGaussian(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
-        toret=xp.log((1-self.lambdag)*self.PL.cdf(x)+self.lambdag*self.TG.cdf(x))
+        toret=jnp.log((1-self.lambdag)*self.PL.cdf(x)+self.lambdag*self.TG.cdf(x))
         return toret
 
 class BrokenPowerLaw(basic_1dimpdf):
@@ -754,7 +756,7 @@ class BrokenPowerLaw(basic_1dimpdf):
         self.break_point = minpl+b*(maxpl-minpl)
         self.PL1=PowerLaw(minpl,self.break_point,alpha_1)
         self.PL2=PowerLaw(self.break_point,maxpl,alpha_2)
-        self.norm_fact=(1+self.PL1.pdf(xp.array([self.break_point]))/self.PL2.pdf(xp.array([self.break_point])))
+        self.norm_fact=(1+self.PL1.pdf(jnp.array([self.break_point]))/self.PL2.pdf(jnp.array([self.break_point])))
         
     def _log_pdf(self,x):
         '''
@@ -762,15 +764,15 @@ class BrokenPowerLaw(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
-        toret=xp.logaddexp(self.PL1.log_pdf(x),self.PL2.log_pdf(x)+self.PL1.log_pdf(xp.array([self.break_point]))
-            -self.PL2.log_pdf(xp.array([self.break_point])))-xp.log(self.norm_fact)
+        toret=jnp.logaddexp(self.PL1.log_pdf(x),self.PL2.log_pdf(x)+self.PL1.log_pdf(jnp.array([self.break_point]))
+            -self.PL2.log_pdf(jnp.array([self.break_point])))-jnp.log(self.norm_fact)
         return toret
     
     def _log_cdf(self,x):
@@ -779,16 +781,16 @@ class BrokenPowerLaw(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
-        toret=xp.log((self.PL1.cdf(x)+self.PL2.cdf(x)*
-        (self.PL1.pdf(xp.array([self.break_point]))
-        /self.PL2.pdf(xp.array([self.break_point]))))/self.norm_fact)
+        toret=jnp.log((self.PL1.cdf(x)+self.PL2.cdf(x)*
+        (self.PL1.pdf(jnp.array([self.break_point]))
+        /self.PL2.pdf(jnp.array([self.break_point]))))/self.norm_fact)
         return toret
 
 class PowerLawTwoGaussians(basic_1dimpdf):
@@ -819,17 +821,17 @@ class PowerLawTwoGaussians(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
-        pl_part = xp.log1p(-self.lambdag)+self.PL.log_pdf(x)
-        g_low = self.TGlow.log_pdf(x)+xp.log(self.lambdag)+xp.log(self.lambdaglow)
-        g_high = self.TGhigh.log_pdf(x)+xp.log(self.lambdag)+xp.log1p(-self.lambdaglow)
-        return xp.logaddexp(xp.logaddexp(pl_part,g_low),g_high)
+        pl_part = jnp.log1p(-self.lambdag)+self.PL.log_pdf(x)
+        g_low = self.TGlow.log_pdf(x)+jnp.log(self.lambdag)+jnp.log(self.lambdaglow)
+        g_high = self.TGhigh.log_pdf(x)+jnp.log(self.lambdag)+jnp.log1p(-self.lambdaglow)
+        return jnp.logaddexp(jnp.logaddexp(pl_part,g_low),g_high)
     
     def _log_cdf(self,x):
         '''
@@ -837,16 +839,16 @@ class PowerLawTwoGaussians(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
         pl_part = (1.-self.lambdag)*self.PL.cdf(x)
         g_part =self.TGlow.cdf(x)*self.lambdag*self.lambdaglow+self.TGhigh.cdf(x)*self.lambdag*(1-self.lambdaglow)
-        return xp.log(pl_part+g_part)
+        return jnp.log(pl_part+g_part)
 
 class absL_PL_inM(basic_1dimpdf):
     
@@ -861,7 +863,7 @@ class absL_PL_inM(basic_1dimpdf):
         self.L_PL_CDF=PowerLaw(self.Lmin,self.Lmax,alpha)
         self.alpha=alpha
 
-        self.extrafact=0.4*xp.log(10)*PL_normfact(self.Lmin,self.Lmax,alpha+1.)/PL_normfact(self.Lmin,self.Lmax,alpha)
+        self.extrafact=0.4*jnp.log(10)*PL_normfact(self.Lmin,self.Lmax,alpha+1.)/PL_normfact(self.Lmin,self.Lmax,alpha)
     
     def _log_pdf(self,M):
         '''
@@ -869,14 +871,14 @@ class absL_PL_inM(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_pdf
         
         Returns
         -------
-        log_pdf: xp.array
+        log_pdf: jnp.array
         '''
-        toret=self.L_PL.log_pdf(M2L(M))+xp.log(self.extrafact)
+        toret=self.L_PL.log_pdf(M2L(M))+jnp.log(self.extrafact)
         return toret
     
     def _log_cdf(self,M):
@@ -885,13 +887,13 @@ class absL_PL_inM(basic_1dimpdf):
         
         Parameters
         ----------
-        x: xp.array
+        x: jnp.array
             where to evaluate the log_cdf
         
         Returns
         -------
-        log_cdf: xp.array
+        log_cdf: jnp.array
         '''
-        toret=xp.log(1.-self.L_PL_CDF.cdf(M2L(M)))
+        toret=jnp.log(1.-self.L_PL_CDF.cdf(M2L(M)))
         return toret
       
