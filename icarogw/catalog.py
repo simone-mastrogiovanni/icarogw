@@ -567,9 +567,8 @@ class galaxy_catalog(object):
         
         if average:
             gcpart=jnp.interp(z,self.z_grid,self.dNgal_dzdOm_sky_mean,left=0.,right=0.)
-        else:        
-            gcpart=interpn((self.z_grid,self.pixel_grid),self.dNgal_dzdOm_vals,jnp.column_stack([z,skypos]),bounds_error=False,
-                                fill_value=0.,method='linear') # If a posterior samples fall outside, then you return 0
+        else:
+            gcpart=interp2d(z,skypos,self.z_grid,self.pixel_grid,self.dNgal_dzdOm_vals,fill_value=0.) # If a posterior samples fall outside, then you return 0
         
         bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array)*cosmology.dVc_by_dzdOmega_at_z(z)
         

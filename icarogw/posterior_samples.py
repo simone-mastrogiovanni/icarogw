@@ -75,7 +75,7 @@ class posterior_samples_catalog(object):
         # Check for the number of effective sample (Eq. 2.73 document)
         
         Neff_vect=jnp.power(self.sum_weights,2.)/self.sum_weights_squared        
-        Neff_vect[jnp.isnan(Neff_vect)]=0.
+        Neff_vect=Neff_vect.at[jnp.isnan(Neff_vect)].set(0.)
         return Neff_vect
     
     def pixelize(self,nside):
