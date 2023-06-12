@@ -1,6 +1,7 @@
 from .jax_pal import *
 from .conversions import L2M, M2L
 import copy
+import random
 
 def betadistro_muvar2ab(mu,var):
     '''
@@ -206,7 +207,7 @@ class basic_1dimpdf(object):
         '''
         sarray=jnp.linspace(self.minval,self.maxval,10000)
         cdfeval=self.cdf(sarray)
-        randomcdf=jnp.random.rand(N)
+        randomcdf=jax.random.uniform(jax.random.PRNGKey(random.randint(1,50000)), shape=(N,))
         return jnp.interp(randomcdf,cdfeval,sarray)
 
 class conditional_2dimpdf(object):
@@ -290,11 +291,11 @@ class conditional_2dimpdf(object):
         '''
         sarray1=jnp.linspace(self.pdf1.minval,self.pdf1.maxval,10000)
         cdfeval1=self.pdf1.cdf(sarray1)
-        randomcdf1=jnp.random.rand(N)
+        randomcdf1=jax.random.uniform(jax.random.PRNGKey(random.randint(1,50000)), shape=(N,))
 
         sarray2=jnp.linspace(self.pdf2.minval,self.pdf2.maxval,10000)
         cdfeval2=self.pdf2.cdf(sarray2)
-        randomcdf2=jnp.random.rand(N)
+        randomcdf2=jax.random.uniform(jax.random.PRNGKey(random.randint(1,50000)), shape=(N,))
         x1samp=jnp.interp(randomcdf1,cdfeval1,sarray1)
         x2samp=jnp.interp(randomcdf2*self.pdf2.cdf(x1samp),cdfeval2,sarray2)
         return x1samp,x2samp
@@ -686,10 +687,12 @@ class Bivariate2DGaussian(conditional_2dimpdf):
         -------
         Samples: jnp.array
         '''
-        x1samp=jnp.random.uniform(self.x1min,self.x1max,size=10000)
-        x2samp=jnp.random.uniform(self.x2min,self.x2max,size=10000)
+        #x1samp=jnp.random.uniform(self.x1min,self.x1max,size=10000)
+        x1samp = jax.random.uniform(jax.random.PRNGKey(random.randint(1,50000)), shape=(10000,), minval=self.x1min, maxval=self.x1max)
+        #x2samp=jnp.random.uniform(self.x2min,self.x2max,size=10000)
+        x2samp = jax.random.uniform(jax.random.PRNGKey(random.randint(1,50000)), shape=(10000,), minval=self.x2min, maxval=self.x2max)
         pdfeval=self.pdf(x1samp,x2samp)
-        idx=jnp.random.choice(len(x1samp),size=N,replace=True,p=pdfeval/pdfeval.sum())
+        idx=jax.random.choice(len(x1samp),size=N,replace=True,p=pdfeval/pdfeval.sum())
         return x1samp[idx],x2samp[idx]
 
 class PowerLawGaussian(basic_1dimpdf):
