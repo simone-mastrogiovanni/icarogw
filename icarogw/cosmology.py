@@ -339,7 +339,7 @@ class galaxy_MF(object):
         '''
         toret=jnp.log(0.4*jnp.log(10)*self.phistarobs)+ \
         ((self.alpha+1)*0.4*(self.Mstarobs-M))*jnp.log(10.)-jnp.power(10.,0.4*(self.Mstarobs-M))
-        toret[(M<self.Mminobs) | (M>self.Mmaxobs)]=-jnp.inf
+        toret = toret.at[(M<self.Mminobs) | (M>self.Mmaxobs)].set(-jnp.inf)
         return toret
 
     def log_pdf(self,M):
