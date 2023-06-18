@@ -27,11 +27,9 @@ class hierarchical_likelihood(bilby.Likelihood):
         
         # Saves injections in a cupyfied format
         self.injections=injections
-        self.injections.cupyfy()
         self.neffPE=neffPE
         self.rate_model=rate_model
         self.posterior_samples_dict=posterior_samples_dict
-        
         self.posterior_samples_dict.build_parallel_posterior(nparallel=nparallel)
         
         if neffINJ is None:
@@ -53,6 +51,9 @@ class hierarchical_likelihood(bilby.Likelihood):
         Neff=self.injections.effective_injections_number()
         # If the injections are not enough return 0, you cannot go to that point. This is done because the number of injections that you have
         # are not enough to calculate the selection effect
+        
+        xp = get_module_array(self.injections.log_weights)
+        
         if (Neff<self.neffINJ) | (Neff==0.):
             return float(xp.nan_to_num(-xp.inf))
         
@@ -102,7 +103,6 @@ class hierarchical_likelihood_noevents(bilby.Likelihood):
         
         # Saves injections in a cupyfied format
         self.injections=injections
-        self.injections.cupyfy()
         self.rate_model=rate_model
         super().__init__(parameters={ll: None for ll in self.rate_model.population_parameters})
                 
@@ -115,6 +115,8 @@ class hierarchical_likelihood_noevents(bilby.Likelihood):
         # Update the sensitivity estimation with the new model
         self.injections.update_weights(self.rate_model)
         
+        xp = get_module_array(self.injections.log_weights)
+
         Nexp=self.injections.expected_number_detections()
         # Log likelihood for  the model, Eq. 1.1 on the document
         log_likeli = -Nexp 
