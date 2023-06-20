@@ -39,40 +39,39 @@ except ImportError:
         CUPY_LOADED = False
         print('CUPY NOT LOADED BACK TO NUMPY')
 
-if CUPY_LOADED: 
-    def cp2np(array):
-        '''Cast any array to numpy'''
+def cp2np(array):
+    '''Cast any array to numpy'''
+    if CUPY_LOADED:
         return cp.asnumpy(array)
-
-    def np2cp(array):
-        '''Cast any array to cupy'''
-        return cp.asarray(array)
-    
-    def get_module_array(array):
-        return cp.get_array_module(array)
-    
-    def get_module_array_scipy(array):
+    else:
+        return array
         
-        return _cupyx.scipy.get_array_module(array)
-    
-    def iscupy(array):
-        return isinstance(array, (cp.ndarray, _cupyx.scipy.sparse.spmatrix,
-                            _core.fusion._FusionVarArray,
-                            _core.new_fusion._ArrayProxy))
-else:
-    def cp2np(array):
-        '''Cast any array to numpy'''
+
+def np2cp(array):
+    '''Cast any array to cupy'''
+    if CUPY_LOADED:
+        return cp.asarray(array)
+    else:
         return array
-    
-    def np2cp(array):
-        '''Cast any array to cupy'''
-        return array
-    
-    def get_module_array(array):
+
+def get_module_array(array):
+    if CUPY_LOADED:
+        return cp.get_array_module(array)
+    else:
         return np
-    
-    def get_module_array_scipy(array):
+
+def get_module_array_scipy(array):
+    if CUPY_LOADED:
+        return _cupyx.scipy.get_array_module(array)
+    else:
         return sn
-    
-    def iscupy(array):
+
+def iscupy(array):
+    if CUPY_LOADED:
+        return isinstance(array, (cp.ndarray, _cupyx.scipy.sparse.spmatrix,
+                        _core.fusion._FusionVarArray,
+                        _core.new_fusion._ArrayProxy))
+    else:
         return False
+
+
