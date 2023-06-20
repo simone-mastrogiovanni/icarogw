@@ -1,43 +1,29 @@
-try:
-    import config
-    print('Config file loaded')
-    if config.CUPY:
-        try:
-            import cupy as cp
-            import numpy as np
-            import cupyx as _cupyx
-            from cupyx.scipy import interpolate
-            from cupy import _core
-            import scipy as sn
-            
-            CUPY_LOADED = True
-            print('CUPY LOADED')
-        except ImportError:
-            import numpy as np
-            import scipy as sn
-            CUPY_LOADED = False
-            print('CUPY NOT LOADED BACK TO NUMPY')
-    else:
-        import numpy as np
-        import scipy as sn
-        CUPY_LOADED = False
-        print('CUPY NOT LOADED')        
-except ImportError:
-    print('Config not imported, automatically decides between Numpy and Cupy')
+import numpy as np
+import scipy as sn
+
+CUPY_LOADED = False
+def enable_cupy():
     try:
-        import numpy as np
         import cupy as cp
         import cupyx as _cupyx
         from cupyx.scipy import interpolate
         from cupy import _core
-        import scipy as sn
+            
         CUPY_LOADED = True
         print('CUPY LOADED')
     except ImportError:
-        import numpy as np
-        import scipy as sn
-        CUPY_LOADED = False
-        print('CUPY NOT LOADED BACK TO NUMPY')
+        print('CUPY IMPORT FAILED, BACK TO NUMPY')
+
+try:
+    import config
+    print('Config file loaded')
+    if config.CUPY:
+        enable_cupy()
+    else:
+        print('CUPY NOT LOADED')        
+except ImportError:
+    print('Config not imported, automatically decides between Numpy and Cupy')
+    enable_cupy()
 
 def cp2np(array):
     '''Cast any array to numpy'''
