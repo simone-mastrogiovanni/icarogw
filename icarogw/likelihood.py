@@ -3,6 +3,7 @@ import time
 import copy
 import bilby
 import icarogw
+from .wrappers import FlatLambdaCDM_wrap
 
 class hierarchical_likelihood(bilby.Likelihood):
     def __init__(self, posterior_samples_dict, injections, rate_model, nparallel=None, neffPE=20,neffINJ=None):
@@ -43,6 +44,11 @@ class hierarchical_likelihood(bilby.Likelihood):
         '''
         Evaluates and return the log-likelihood
         '''
+
+        # enable_cupy()
+        # self.injections.cupyfy()
+        # self.posterior_samples_dict.cupyfy()
+        # self.rate_model.cw=FlatLambdaCDM_wrap(2.)
                 
         #Update the rate model with the population parameters
         self.rate_model.update(**{key:self.parameters[key] for key in self.rate_model.population_parameters})

@@ -1,4 +1,4 @@
-from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, check_bounds_1D, check_bounds_2D
 from .conversions import L2M, M2L
 import copy
 
@@ -111,7 +111,8 @@ class basic_1dimpdf(object):
             
         '''
         xp = get_module_array(x)
-        y[(x<self.minval) | (x>self.maxval)]=-xp.inf
+        indx=check_bounds_1D(x,self.minval,self.maxval)
+        y[indx]=-xp.inf
         return y
     
     def _check_bound_cdf(self,x,y):
@@ -247,7 +248,8 @@ class conditional_2dimpdf(object):
             
         '''
         xp = get_module_array(x1)
-        y[(x1<x2) | xp.isnan(y)]=-xp.inf
+        indx=check_bounds_2D(x1,x2,y)
+        y[indx]=-xp.inf
         return y
     
     def log_pdf(self,x1,x2):

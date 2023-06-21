@@ -39,6 +39,37 @@ except ImportError:
     print('Config not imported, automatically decides between Numpy and Cupy')
     enable_cupy()
 
+
+_cupy_functions = {}
+
+def check_bounds_1D(x,minval,maxval):
+    if CUPY_LOADED:
+        kernel = _cupy_functions.get('check_bounds_1D', None)
+        if kernel is None:
+            @cp.fuse()
+            def check_bounds_sub_1D(x,minval,maxval):
+                return (x<minval) | (x>maxval)
+            _cupy_functions['check_bounds_1D']=check_bounds_sub_1D
+            kernel = check_bounds_sub_1D
+        return kernel(x,minval,maxval)
+    else:
+        return (x<minval) | (x>maxval)
+
+def check_bounds_2D(x1,x2,y):
+    if CUPY_LOADED:
+        kernel = _cupy_functions.get('check_bounds_2D', None)
+        if kernel is None:
+            @cp.fuse()
+            def check_bounds_sub_2D(x1,x2,y):
+                xp = get_module_array(x1)
+                return (x1<x2) | xp.isnan(y)
+            _cupy_functions['check_bounds_2D']=check_bounds_sub_2D
+            kernel = check_bounds_sub_2D
+        return kernel(x1,x2,y)
+    else:
+        return (x1<x2) | np.isnan(y)
+    
+
 def cp2np(array):
     '''Cast any array to numpy'''
     if CUPY_LOADED:

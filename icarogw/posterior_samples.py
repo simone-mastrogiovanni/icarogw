@@ -72,10 +72,12 @@ class posterior_samples_catalog(object):
         rate_wrapper: class
             Rate wrapper from the wrapper.py module, initialized with your desired population model.
         '''
-        
-        self.log_weights = rate_wrapper.log_rate_PE(**{key:self.posterior_parallel[key] for key in self.posterior_parallel.keys()})
+
+        self.log_weights = rate_wrapper.log_rate_PE(**{key:self.posterior_parallel[key].ravel() for key in self.posterior_parallel.keys()})
         xp = get_module_array(self.log_weights)
         sx = get_module_array_scipy(self.log_weights)
+        kk = list(self.posterior_parallel.keys())[0]
+        self.log_weights = xp.reshape(self.log_weights,self.posterior_parallel[kk].shape)
         self.sum_weights=xp.exp(sx.special.logsumexp(self.log_weights,axis=1))/self.nparallel
         self.sum_weights_squared= xp.exp(sx.special.logsumexp(2*self.log_weights,axis=1))/xp.power(self.nparallel,2.)
         
