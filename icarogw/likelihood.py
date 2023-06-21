@@ -1,8 +1,8 @@
-from .cupy_pal import *
-from .conversions import *
-from .wrappers import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, enable_cupy
+import time
 import copy
 import bilby
+import icarogw
 
 class hierarchical_likelihood(bilby.Likelihood):
     def __init__(self, posterior_samples_dict, injections, rate_model, nparallel=None, neffPE=20,neffINJ=None):
@@ -43,7 +43,7 @@ class hierarchical_likelihood(bilby.Likelihood):
         '''
         Evaluates and return the log-likelihood
         '''
-        
+                
         #Update the rate model with the population parameters
         self.rate_model.update(**{key:self.parameters[key] for key in self.rate_model.population_parameters})
         # Update the sensitivity estimation with the new model

@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, is_there_cupy
 from .conversions import radec2indeces, indices2radec, M2m, m2M
 from .cosmology import galaxy_MF, kcorr, log_powerlaw_absM_rate
 
@@ -178,11 +178,11 @@ class galaxy_catalog(object):
         try:
             if self.hdf5pointer['catalog/mthr_map'].attrs['mthr_percentile'] == 'empty':
                 self.mthr_map_cpu = 'empty'
-                if CUPY_LOADED:
+                if is_there_cupy:
                     self.mthr_map_gpu = 'empty'
             else:
                 self.mthr_map_cpu = self.hdf5pointer['catalog/mthr_map/mthr_sky'][:]
-                if CUPY_LOADED:
+                if is_there_cupy:
                     self.mthr_map_gpu = np2cp(self.hdf5pointer['catalog/mthr_map/mthr_sky'][:])
                 
             print('Loading apparent magnitude threshold map')
@@ -217,7 +217,7 @@ class galaxy_catalog(object):
             
             print('Loading Galaxy density interpolant')
             
-            if CUPY_LOADED:
+            if is_there_cupy:
                 self.dNgal_dzdOm_vals_gpu=np2cp(self.dNgal_dzdOm_vals_cpu)
                 self.dNgal_dzdOm_sky_mean_gpu=np2cp(self.dNgal_dzdOm_sky_mean_cpu)
                 self.z_grid_gpu = np2cp(self.z_grid_cpu)
@@ -283,13 +283,13 @@ class galaxy_catalog(object):
             self.hdf5pointer['catalog'].attrs['Ngal']=len(tokeep)
             # Stores it internally
             self.mthr_map_cpu = self.hdf5pointer['catalog/mthr_map/mthr_sky'][:]
-            if CUPY_LOADED:
+            if is_there_cupy:
                 self.mthr_map_gpu=np2cp(self.mthr_map_cpu)
         else:
             # Set the counter to the last loop point
             mthgroup.attrs['sky_checkpoint']=self.hdf5pointer['catalog'].attrs['npixels']-1
             self.mthr_map_cpu='empty'
-            if CUPY_LOADED:
+            if is_there_cupy:
                 self.mthr_map_gpu='empty'
     
     def return_counts_map(self):

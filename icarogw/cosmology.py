@@ -1,4 +1,5 @@
-from .cupy_pal import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, is_there_cupy
+from icarogw import cupy_pal
 from scipy.integrate import cumtrapz
 import mpmath
 
@@ -19,9 +20,9 @@ class base_cosmology(object):
         self.z_cpu=np.logspace(-6,np.log10(self.zmax),2500)
         self.log10_z_cpu=np.log10(self.z_cpu)
         
-        if CUPY_LOADED:
-            self.z_gpu=cp.logspace(-6,np.log10(self.zmax),2500)
-            self.log10_z_gpu=cp.log10(self.z_gpu)
+        if is_there_cupy():
+            self.z_gpu=cupy_pal.cp.logspace(-6,np.log10(self.zmax),2500)
+            self.log10_z_gpu=cupy_pal.cp.log10(self.z_gpu)
         
     def _checkz(self,z):
         smin,smax=z.min(),z.max()
@@ -232,7 +233,7 @@ class astropycosmology(base_cosmology):
         self.log10_dl_at_z_cpu=np.log10(astropy_cosmo.luminosity_distance(self.z_cpu).value)
         self.log10_ddl_by_dz_cpu=np.log10((np.power(10.,self.log10_dl_at_z_cpu)/(1.+self.z_cpu))+COST_C*(1.+self.z_cpu)/astropy_cosmo.H(self.z_cpu).value)
         
-        if CUPY_LOADED:
+        if is_there_cupy():
             
             self.log10_dVc_dzdOmega_gpu=np2cp(self.log10_dVc_dzdOmega_cpu)
             self.log10_Vc_gpu=np2cp(self.log10_Vc_cpu)
@@ -263,7 +264,7 @@ class extraD_astropycosmology(astropycosmology):
         self.log10_ddl_by_dz_cpu=np.log10(np.abs(np.power(Afa,expo)*(dlbydz_em+np.power(dlem/Rc,n)*(expo*n/Afa)*\
             (dlbydz_em/np.power(1.+self.z_cpu,n)-dlem/np.power(1.+self.z_cpu,n+1.)))))
         
-        if CUPY_LOADED:
+        if is_there_cupy():
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
 
@@ -296,7 +297,7 @@ class cM_astropycosmology(astropycosmology):
         # We put the absolute value for the Jacobian (because this is needed for probabilities)
         self.log10_ddl_by_dz_cpu=np.log10(np.abs(exp_factor*dlbydz_em+0.5*dlem*cM*exp_factor*Integrand))
         
-        if CUPY_LOADED:
+        if is_there_cupy():
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
         
@@ -321,7 +322,7 @@ class Xi0_astropycosmology(astropycosmology):
         # We put the absolute value for the Jacobian (because this is needed for probabilities)
         self.log10_ddl_by_dz_cpu=np.log10(np.abs(dlbydz_em*(Xi0+(1.-Xi0)*np.power(1+self.z_cpu,-n))-dlem*(1.-Xi0)*n*np.power(1+self.z_cpu,-n-1)))
         
-        if CUPY_LOADED:
+        if is_there_cupy():
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
         
@@ -351,7 +352,7 @@ class alphalog_astropycosmology(astropycosmology):
         # We put the absolute value for the Jacobian (because this is needed for probabilities)
         self.log10_ddl_by_dz_cpu=np.log10(np.abs(part1 + part2))
         
-        if CUPY_LOADED:
+        if is_there_cupy():
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
 
@@ -509,7 +510,7 @@ class galaxy_MF(object):
         self.xvector_interpolant_cpu=self.Mstar-Mvector_interpolant[::-1]
         
         
-        if CUPY_LOADED:
+        if is_there_cupy():
             self.effective_density_interpolant_gpu=np2cp(self.effective_density_interpolant[::-1])
             self.xvector_interpolant_gpu=np2cp(self.Mstar-Mvector_interpolant[::-1])
         

@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 import healpy as hp
 from scipy.stats import gaussian_kde
 from scipy.special import spence as PL

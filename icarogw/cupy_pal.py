@@ -2,17 +2,31 @@ import numpy as np
 import scipy as sn
 
 CUPY_LOADED = False
+
 def enable_cupy():
     try:
         import cupy as cp
         import cupyx as _cupyx
         from cupyx.scipy import interpolate
         from cupy import _core
-            
+
+        global cp
+        global _cupyx
+        global interpolate
+        global _core
+        global CUPY_LOADED
+        
         CUPY_LOADED = True
-        print('CUPY LOADED')
+        print('cupy imported')
     except ImportError:
-        print('CUPY IMPORT FAILED, BACK TO NUMPY')
+        print('Error in importing cupy')
+
+def disable_cupy():
+    global CUPY_LOADED
+    CUPY_LOADED = False
+    
+def is_there_cupy():
+    return CUPY_LOADED
 
 try:
     import config
@@ -20,7 +34,7 @@ try:
     if config.CUPY:
         enable_cupy()
     else:
-        print('CUPY NOT LOADED')        
+        print('Config does not allow CUPY')        
 except ImportError:
     print('Config not imported, automatically decides between Numpy and Cupy')
     enable_cupy()
