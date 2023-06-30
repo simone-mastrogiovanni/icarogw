@@ -184,12 +184,15 @@ class ligo_skymap(object):
        
         for i,pix in enumerate(match_ipix):
             idx = xp.where(ipix == pix)[0]
-            dl_mean = self.table['DISTMU'][idx].value
-            dl_sigma = self.table['DISTSIGMA'][idx].value
+            dl_mean = self.table['DISTMU'][idx].value[0]
+            dl_sigma = self.table['DISTSIGMA'][idx].value[0]
 
+            if dl_mean<0:
+                print('Skipping iteration {:d}, pixel {:d}, negative dl_mean {:.2f} Mpc'.format(i,pix,dl_mean))
+                continue
             dldraw = -1
             while dldraw<=0:
-                dldraw = xp.random.randn(1)*dl_sigma+dl_mean
+                dldraw = xp.random.randn()*dl_sigma+dl_mean
             dl[i] = dldraw
         
         return dl, np2cp(ra.rad), np2cp(dec.rad)
