@@ -9,6 +9,225 @@ from astropy.cosmology import FlatLambdaCDM, FlatwCDM
 
 ################ BEGIN: Wrappers to compute the CBC rate per year at the detector below ###############
 
+class CBC_catalog_vanilla_rate_skymap(object):
+    
+    def __init__(self,catalog,cosmology_wrapper,rate_wrapper, average=False,scale_free=False):
+        '''
+        A wrapper for the CBC rate model that make use of of just the luminosity distance and position of GW events.
+        Useful if you generate PE from skymaps
+
+        Parameters
+        ----------
+        catalog: object
+            icarogw catalog class containing the preprocessed galaxy catalog
+        cosmology_wrapper: object
+            Cosmology wrapper from icarogw
+        rate_wrapper: object
+            Merger rate wrapper from icarogw
+        '''
+        
+        self.catalog = catalog
+        self.cw = cosmology_wrapper
+        self.rw = rate_wrapper
+        self.average = average
+        self.scale_free = scale_free
+        
+        if scale_free:
+            self.population_parameters =  self.cw.population_parameters+self.rw.population_parameters
+        else:
+            self.population_parameters =  self.cw.population_parameters+self.rw.population_parameters + ['Rgal']
+            
+        event_parameters = ['luminosity_distance','sky_indices']
+        
+        self.PEs_parameters = event_parameters.copy()
+        self.injections_parameters = event_parameters.copy()
+            
+    def update(self,**kwargs):
+        '''
+        This method updates the population models encoded in the wrapper. 
+        
+        Parameters
+        ----------
+        kwargs: flags
+            The kwargs passed should be the population parameters given in self.population_parameters
+        '''
+        self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
+        self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
+            
+        if not self.scale_free:
+            self.Rgal = kwargs['Rgal']
+        
+    def log_rate_PE(self,prior,**kwargs):
+        '''
+        This method calculates the weights (CBC merger rate per year at detector) for the posterior samples.
+        
+        Parameters
+        ----------
+        prior: array
+            Prior written in terms of the variables identified by self.event_parameters
+        kwargs: flags
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+        '''
+        
+        z = self.cw.cosmology.dl2z(kwargs['luminosity_distance'])
+        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
+                                                    ,dl=kwargs['luminosity_distance'],average=False)
+
+        # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
+        dNgaleff=dNgal_cat+dNgal_bg
+        
+        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
+        log_weights=self.rw.rate.log_evaluate(z)+xp.log(dNgaleff) \
+        -xp.log1p(z)-xp.log(xp.abs(self.cw.cosmology.ddl_by_dz_at_z(z)))-xp.log(prior)
+            
+        if not self.scale_free:
+            log_out = log_weights + xp.log(self.Rgal)
+        else:
+            log_out = log_weights
+            
+        return log_out
+    
+    def log_rate_injections(self,prior,**kwargs):
+        '''
+        This method calculates the weights (CBC merger rate per year at detector) for the injections.
+        
+        Parameters
+        ----------
+        prior: array
+            Prior written in terms of the variables identified by self.event_parameters
+        kwargs: flags
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+        '''
+        
+        z = self.cw.cosmology.dl2z(kwargs['luminosity_distance'])
+        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
+                                                    ,dl=kwargs['luminosity_distance'],average=self.average)
+
+        # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
+        dNgaleff=dNgal_cat+dNgal_bg
+        
+        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
+        log_weights=self.rw.rate.log_evaluate(z)+xp.log(dNgaleff) \
+        -xp.log1p(z)-xp.log(xp.abs(self.cw.cosmology.ddl_by_dz_at_z(z)))-xp.log(prior)
+            
+        if not self.scale_free:
+            log_out = log_weights + xp.log(self.Rgal)
+        else:
+            log_out = log_weights
+            
+        return log_out
+
+class CBC_low_latency_skymap_EM_counterpart(object):
+    def __init__(self,cosmology_wrapper,rate_wrapper, list_of_skymaps,scale_free=False):
+
+        '''
+        A wrapper for the CBC rate model that make use of LVK low latency skymaps and EM counterparts.
+        Posterior samples are going to be possible EM counterparts (1 for each event). These EM PEs
+        are then combined with the GW skymap
+
+        Parameters
+        ----------
+        cosmology_wrapper: object
+            Cosmology wrapper from icarogw
+        rate_wrapper: object
+            Merger rate wrapper from icarogw
+        list_of_skymaps: object
+            A list of icarogw skymaps objects, order must be compatible with catalog of EM counterparts passed in posterior sampels
+        scale_free: True
+            Scale free model or not
+        '''
+        
+        self.cw = cosmology_wrapper
+        self.rw = rate_wrapper
+        self.scale_free = scale_free
+        self.list_of_skymaps=list_of_skymaps
+         
+        if scale_free:
+            self.population_parameters =  self.cw.population_parameters+self.rw.population_parameters
+        else:
+            self.population_parameters =  self.cw.population_parameters+self.rw.population_parameters + ['R0']
+            
+        self.PEs_parameters = ['z_EM','right_ascension','declination']
+        self.injections_parameters = ['luminosity_distance']
+
+        
+    def update(self,**kwargs):
+        '''
+        This method updates the population models encoded in the wrapper. 
+        
+        Parameters
+        ----------
+        kwargs: flags
+            The kwargs passed should be the population parameters given in self.population_parameters
+        '''
+        self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
+        self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
+        
+        if not self.scale_free:
+            self.R0 = kwargs['R0']
+        
+    def log_rate_PE(self,prior,**kwargs):
+        '''
+        This method calculates the weights (CBC merger rate per year at detector) for the posterior samples.
+        
+        Parameters
+        ----------
+        prior: array
+            Prior written in terms of the variables identified by self.event_parameters
+        kwargs: flags
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+        '''
+        
+        if len(kwargs['z_EM'].shape) != 2:
+            raise ValueError('The EM counterpart rate wants N_ev x N_samples arrays')
+
+        dl_samples = self.cw.cosmology.z2dl(kwargs['z_EM'])       
+        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(kwargs['z_EM'])*4*xp.pi)
+        
+        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
+        log_weights=self.rw.rate.log_evaluate(kwargs['z_EM'])+log_dVc_dz-xp.log(prior)-xp.log1p(kwargs['z_EM'])       
+        
+        n_ev = kwargs['z_EM'].shape[0]
+        lwtot = xp.empty(kwargs['z_EM'].shape)
+        for i in range(n_ev): 
+            self.list_of_skymaps[i].intersect_EM_PE(kwargs['right_ascension'][i,:],kwargs['declination'][i,:])
+            log_l_skymap = xp.log(self.list_of_skymaps[i].evaluate_3D_likelihood_intersected(dl_samples[i,:]))            
+            lwtot[i,:] = logsumexp(log_weights[i,:]+log_l_skymap)-xp.log(kwargs['z_EM'].shape[1])
+
+        if not self.scale_free:
+            log_out = lwtot + xp.log(self.R0)
+        else:
+            log_out = lwtot
+            
+        return log_out
+    
+    def log_rate_injections(self,prior,**kwargs):
+        '''
+        This method calculates the weights (CBC merger rate per year at detector) for the injections.
+        
+        Parameters
+        ----------
+        prior: array
+            Prior written in terms of the variables identified by self.event_parameters
+        kwargs: flags
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+        '''
+        
+        z = self.cw.cosmology.dl2z(kwargs['luminosity_distance']) 
+        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
+        
+        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
+        log_weights=self.rw.rate.log_evaluate(z)+log_dVc_dz \
+        -xp.log(prior)-xp.log(xp.abs(self.cw.cosmology.ddl_by_dz_at_z(z)))-xp.log1p(z)
+        
+        if not self.scale_free:
+            log_out = log_weights + xp.log(self.R0)
+        else:
+            log_out = log_weights
+            
+        return log_out
+
+
 class CBC_vanilla_EM_counterpart(object):
     '''
     This is a rate model that parametrizes the CBC rate per year at the detector in terms of source-frame
@@ -47,12 +266,16 @@ class CBC_vanilla_EM_counterpart(object):
             self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters
         else:
             self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters + ['R0']
-            
-        self.event_parameters = ['mass_1', 'mass_2', 'luminosity_distance','z_EM']
+
+        event_parameters = ['mass_1', 'mass_2', 'luminosity_distance','z_EM']
         
         if self.sw is not None:
             self.population_parameters = self.population_parameters+self.sw.population_parameters
-            self.event_parameters = self.event_parameters + self.sw.event_parameters
+            event_parameters = event_parameters + self.sw.event_parameters
+
+        self.PEs_parameters = event_parameters.copy()
+        self.injections_parameters = event_parameters.copy()
+        self.injections_parameters.remove('z_EM')
             
     def update(self,**kwargs):
         '''
@@ -179,11 +402,14 @@ class CBC_vanilla_rate(object):
         else:
             self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters + ['R0']
             
-        self.event_parameters = ['mass_1', 'mass_2', 'luminosity_distance']
+        event_parameters = ['mass_1', 'mass_2', 'luminosity_distance']
         
         if self.sw is not None:
             self.population_parameters = self.population_parameters+self.sw.population_parameters
-            self.event_parameters = self.event_parameters + self.sw.event_parameters
+            event_parameters = event_parameters + self.sw.event_parameters
+
+        self.PEs_parameters = event_parameters.copy()
+        self.injections_parameters = event_parameters.copy()
             
     def update(self,**kwargs):
         '''
@@ -306,11 +532,14 @@ class CBC_catalog_vanilla_rate(object):
         else:
             self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters + ['Rgal']
             
-        self.event_parameters = ['mass_1', 'mass_2', 'luminosity_distance','sky_indices']
+        event_parameters = ['mass_1', 'mass_2', 'luminosity_distance','sky_indices']
         
         if self.sw is not None:
             self.population_parameters = self.population_parameters+self.sw.population_parameters
-            self.event_parameters = self.event_parameters + self.sw.event_parameters
+            event_parameters = event_parameters + self.sw.event_parameters
+
+        self.PEs_parameters = event_parameters.copy()
+        self.injections_parameters = event_parameters.copy()
             
     def update(self,**kwargs):
         '''
@@ -637,36 +866,32 @@ class spinprior_gaussian(object):
     def log_pdf(self,chi_eff,chi_p):
         return self.pdf_evaluator.log_pdf(chi_eff,chi_p)
     def pdf(self,chi_eff,chi_p):
-        return xp.exp(self.log_pdf(chi_eff,chi_p))
-        
-        
-        
+        return xp.exp(self.log_pdf(chi_eff,chi_p))        
         
 class spinprior_ECOs(object):
     def __init__(self):
-        self.population_parameters=['alpha_chi','beta_chi','eps', 'R', 'f_eco', 'sigma']
+        self.population_parameters=['alpha_chi','beta_chi','eps', 'f_eco', 'sigma_chi_ECO']
         self.event_parameters=['chi_1','chi_2'] 
         self.name='DEFAULT'
         
-    def get_chi_crit(self, eps, R):
-        return 0.5
+    def get_chi_crit(self, eps):
+        q = 1. # Value for polar perturbations, more conservative
+        return xp.pi*(1.+q)/(2*xp.abs(xp.log10(eps)))
 
     def update(self,**kwargs):
         self.alpha_chi = kwargs['alpha_chi']
         self.beta_chi = kwargs['beta_chi']
         self.eps = kwargs['eps']
-        self.R = kwargs['R']
         self.f_eco = kwargs['f_eco']
-        self.sigma = kwargs['sigma']
-        self.chi_crit = self.get_chi_crit(self.eps,self.R)
-        #self.aligned_pdf = TruncatedGaussian(1.,kwargs['sigma_t'],-1.,1.)
+        self.sigma = kwargs['sigma_chi_ECO']
+        self.chi_crit = self.get_chi_crit(self.eps)
         if (self.alpha_chi <= 1) | (self.beta_chi <= 1) :
             raise ValueError('Alpha and Beta must be > 1') 
             
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
         self.truncatedbeta_pdf = TruncatedBetaDistribution(self.alpha_chi,self.beta_chi,self.chi_crit)
         self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., 1.)
-        self.lambda_eco = 1-self.beta_pdf.cdf(xp.array([self.get_chi_crit(self.eps, self.R)]))[0]
+        self.lambda_eco = 1-self.beta_pdf.cdf(xp.array([self.get_chi_crit(self.eps)]))[0]
         
         
     def pdf(self,chi_1,chi_2):
