@@ -111,7 +111,7 @@ class injections(object):
         '''
         prob = xp.exp(self.log_weights)
         prob/=prob.sum()
-        idx = xp.random.choice(len(self.prior),replace=replace,p=prob)
+        idx = xp.random.choice(len(self.prior),replace=replace,p=prob,size=Nsamp)
         return {key:self.injections_data[key][idx] for key in list(self.injections_data.keys())}
         
         
