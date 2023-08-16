@@ -207,6 +207,64 @@ class basic_1dimpdf(object):
         cdfeval=self.cdf(sarray)
         randomcdf=xp.random.rand(N)
         return xp.interp(randomcdf,cdfeval,sarray)
+    
+# Not reviewed    
+class paired_2dimpdf(object):
+    
+    def __init__(self,pdf,pairing_function):
+        '''
+        Class for a pairing mass function
+        
+        Parameters
+        ----------
+        pdf1: first pdf
+        pairing function: python function that pairs m1 and m2
+        '''
+        self.pdf_base=pdf
+        self.pairing_function=pairing_function
+        self.norm = self._get_norm_factor()
+
+    def _get_norm_factor(self):
+
+        m1 = self.pdf_base.sample(10000)
+        m2 = self.pdf_base.sample(10000)
+        self.new_norm = xp.mean(self.pairing_function(m1,m2))
+
+    def log_pdf(self,x1,x2):
+        '''
+        Evaluates the log_pdf
+        
+        Parameters
+        ----------
+        x1,x2: xp.array
+            where to evaluate the log_pdf
+        
+        Returns
+        -------
+        log_pdf: xp.array
+        '''
+        # This line might create some nan since p(m2|m1) = p(m2)/CDF_m2(m1) = 0/0 if m2 and m1 < mmin.
+        # This nan is eliminated with the _check_bound_pdf
+        y=self.pdf_base.log_pdf(x1)+self.pdf_base.log_pdf(x2)+xp.log(self.pairing_function(x1,x2))-xp.log(self.new_norm)
+        y[xp.isnan(y)]=-xp.inf
+        return y 
+    
+    def pdf(self,x1,x2):
+        '''
+        Evaluates the pdf
+        
+        Parameters
+        ----------
+        x1,x2: xp.array
+            where to evaluate the pdf
+        
+        Returns
+        -------
+        pdf: xp.array
+        '''
+        return xp.exp(self.log_pdf(x1,x2))
+
+
 
 class conditional_2dimpdf(object):
     

@@ -4,7 +4,7 @@ Special thanks LIGO-Virgo-KAGRA / Aaron Geller / Northwestern who made possible 
 
 [![DOI](https://zenodo.org/badge/615814860.svg)](https://zenodo.org/badge/latestdoi/615814860)
 
-# icarogw 2.0 Developers branch
+# icarogw 2.0 
 
 ## Installation
 

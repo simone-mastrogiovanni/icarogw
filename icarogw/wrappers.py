@@ -770,6 +770,22 @@ class massprior_PowerLaw(source_mass_default):
         p1,p2=PowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha']),PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta'])
         self.prior=conditional_2dimpdf(p1,p2)
 
+# Not Reviewed
+class massprior_pairedQ_PowerLawPeak(source_mass_default):
+    def __init__(self):
+        self.population_parameters=['alpha','beta','mmin','mmax','delta_m','mu_g','sigma_g','lambda_peak']
+    def update(self,**kwargs):
+        p=SmoothedProb(PowerLawGaussian(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],kwargs['lambda_peak'],kwargs['mu_g'],
+                                         kwargs['sigma_g'],kwargs['mmin'],kwargs['mu_g']+5*kwargs['sigma_g']),kwargs['delta_m'])
+
+        def pairing_function(m1,m2,beta=kwargs['beta']):
+            q = m2/m1
+            toret = xp.power(q,beta)
+            toret[q>1] = 0.
+            return toret
+        
+        self.prior=paired_2dimpdf(p,pairing_function)
+
 class massprior_PowerLawPeak(source_mass_default):
     def __init__(self):
         self.population_parameters=['alpha','beta','mmin','mmax','delta_m','mu_g','sigma_g','lambda_peak']
