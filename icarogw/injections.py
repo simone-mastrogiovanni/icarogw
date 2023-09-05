@@ -86,10 +86,9 @@ class injections(object):
         
         rate_wrapper: class
             Rate wrapper from the wrapper.py module, initialized with your desired population model.
-        '''
+        '''        
         
-        
-        self.log_weights = rate_wrapper.log_rate_injections(self.prior,**{key:self.injections_data[key] for key in self.injections_data.keys()})
+        self.log_weights = rate_wrapper.log_rate_injections(self.prior,**{key:self.injections_data[key] for key in rate_wrapper.injections_parameters})
         xp = get_module_array(self.log_weights)
         sx = get_module_array_scipy(self.log_weights)
         self.pseudo_rate = xp.exp(sx.special.logsumexp(self.log_weights))/self.ntotal # Eq. 1.5 on the overleaf documentation
@@ -120,7 +119,7 @@ class injections(object):
         xp = get_module_array(self.log_weights)
         prob = xp.exp(self.log_weights)
         prob/=prob.sum()
-        idx = xp.random.choice(len(self.prior),replace=replace,p=prob)
+        idx = xp.random.choice(len(self.prior),replace=replace,p=prob,size=Nsamp)
         return {key:self.injections_data[key][idx] for key in list(self.injections_data.keys())}
         
         

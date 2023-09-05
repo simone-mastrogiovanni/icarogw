@@ -73,7 +73,8 @@ class posterior_samples_catalog(object):
             Rate wrapper from the wrapper.py module, initialized with your desired population model.
         '''
 
-        self.log_weights = rate_wrapper.log_rate_PE(**{key:self.posterior_parallel[key].ravel() for key in self.posterior_parallel.keys()})
+        self.log_weights = rate_wrapper.log_rate_PE(self.posterior_parallel['prior'].ravel(),
+                                                    **{key:self.posterior_parallel[key].ravel() for key in rate_wrapper.PEs_parameters})
         xp = get_module_array(self.log_weights)
         sx = get_module_array_scipy(self.log_weights)
         kk = list(self.posterior_parallel.keys())[0]
@@ -209,8 +210,3 @@ class posterior_samples(object):
         prob/=prob.sum()
         idx = xp.random.choice(len(self.posterior_data['prior']),replace=replace,p=prob)
         return {key:self.posterior_data[key][idx] for key in list(self.posterior_data.keys())}
-        
-        
-        
-        
-        
