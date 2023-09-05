@@ -13,7 +13,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url='https://github.com/simone-mastrogiovanni/icarogw',
     license='EUPL-1.2',
-    python_requires='>=3.9',
+    python_requires='>=3.10',
     packages=['icarogw'],
-    install_requires=['bilby','healpy','mpmath','ligo.skymap','ChainConsumer']
+    install_requires=['attrs','jupyterlab','bilby','healpy','mpmath','ligo.skymap','ChainConsumer']
 )
