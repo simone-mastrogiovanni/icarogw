@@ -15,5 +15,5 @@ setuptools.setup(
     license='EUPL-1.2',
     python_requires='>=3.10',
     packages=['icarogw'],
-    install_requires=['attrs','jupyterlab','bilby','healpy','mpmath','ligo.skymap','ChainConsumer']
+    install_requires=['attrs','tables','jupyterlab','bilby','healpy','mpmath','ligo.skymap','ChainConsumer']
 )
