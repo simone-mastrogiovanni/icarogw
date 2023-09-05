@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 import copy as cp
 from .conversions import  radec2indeces
 
@@ -19,6 +19,8 @@ class injections(object):
         '''
         
         # Saves what you provided in the class
+        xp = get_module_array(prior)
+
         self.injections_data_original={key:injections_dict[key] for key in injections_dict.keys()}
         self.injections_data={key:injections_dict[key] for key in injections_dict.keys()}
         self.prior_original=cp.deepcopy(prior)
@@ -56,8 +58,11 @@ class injections(object):
     def effective_injections_number(self):
         ''' Get the effetive number of injections
         '''
-        mean = xp.exp(logsumexp(self.log_weights))/self.ntotal
-        var = xp.exp(logsumexp(2*self.log_weights))/(self.ntotal**2)-(mean**2)/self.ntotal
+        xp = get_module_array(self.log_weights)
+        sx = get_module_array_scipy(self.log_weights)
+
+        mean = xp.exp(sx.special.logsumexp(self.log_weights))/self.ntotal
+        var = xp.exp(sx.special.logsumexp(2*self.log_weights))/(self.ntotal**2)-(mean**2)/self.ntotal
         return (mean**2)/var
     
     def pixelize(self,nside):
@@ -81,10 +86,12 @@ class injections(object):
         
         rate_wrapper: class
             Rate wrapper from the wrapper.py module, initialized with your desired population model.
-        '''
+        '''        
         
         self.log_weights = rate_wrapper.log_rate_injections(self.prior,**{key:self.injections_data[key] for key in rate_wrapper.injections_parameters})
-        self.pseudo_rate = xp.exp(logsumexp(self.log_weights))/self.ntotal # Eq. 1.5 on the overleaf documentation
+        xp = get_module_array(self.log_weights)
+        sx = get_module_array_scipy(self.log_weights)
+        self.pseudo_rate = xp.exp(sx.special.logsumexp(self.log_weights))/self.ntotal # Eq. 1.5 on the overleaf documentation
         
     def expected_number_detections(self):
         '''
@@ -109,6 +116,7 @@ class injections(object):
         -------
         Dictionary of reweighted injections
         '''
+        xp = get_module_array(self.log_weights)
         prob = xp.exp(self.log_weights)
         prob/=prob.sum()
         idx = xp.random.choice(len(self.prior),replace=replace,p=prob,size=Nsamp)

@@ -1,7 +1,9 @@
-from .cupy_pal import *
-from .cosmology import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
+from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
+from .cosmology import  md_rate, powerlaw_rate
 from .conversions import detector2source_jacobian, detector2source
-from .priors import *
+from .priors import SmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian
+from .priors import PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf
 from scipy.stats import gaussian_kde
 import copy
 
@@ -308,6 +310,9 @@ class CBC_vanilla_EM_counterpart(object):
             The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
+        xp = get_module_array(prior)
+        sx = get_module_array_scipy(prior)
+        
         if len(kwargs['mass_1'].shape) != 2:
             raise ValueError('The EM counterpart rate wants N_ev x N_samples arrays')
         
@@ -326,7 +331,7 @@ class CBC_vanilla_EM_counterpart(object):
         for i in range(n_ev): 
             ww = xp.exp(log_weights[i,:])
             kde_fit = gaussian_kde(z[i,:],weights=ww/ww.sum())   
-            lwtot[i,:] = logsumexp(log_weights[i,:])-xp.log(kwargs['mass_1'].shape[1])+kde_fit.logpdf(kwargs['z_EM'][i,:])
+            lwtot[i,:] = sx.special.logsumexp(log_weights[i,:])-xp.log(kwargs['mass_1'].shape[1])+np2cp(kde_fit.logpdf(cp2np(kwargs['z_EM'][i,:])))
 
         if not self.scale_free:
             log_out = lwtot + xp.log(self.R0)
@@ -346,6 +351,8 @@ class CBC_vanilla_EM_counterpart(object):
         kwargs: flags
             The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
+        
+        xp = get_module_array(prior)
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
         log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
@@ -441,6 +448,7 @@ class CBC_vanilla_rate(object):
         kwargs: flags
             The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
+        xp = get_module_array(prior)
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
         log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
@@ -470,6 +478,7 @@ class CBC_vanilla_rate(object):
         kwargs: flags
             The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
+        xp = get_module_array(prior)
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
         log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
@@ -571,6 +580,7 @@ class CBC_catalog_vanilla_rate(object):
         kwargs: flags
             The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
+        xp = get_module_array(prior)
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology)
         dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
@@ -604,6 +614,7 @@ class CBC_catalog_vanilla_rate(object):
         kwargs: flags
             The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
+        xp = get_module_array(prior)
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology)
         dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
@@ -865,8 +876,10 @@ class spinprior_default(object):
             raise ValueError('Alpha and Beta must be > 1') 
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
     def log_pdf(self,chi_1,chi_2,cos_t_1,cos_t_2):
+        xp = get_module_array(chi_1)
         return self.beta_pdf.log_pdf(chi_1)+self.beta_pdf.log_pdf(chi_2)+xp.log(self.csi_spin*self.aligned_pdf.pdf(cos_t_1)+(1.-self.csi_spin)*0.5)+xp.log(self.csi_spin*self.aligned_pdf.pdf(cos_t_2)+(1.-self.csi_spin)*0.5)
     def pdf(self,chi_1,chi_2,cos_t_1,cos_t_2):
+        xp = get_module_array(chi_1)
         return xp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2))
     
 class spinprior_gaussian(object):
@@ -882,8 +895,9 @@ class spinprior_gaussian(object):
     def log_pdf(self,chi_eff,chi_p):
         return self.pdf_evaluator.log_pdf(chi_eff,chi_p)
     def pdf(self,chi_eff,chi_p):
-        return xp.exp(self.log_pdf(chi_eff,chi_p))        
-        
+        xp = get_module_array(chi_eff)
+        return xp.exp(self.log_pdf(chi_eff,chi_p))
+      
 class spinprior_ECOs(object):
     def __init__(self):
         self.population_parameters=['alpha_chi','beta_chi','eps', 'f_eco', 'sigma_chi_ECO']
@@ -891,6 +905,7 @@ class spinprior_ECOs(object):
         self.name='DEFAULT'
         
     def get_chi_crit(self, eps):
+        xp = get_module_array(eps)
         q = 1. # Value for polar perturbations, more conservative
         return xp.pi*(1.+q)/(2*xp.abs(xp.log10(eps)))
 
@@ -907,7 +922,7 @@ class spinprior_ECOs(object):
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
         self.truncatedbeta_pdf = TruncatedBetaDistribution(self.alpha_chi,self.beta_chi,self.chi_crit)
         self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., 1.)
-        self.lambda_eco = 1-self.beta_pdf.cdf(xp.array([self.get_chi_crit(self.eps)]))[0]
+        self.lambda_eco = 1-self.beta_pdf.cdf(np.array([self.get_chi_crit(self.eps)]))[0]
         
         
     def pdf(self,chi_1,chi_2):
@@ -917,6 +932,7 @@ class spinprior_ECOs(object):
         
         
     def log_pdf(self,chi_1,chi_2):
+        xp = get_module_array(chi_1)
         return xp.log(self.pdf(chi_1,chi_2))
     
 ################ END: Small wrappers used in support of the main wrappers above ###################

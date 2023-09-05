@@ -1,8 +1,9 @@
-from .cupy_pal import *
-from .conversions import *
-from .wrappers import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, enable_cupy
+import time
 import copy
 import bilby
+import icarogw
+from .wrappers import FlatLambdaCDM_wrap
 
 class hierarchical_likelihood(bilby.Likelihood):
     def __init__(self, posterior_samples_dict, injections, rate_model, nparallel=None, neffPE=20,neffINJ=None):
@@ -27,11 +28,9 @@ class hierarchical_likelihood(bilby.Likelihood):
         
         # Saves injections in a cupyfied format
         self.injections=injections
-        self.injections.cupyfy()
         self.neffPE=neffPE
         self.rate_model=rate_model
         self.posterior_samples_dict=posterior_samples_dict
-        
         self.posterior_samples_dict.build_parallel_posterior(nparallel=nparallel)
         
         if neffINJ is None:
@@ -45,7 +44,12 @@ class hierarchical_likelihood(bilby.Likelihood):
         '''
         Evaluates and return the log-likelihood
         '''
-        
+
+        # enable_cupy()
+        # self.injections.cupyfy()
+        # self.posterior_samples_dict.cupyfy()
+        # self.rate_model.cw=FlatLambdaCDM_wrap(2.)
+                
         #Update the rate model with the population parameters
         self.rate_model.update(**{key:self.parameters[key] for key in self.rate_model.population_parameters})
         # Update the sensitivity estimation with the new model
@@ -53,6 +57,9 @@ class hierarchical_likelihood(bilby.Likelihood):
         Neff=self.injections.effective_injections_number()
         # If the injections are not enough return 0, you cannot go to that point. This is done because the number of injections that you have
         # are not enough to calculate the selection effect
+        
+        xp = get_module_array(self.injections.log_weights)
+        
         if (Neff<self.neffINJ) | (Neff==0.):
             return float(xp.nan_to_num(-xp.inf))
         
@@ -102,7 +109,6 @@ class hierarchical_likelihood_noevents(bilby.Likelihood):
         
         # Saves injections in a cupyfied format
         self.injections=injections
-        self.injections.cupyfy()
         self.rate_model=rate_model
         super().__init__(parameters={ll: None for ll in self.rate_model.population_parameters})
                 
@@ -115,6 +121,8 @@ class hierarchical_likelihood_noevents(bilby.Likelihood):
         # Update the sensitivity estimation with the new model
         self.injections.update_weights(self.rate_model)
         
+        xp = get_module_array(self.injections.log_weights)
+
         Nexp=self.injections.expected_number_detections()
         # Log likelihood for  the model, Eq. 1.1 on the document
         log_likeli = -Nexp 

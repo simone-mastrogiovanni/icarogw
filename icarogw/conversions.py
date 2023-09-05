@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 import healpy as hp
 from scipy.stats import gaussian_kde
 from scipy.special import spence as PL
@@ -213,6 +213,8 @@ def cartestianspins2chis(s1x,s1y,s1z,s2x,s2y,s2z,q):
         mass ratio in (0,1]
     '''
     
+    xp = get_module_array(s1x)
+    
     chi_1 = xp.sqrt(s1x**2.+s1y**2.+s1z**2.)
     chi_2 = xp.sqrt(s2x**2.+s2y**2.+s2z**2.)
     cos_t_1, cos_t_2 = s1z/chi_1 , s2z/chi_2
@@ -251,24 +253,26 @@ def chi_effective_prior_from_aligned_spins(q,aMax,xs):
     
     Parameters
     ----------
-    q: np.array
+    q: xp.array
         Mass ratio value (according to the convention q<1)
     aMax: float
         Maximum allowed dimensionless component spin magnitude
-    xs: np.array
+    xs: xp.array
         Chi_effective value or values at which we wish to compute prior
   
     Returns
     -------
     Array of prior values
     '''
+    
+    xp = get_module_array(q)
 
     # Ensure that `xs` is an array and take Absolute bolometric value
     origin_shape=xs.shape
-    xs = np.reshape(xs,-1)
+    xs = xp.reshape(xs,-1)
 
     # Set up various piecewise cases
-    pdfs = np.zeros(xs.size)
+    pdfs = xp.zeros(xs.size)
     caseA = (xs>aMax*(1.-q)/(1.+q))*(xs<=aMax)
     caseB = (xs<-aMax*(1.-q)/(1.+q))*(xs>=-aMax)
     caseC = (xs>=-aMax*(1.-q)/(1.+q))*(xs<=aMax*(1.-q)/(1.+q))
@@ -297,24 +301,26 @@ def chi_effective_prior_from_isotropic_spins(q,aMax,xs):
     
     Parameters
     ----------
-    q: np.array
+    q: xp.array
         Mass ratio value (according to the convention q<1)
     aMax: float
         Maximum allowed dimensionless component spin magnitude
-    xs: np.array
+    xs: xp.array
         Chi_effective value or values at which we wish to compute prior
     
     Returns
     -------
     Array of prior values
     '''
+    
+    xp = get_module_array(q)
 
     # Ensure that `xs` is an array and take Absolute bolometric value
     origin_shape=xs.shape
-    xs = np.reshape(np.abs(xs),-1)
+    xs = xp.reshape(xp.abs(xs),-1)
 
     # Set up various piecewise cases
-    pdfs = np.ones(xs.size,dtype=complex)*(-1.)
+    pdfs = xp.ones(xs.size,dtype=complex)*(-1.)
     caseZ = (xs==0)
     caseA = (xs>0)*(xs<aMax*(1.-q)/(1.+q))*(xs<q*aMax/(1.+q))
     caseB = (xs<aMax*(1.-q)/(1.+q))*(xs>q*aMax/(1.+q))
@@ -331,67 +337,67 @@ def chi_effective_prior_from_isotropic_spins(q,aMax,xs):
     x_E, q_E = xs[caseE], q[caseE]
     q_Z = q[caseZ]
 
-    pdfs[caseZ] = (1.+q_Z)/(2.*aMax)*(2.-np.log(q_Z))
+    pdfs[caseZ] = (1.+q_Z)/(2.*aMax)*(2.-xp.log(q_Z))
 
     pdfs[caseA] = (1.+q_A)/(4.*q_A*aMax**2)*(
-                    q_A*aMax*(4.+2.*np.log(aMax) - np.log(q_A**2*aMax**2 - (1.+q_A)**2*x_A**2))
-                    - 2.*(1.+q_A)*x_A*np.arctanh((1.+q_A)*x_A/(q_A*aMax))
+                    q_A*aMax*(4.+2.*xp.log(aMax) - xp.log(q_A**2*aMax**2 - (1.+q_A)**2*x_A**2))
+                    - 2.*(1.+q_A)*x_A*xp.arctanh((1.+q_A)*x_A/(q_A*aMax))
                     + (1.+q_A)*x_A*(Di(-q_A*aMax/((1.+q_A)*x_A)) - Di(q_A*aMax/((1.+q_A)*x_A)))
                     )
 
     pdfs[caseB] = (1.+q_B)/(4.*q_B*aMax**2)*(
                     4.*q_B*aMax
-                    + 2.*q_B*aMax*np.log(aMax)
-                    - 2.*(1.+q_B)*x_B*np.arctanh(q_B*aMax/((1.+q_B)*x_B))
-                    - q_B*aMax*np.log((1.+q_B)**2*x_B**2 - q_B**2*aMax**2)
+                    + 2.*q_B*aMax*xp.log(aMax)
+                    - 2.*(1.+q_B)*x_B*xp.arctanh(q_B*aMax/((1.+q_B)*x_B))
+                    - q_B*aMax*xp.log((1.+q_B)**2*x_B**2 - q_B**2*aMax**2)
                     + (1.+q_B)*x_B*(Di(-q_B*aMax/((1.+q_B)*x_B)) - Di(q_B*aMax/((1.+q_B)*x_B)))
                     )
 
     pdfs[caseC] = (1.+q_C)/(4.*q_C*aMax**2)*(
                     2.*(1.+q_C)*(aMax-x_C)
-                    - (1.+q_C)*x_C*np.log(aMax)**2.
-                    + (aMax + (1.+q_C)*x_C*np.log((1.+q_C)*x_C))*np.log(q_C*aMax/(aMax-(1.+q_C)*x_C))
-                    - (1.+q_C)*x_C*np.log(aMax)*(2. + np.log(q_C) - np.log(aMax-(1.+q_C)*x_C))
-                    + q_C*aMax*np.log(aMax/(q_C*aMax-(1.+q_C)*x_C))
-                    + (1.+q_C)*x_C*np.log((aMax-(1.+q_C)*x_C)*(q_C*aMax-(1.+q_C)*x_C)/q_C)
+                    - (1.+q_C)*x_C*xp.log(aMax)**2.
+                    + (aMax + (1.+q_C)*x_C*xp.log((1.+q_C)*x_C))*xp.log(q_C*aMax/(aMax-(1.+q_C)*x_C))
+                    - (1.+q_C)*x_C*xp.log(aMax)*(2. + xp.log(q_C) - xp.log(aMax-(1.+q_C)*x_C))
+                    + q_C*aMax*xp.log(aMax/(q_C*aMax-(1.+q_C)*x_C))
+                    + (1.+q_C)*x_C*xp.log((aMax-(1.+q_C)*x_C)*(q_C*aMax-(1.+q_C)*x_C)/q_C)
                     + (1.+q_C)*x_C*(Di(1.-aMax/((1.+q_C)*x_C)) - Di(q_C*aMax/((1.+q_C)*x_C)))
                     )
 
     pdfs[caseD] = (1.+q_D)/(4.*q_D*aMax**2)*(
-                    -x_D*np.log(aMax)**2
+                    -x_D*xp.log(aMax)**2
                     + 2.*(1.+q_D)*(aMax-x_D)
-                    + q_D*aMax*np.log(aMax/((1.+q_D)*x_D-q_D*aMax))
-                    + aMax*np.log(q_D*aMax/(aMax-(1.+q_D)*x_D))
-                    - x_D*np.log(aMax)*(2.*(1.+q_D) - np.log((1.+q_D)*x_D) - q_D*np.log((1.+q_D)*x_D/aMax))
-                    + (1.+q_D)*x_D*np.log((-q_D*aMax+(1.+q_D)*x_D)*(aMax-(1.+q_D)*x_D)/q_D)
-                    + (1.+q_D)*x_D*np.log(aMax/((1.+q_D)*x_D))*np.log((aMax-(1.+q_D)*x_D)/q_D)
+                    + q_D*aMax*xp.log(aMax/((1.+q_D)*x_D-q_D*aMax))
+                    + aMax*xp.log(q_D*aMax/(aMax-(1.+q_D)*x_D))
+                    - x_D*xp.log(aMax)*(2.*(1.+q_D) - xp.log((1.+q_D)*x_D) - q_D*xp.log((1.+q_D)*x_D/aMax))
+                    + (1.+q_D)*x_D*xp.log((-q_D*aMax+(1.+q_D)*x_D)*(aMax-(1.+q_D)*x_D)/q_D)
+                    + (1.+q_D)*x_D*xp.log(aMax/((1.+q_D)*x_D))*xp.log((aMax-(1.+q_D)*x_D)/q_D)
                     + (1.+q_D)*x_D*(Di(1.-aMax/((1.+q_D)*x_D)) - Di(q_D*aMax/((1.+q_D)*x_D)))
                     )
 
     pdfs[caseE] = (1.+q_E)/(4.*q_E*aMax**2)*(
                     2.*(1.+q_E)*(aMax-x_E)
-                    - (1.+q_E)*x_E*np.log(aMax)**2
-                    + np.log(aMax)*(
+                    - (1.+q_E)*x_E*xp.log(aMax)**2
+                    + xp.log(aMax)*(
                         aMax
                         -2.*(1.+q_E)*x_E
-                        -(1.+q_E)*x_E*np.log(q_E/((1.+q_E)*x_E-aMax))
+                        -(1.+q_E)*x_E*xp.log(q_E/((1.+q_E)*x_E-aMax))
                         )
-                    - aMax*np.log(((1.+q_E)*x_E-aMax)/q_E)
-                    + (1.+q_E)*x_E*np.log(((1.+q_E)*x_E-aMax)*((1.+q_E)*x_E-q_E*aMax)/q_E)
-                    + (1.+q_E)*x_E*np.log((1.+q_E)*x_E)*np.log(q_E*aMax/((1.+q_E)*x_E-aMax))
-                    - q_E*aMax*np.log(((1.+q_E)*x_E-q_E*aMax)/aMax)
+                    - aMax*xp.log(((1.+q_E)*x_E-aMax)/q_E)
+                    + (1.+q_E)*x_E*xp.log(((1.+q_E)*x_E-aMax)*((1.+q_E)*x_E-q_E*aMax)/q_E)
+                    + (1.+q_E)*x_E*xp.log((1.+q_E)*x_E)*xp.log(q_E*aMax/((1.+q_E)*x_E-aMax))
+                    - q_E*aMax*xp.log(((1.+q_E)*x_E-q_E*aMax)/aMax)
                     + (1.+q_E)*x_E*(Di(1.-aMax/((1.+q_E)*x_E)) - Di(q_E*aMax/((1.+q_E)*x_E)))
                     )
 
     pdfs[caseF] = 0.
 
     # Deal with spins on the boundary between cases
-    if np.any(pdfs==-1):
+    if xp.any(pdfs==-1):
         boundary = (pdfs==-1)
         pdfs[boundary] = 0.5*(chi_effective_prior_from_isotropic_spins(q[boundary],aMax,xs[boundary]+1e-6)\
                         + chi_effective_prior_from_isotropic_spins(q[boundary],aMax,xs[boundary]-1e-6))
 
-    return np.real(pdfs).reshape(origin_shape)
+    return xp.real(pdfs).reshape(origin_shape)
 
 def chi_p_prior_from_isotropic_spins(q,aMax,xs):
     '''
@@ -403,11 +409,11 @@ def chi_p_prior_from_isotropic_spins(q,aMax,xs):
 
     Parameters
     ----------
-    q: np.array
+    q: xp.array
         Mass ratio value (according to the convention q<1)
     aMax: float
         Maximum allowed dimensionless component spin magnitude
-    xs: np.arry
+    xs: xp.arry
         Chi_p value or values at which we wish to compute prior
     
     Returns:
@@ -416,11 +422,12 @@ def chi_p_prior_from_isotropic_spins(q,aMax,xs):
     '''
 
     # Ensure that `xs` is an array and take Absolute bolometric value
+    xp = get_module_array(q)
     origin_shape=xs.shape
-    xs = np.reshape(xs,-1)
+    xs = xp.reshape(xs,-1)
 
     # Set up various piecewise cases
-    pdfs = np.zeros(xs.size)
+    pdfs = xp.zeros(xs.size)
     caseA = xs<q*aMax*(3.+4.*q)/(4.+3.*q)
     caseB = (xs>=q*aMax*(3.+4.*q)/(4.+3.*q))*(xs<aMax)
 
@@ -429,19 +436,19 @@ def chi_p_prior_from_isotropic_spins(q,aMax,xs):
     x_B, q_B = xs[caseB], q[caseB]
 
     pdfs[caseA] = (1./(aMax**2*q_A))*((4.+3.*q_A)/(3.+4.*q_A))*(
-                    np.arccos((4.+3.*q_A)*x_A/((3.+4.*q_A)*q*aMax))*(
+                    xp.arccos((4.+3.*q_A)*x_A/((3.+4.*q_A)*q*aMax))*(
                         aMax
-                        - np.sqrt(aMax**2-x_A**2)
-                        + x_A*np.arccos(x_A/aMax)
+                        - xp.sqrt(aMax**2-x_A**2)
+                        + x_A*xp.arccos(x_A/aMax)
                         )
-                    + np.arccos(x_A/aMax)*(
+                    + xp.arccos(x_A/aMax)*(
                         aMax*q_A*(3.+4.*q_A)/(4.+3.*q_A)
-                        - np.sqrt(aMax**2*q_A**2*((3.+4.*q_A)/(4.+3.*q_A))**2 - x_A**2)
-                        + x_A*np.arccos((4.+3.*q_A)*x_A/((3.+4.*q_A)*aMax*q_A))
+                        - xp.sqrt(aMax**2*q_A**2*((3.+4.*q_A)/(4.+3.*q_A))**2 - x_A**2)
+                        + x_A*xp.arccos((4.+3.*q_A)*x_A/((3.+4.*q_A)*aMax*q_A))
                         )
                     )
 
-    pdfs[caseB] = (1./aMax)*np.arccos(x_B/aMax)
+    pdfs[caseB] = (1./aMax)*xp.arccos(x_B/aMax)
 
     return pdfs.reshape(origin_shape)
 
@@ -454,13 +461,13 @@ def joint_prior_from_isotropic_spins(q,aMax,xeffs,xps,ndraws=10000,bw_method='sc
     
     Parameters
     ----------
-    q: np.array
+    q: xp.array
         Mass ratio
     aMax: float
         Maximimum spin magnitude considered
-    xeffs: np.array
+    xeffs: xp.array
         Effective inspiral spin samples
-    xps: np.array
+    xps: xp.array
         Effective precessing spin values
     ndraws: int
         Number of draws from the component spin priors used in numerically building interpolant
@@ -470,15 +477,16 @@ def joint_prior_from_isotropic_spins(q,aMax,xeffs,xps,ndraws=10000,bw_method='sc
     
     Array of priors on xp, conditioned on given effective inspiral spins and mass ratios
     '''
+    xp=get_module_array(xeffs)
 
     # Convert to arrays for safety
     origin_shape=xeffs.shape
-    xeffs = np.reshape(xeffs,-1)
-    xps = np.reshape(xps,-1)
+    xeffs = xp.reshape(xeffs,-1)
+    xps = xp.reshape(xps,-1)
 
     # Compute marginal prior on xeff, conditional prior on xp, and multiply to get joint prior!
     p_chi_eff = chi_effective_prior_from_isotropic_spins(q,aMax,xeffs)
-    p_chi_p_given_chi_eff = np.zeros(len(p_chi_eff))
+    p_chi_p_given_chi_eff = xp.zeros(len(p_chi_eff))
     
     for i in tqdm(range(len(p_chi_eff)),desc='Calculating p(chi_p|chi_eff,q)'):
         p_chi_p_given_chi_eff[i] = chi_p_prior_given_chi_eff_q(q[i],aMax,xeffs[i],xps[i],ndraws,bw_method)
@@ -496,13 +504,13 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
     
     Parameters
     ----------
-    q: np.array
+    q: xp.array
         Single posterior mass ratio sample
     aMax: float
         Maximimum spin magnitude considered
-    xeff: np.array
+    xeff: xp.array
         Single effective inspiral spin sample
-    xp: np.array
+    xp: xp.array
         Single effective precessing spin value
     ndraws: int
         Number of draws from the component spin priors used in numerically building interpolant
@@ -511,15 +519,17 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
     -------
     Prior on xp, conditioned on given effective inspiral spin and mass ratio
     '''
+    
+    xp=get_module_array(q)
 
     # Draw random spin magnitudes.
     # Note that, given a fixed chi_eff, a1 can be no larger than (1+q)*chi_eff,
     # and a2 can be no larger than (1+q)*chi_eff/q
-    a1 = np.random.random(ndraws)*aMax
-    a2 = np.random.random(ndraws)*aMax
+    a1 = xp.random.random(ndraws)*aMax
+    a2 = xp.random.random(ndraws)*aMax
 
     # Draw random tilts for spin 2
-    cost2 = 2.*np.random.random(ndraws)-1.
+    cost2 = 2.*xp.random.random(ndraws)-1.
 
     # Finally, given our conditional value for chi_eff, we can solve for cost1
     # Note, though, that we still must require that the implied value of cost1 be *physical*
@@ -527,11 +537,11 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
 
     # While any cost1 values remain unphysical, redraw a1, a2, and cost2, and recompute
     # Repeat as necessary
-    while np.any(cost1<-1) or np.any(cost1>1):
-        to_replace = np.where((cost1<-1) | (cost1>1))[0]
-        a1[to_replace] = np.random.random(to_replace.size)*aMax
-        a2[to_replace] = np.random.random(to_replace.size)*aMax
-        cost2[to_replace] = 2.*np.random.random(to_replace.size)-1.
+    while xp.any(cost1<-1) or xp.any(cost1>1):
+        to_replace = xp.where((cost1<-1) | (cost1>1))[0]
+        a1[to_replace] = xp.random.random(to_replace.size)*aMax
+        a2[to_replace] = xp.random.random(to_replace.size)*aMax
+        cost2[to_replace] = 2.*xp.random.random(to_replace.size)-1.
         cost1 = (xeff*(1.+q) - q*a2*cost2)/a1
 
     # Compute precessing spins and corresponding weights, build KDE
@@ -541,22 +551,22 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
     prior_kde = gaussian_kde(Xp_draws,weights=jacobian_weights,bw_method=bw_method)
 
     # Compute maximum chi_p
-    if (1.+q)*np.abs(xeff)/q<aMax:
+    if (1.+q)*xp.abs(xeff)/q<aMax:
         max_Xp = aMax
     else:
-        max_Xp = np.sqrt(aMax**2 - ((1.+q)*np.abs(xeff)-q)**2.)
+        max_Xp = xp.sqrt(aMax**2 - ((1.+q)*xp.abs(xeff)-q)**2.)
 
     # Set up a grid slightly inside (0,max chi_p) and evaluate KDE
-    reference_grid = np.linspace(0.05*max_Xp,0.95*max_Xp,50)
+    reference_grid = xp.linspace(0.05*max_Xp,0.95*max_Xp,50)
     reference_vals = prior_kde(reference_grid)
 
     # Manually prepend/append zeros at the boundaries
-    reference_grid = np.concatenate([[0],reference_grid,[max_Xp]])
-    reference_vals = np.concatenate([[0],reference_vals,[0]])
-    norm_constant = np.trapz(reference_vals,reference_grid)
+    reference_grid = xp.concatenate([[0],reference_grid,[max_Xp]])
+    reference_vals = xp.concatenate([[0],reference_vals,[0]])
+    norm_constant = xp.trapz(reference_vals,reference_grid)
 
     # Interpolate!
-    p_chi_p = np.interp(xp,reference_grid,reference_vals/norm_constant)
+    p_chi_p = xp.interp(xp,reference_grid,reference_vals/norm_constant)
     return p_chi_p
 
 def chi_eff_from_spins(chi1, chi2, cos1, cos2, q):
@@ -597,11 +607,11 @@ def chi_p_from_spins(chi1, chi2, cos1, cos2, q):
     -------
     chi p
     '''
-    
-    sin1 = np.sqrt(1.-cos1**2)
-    sin2 = np.sqrt(1.-cos2**2)
+    xp = get_module_array(chi1)
+    sin1 = xp.sqrt(1.-cos1**2)
+    sin2 = xp.sqrt(1.-cos2**2)
 
-    to_ret = np.maximum(chi1*sin1, ((4*q+3)/(3*q+4))*q*chi2*sin2)
+    to_ret = xp.maximum(chi1*sin1, ((4*q+3)/(3*q+4))*q*chi2*sin2)
     
     return to_ret
 
@@ -611,26 +621,27 @@ def radec2skymap(ra,dec,nside):
     
     Parameters
     ----------
-    ra, dec: np.array
+    ra, dec: xp.array
         arrays with RA and DEC in radians
     nside: int
         nside for healpy
     
     Returns
     -------
-    counts_maps: np.array
+    counts_maps: xp.array
         Healpy array with skymap
     dOmega_sterad: float
         Area in steradians of the sky cell
     '''
 
     npixels=hp.nside2npix(nside)
-    dOmega_sterad=4*np.pi/npixels
-    dOmega_deg2=np.power(180/xp.pi,2.)*dOmega_sterad
+    xp=get_module_array(ra)
+    dOmega_sterad=4*xp.pi/npixels
+    dOmega_deg2=xp.power(180/xp.pi,2.)*dOmega_sterad
     indices = radec2indeces(ra,dec,nside)
-    counts_map = np.zeros(npixels)
+    counts_map = xp.zeros(npixels)
     for indx in range(npixels):
-        ind=np.where(indices==indx)[0]
+        ind=xp.where(indices==indx)[0]
         counts_map[indx]=len(ind)
         if ind.size==0:
             continue
@@ -652,6 +663,7 @@ def L2M(L):
     M: xp.array
         Absolute bolometric magnitude
     '''
+    xp=get_module_array(L)
     # From Resolution B2 proposed by IAU, see e.g. Pag. 2, Eq. 2 of https://www.iau.org/static/resolutions/IAU2015_English.pdf
     return -2.5*xp.log10(L)+71.197425
 
@@ -669,6 +681,7 @@ def M2L(M):
     L: xp.array
         Luminosity in Watt
     '''
+    xp=get_module_array(M)
     # From Pag. 2, Eq. 1-2 of https://www.iau.org/static/resolutions/IAU2015_English.pdf
     return 3.0128e28*xp.power(10.,-0.4*M)
 
@@ -687,7 +700,7 @@ def radec2indeces(ra,dec,nside):
     -------
     healpy indeces as numpy array
     '''
-    theta = xp.pi/2.0 - dec
+    theta = np.pi/2.0 - dec
     phi = ra
     return hp.ang2pix(nside, theta, phi)
 
@@ -709,7 +722,7 @@ def indices2radec(indices,nside):
     '''
     
     theta,phi= hp.pix2ang(nside,indices)
-    return phi, xp.pi/2.0-theta
+    return phi, np.pi/2.0-theta
 
 def M2m(M,dl,kcorr):
     '''
@@ -729,6 +742,7 @@ def M2m(M,dl,kcorr):
     m: xp.array
         Apparent magnitude
     '''
+    xp=get_module_array(M)
     # Note that the distance is Mpc here. See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
     dist_modulus=5*xp.log10(dl)+25.
     return M+dist_modulus+kcorr
@@ -751,6 +765,7 @@ def m2M(m,dl,kcorr):
     M: xp.array
         Absolute bolometric magnitude
     '''
+    xp=get_module_array(m)    
     # Note that the distance is Mpc here. See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
     dist_modulus=5*xp.log10(dl)+25.
     return m-dist_modulus-kcorr
@@ -811,6 +826,7 @@ def detector2source_jacobian(z, cosmology):
     cosmo:  class from the cosmology module
         Cosmology class from the cosmology module
     '''
+    xp=get_module_array(z)
     return xp.abs(xp.power(1+z,2.)*cosmology.ddl_by_dz_at_z(z))
     
 def source2detector_jacobian(z, cosmology):

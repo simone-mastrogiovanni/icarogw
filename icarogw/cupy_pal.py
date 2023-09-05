@@ -1,123 +1,108 @@
+import numpy as np
+import scipy as sn
+
+CUPY_LOADED = False
+
+def enable_cupy():
+    try:
+        import cupy as cp
+        import cupyx as _cupyx
+        from cupyx.scipy import interpolate
+        from cupy import _core
+
+        global cp
+        global _cupyx
+        global interpolate
+        global _core
+        global CUPY_LOADED
+        
+        CUPY_LOADED = True
+        print('cupy imported')
+    except ImportError:
+        print('Error in importing cupy')
+
+def disable_cupy():
+    global CUPY_LOADED
+    CUPY_LOADED = False
+    
+def is_there_cupy():
+    return CUPY_LOADED
+
 try:
     import config
     print('Config file loaded')
     if config.CUPY:
-        try:
-            import cupy as xp
-            import numpy as np
-            from cupy import trapz
-            from cupyx.scipy.special import erf, beta, betainc, gamma, logsumexp# noqa
-            from cupyx.scipy.interpolate import interpn
-            CUPY_LOADED = True
-            print('CUPY LOADED')
-        except ImportError:
-            import numpy as xp
-            import numpy as np
-            from numpy import trapz
-            from scipy.special import erf, beta, betainc, gamma, logsumexp # noqa
-            from scipy.interpolate import interpn
-            CUPY_LOADED = False
-            print('CUPY NOT LOADED BACK TO NUMPY')
+        enable_cupy()
     else:
-        import numpy as xp
-        import numpy as np
-        from numpy import trapz
-        from scipy.special import erf, beta, betainc, gamma, logsumexp # noqa
-        from scipy.interpolate import interpn
-        CUPY_LOADED = False
-        print('CUPY NOT LOADED')        
+        print('Config does not allow CUPY')        
 except ImportError:
     print('Config not imported, automatically decides between Numpy and Cupy')
-    try:
-        import cupy as xp
-        import numpy as np
-        from cupy import trapz
-        from cupyx.scipy.special import erf, beta, betainc, gamma, logsumexp  # noqa
-        from cupyx.scipy.interpolate import interpn
-        CUPY_LOADED = True
-        print('CUPY LOADED')
-    except ImportError:
-        import numpy as xp
-        import numpy as np
-        from numpy import trapz
-        from scipy.special import erf, beta, betainc, gamma, logsumexp # noqa
-        from scipy.interpolate import interpn
-        CUPY_LOADED = False
-        print('CUPY NOT LOADED BACK TO NUMPY')
+    enable_cupy()
 
+
+_cupy_functions = {}
+
+def check_bounds_1D(x,minval,maxval):
+    if CUPY_LOADED:
+        kernel = _cupy_functions.get('check_bounds_1D', None)
+        if kernel is None:
+            @cp.fuse()
+            def check_bounds_sub_1D(x,minval,maxval):
+                return (x<minval) | (x>maxval)
+            _cupy_functions['check_bounds_1D']=check_bounds_sub_1D
+            kernel = check_bounds_sub_1D
+        return kernel(x,minval,maxval)
+    else:
+        return (x<minval) | (x>maxval)
+
+def check_bounds_2D(x1,x2,y):
+    if CUPY_LOADED:
+        kernel = _cupy_functions.get('check_bounds_2D', None)
+        if kernel is None:
+            @cp.fuse()
+            def check_bounds_sub_2D(x1,x2,y):
+                xp = get_module_array(x1)
+                return (x1<x2) | xp.isnan(y)
+            _cupy_functions['check_bounds_2D']=check_bounds_sub_2D
+            kernel = check_bounds_sub_2D
+        return kernel(x1,x2,y)
+    else:
+        return (x1<x2) | np.isnan(y)
+    
+
+def cp2np(array):
+    '''Cast any array to numpy'''
+    if CUPY_LOADED:
+        return cp.asnumpy(array)
+    else:
+        return array
         
-if CUPY_LOADED: 
-    def cp2np(array):
-        '''Cast any array to numpy'''
-        return xp.asnumpy(array)
 
-    def np2cp(array):
-        '''Cast any array to cupy'''
-        return xp.asarray(array)
-else:
-    def cp2np(array):
-        '''Cast any array to numpy'''
-        return array
-    
-    def np2cp(array):
-        '''Cast any array to cupy'''
+def np2cp(array):
+    '''Cast any array to cupy'''
+    if CUPY_LOADED:
+        return cp.asarray(array)
+    else:
         return array
 
-    
-def find_histoplace(arr,edges, clean_outliers=False):
-    '''
+def get_module_array(array):
+    if CUPY_LOADED:
+        return cp.get_array_module(array)
+    else:
+        return np
 
-    Parameters
-    ----------
-    arr: xp.array
-        1-D array of values to place in the histogram
-    edges: xp.array
-        Monothonic increasing array of edges
-    clean_outliers: bool
-        If True remove the samples falling outside the edges
+def get_module_array_scipy(array):
+    if CUPY_LOADED:
+        return _cupyx.scipy.get_array_module(array)
+    else:
+        return sn
 
-    Returns
-    -------
-    xp.array of indeces, indicating where to place them in the histogram.
-    It has -1 if value is lower than lower boundary, len(edges) if is above
-    '''
+def iscupy(array):
+    if CUPY_LOADED:
+        return isinstance(array, (cp.ndarray, _cupyx.scipy.sparse.spmatrix,
+                        _core.fusion._FusionVarArray,
+                        _core.new_fusion._ArrayProxy))
+    else:
+        return False
 
-    # Values equal or above the first edge will be at 1, values below the first edge at 0
-    # Values equal or above the last edge will be at len(edges)
-    indices=xp.digitize(arr,edges,right=False)
-
-    # Values equal or above the first edge will be at 0, values below the first edge at -1
-    # Values in other bins are correctly placed
-    indices[arr<edges[-1]]=indices[arr<edges[-1]]-1
-
-    # Values that correspond to the last edge will be places at len(edges)-2
-    # The motivation is that bins indeces go from 0 to len(edges-2)
-    indices[arr==edges[-1]]=indices[arr==edges[-1]]-2
-
-    if clean_outliers:
-        indices=indices[(indices!=-1) & (indices!=len(edges))]
-
-    return indices
-
-
-def betaln(alpha, beta):
-    '''
-    Logarithm of the Beta function
-    .. math::
-        \\ln B(\\alpha, \\beta) = \\frac{\\ln\\gamma(\\alpha)\\ln\\gamma(\\beta)}{\\ln\\gamma(\\alpha + \\beta)}
-
-    Parameters
-    ----------
-    alpha: float
-        The Beta alpha parameter (:math:`\\alpha`)
-    beta: float
-        The Beta beta parameter (:math:`\\beta`)
-    
-    Returns
-    -------
-    ln_beta: float, array-like
-        The ln Beta function
-    '''
-    ln_beta = gammaln(alpha) + gammaln(beta) - gammaln(alpha + beta)
-    return ln_beta
 

@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, check_bounds_1D, check_bounds_2D
 from .conversions import L2M, M2L
 import copy
 
@@ -17,6 +17,8 @@ def betadistro_muvar2ab(mu,var):
         a and b parameters of the beta distribution
     '''
     
+    xp = get_module_array(mu)
+    
     a=(((1.-mu)/var)- 1./mu )*xp.power(mu,2.)
     return a,a* (1./mu -1.)
 
@@ -34,6 +36,7 @@ def betadistro_ab2muvar(a,b):
     mu, var: xp.array
         mean and variance of the beta distribution
     '''
+    xp = get_module_array(a)
     
     return a/(a+b), a*b/(xp.power(a+b,2.) *(a+b+1.))
 
@@ -54,6 +57,8 @@ def _S_factor(mass, mmin,delta_m):
     -------
     Values of the window function
     '''
+    
+    xp = get_module_array(mass)
 
     to_ret = xp.ones_like(mass)
     if delta_m == 0:
@@ -105,7 +110,9 @@ class basic_1dimpdf(object):
             log pdf values updates to -xp.inf outside the boundaries
             
         '''
-        y[(x<self.minval) | (x>self.maxval)]=-xp.inf
+        xp = get_module_array(x)
+        indx=check_bounds_1D(x,self.minval,self.maxval)
+        y[indx]=-xp.inf
         return y
     
     def _check_bound_cdf(self,x,y):
@@ -123,6 +130,7 @@ class basic_1dimpdf(object):
             log cdf values updates to 0 and 1 outside the boundaries
             
         '''
+        xp = get_module_array(x)
         y[x<self.minval],y[x>self.maxval]=-xp.inf,0.
         return y
     
@@ -173,6 +181,7 @@ class basic_1dimpdf(object):
         -------
         pdf: xp.array
         '''
+        xp = get_module_array(x)
         return xp.exp(self.log_pdf(x))
     
     def cdf(self,x):
@@ -188,6 +197,7 @@ class basic_1dimpdf(object):
         -------
         cdf: xp.array
         '''
+        xp = get_module_array(x)
         return xp.exp(self.log_cdf(x))
     
     def sample(self,N):
@@ -203,11 +213,11 @@ class basic_1dimpdf(object):
         -------
         Samples: xp.array
         '''
-        sarray=xp.linspace(self.minval,self.maxval,10000)
+        sarray=np.linspace(self.minval,self.maxval,10000)
         cdfeval=self.cdf(sarray)
-        randomcdf=xp.random.rand(N)
-        return xp.interp(randomcdf,cdfeval,sarray)
-    
+        randomcdf=np.random.rand(N)
+        return np.interp(randomcdf,cdfeval,sarray)
+
 # Not reviewed    
 class paired_2dimpdf(object):
     
@@ -228,6 +238,7 @@ class paired_2dimpdf(object):
 
         m1 = self.pdf_base.sample(10000)
         m2 = self.pdf_base.sample(10000)
+        xp = get_module_array(m1)
         self.new_norm = xp.mean(self.pairing_function(m1,m2))
 
     def log_pdf(self,x1,x2):
@@ -245,6 +256,7 @@ class paired_2dimpdf(object):
         '''
         # This line might create some nan since p(m2|m1) = p(m2)/CDF_m2(m1) = 0/0 if m2 and m1 < mmin.
         # This nan is eliminated with the _check_bound_pdf
+        xp = get_module_array(x1)
         y=self.pdf_base.log_pdf(x1)+self.pdf_base.log_pdf(x2)+xp.log(self.pairing_function(x1,x2))-xp.log(self.new_norm)
         y[xp.isnan(y)]=-xp.inf
         return y 
@@ -262,9 +274,8 @@ class paired_2dimpdf(object):
         -------
         pdf: xp.array
         '''
+        xp = get_module_array(x1)
         return xp.exp(self.log_pdf(x1,x2))
-
-
 
 class conditional_2dimpdf(object):
     
@@ -295,7 +306,9 @@ class conditional_2dimpdf(object):
             log pdf values updated to -xp.inf outside the boundaries
             
         '''
-        y[(x1<x2) | xp.isnan(y)]=-xp.inf
+        xp = get_module_array(x1)
+        indx=check_bounds_2D(x1,x2,y)
+        y[indx]=-xp.inf
         return y
     
     def log_pdf(self,x1,x2):
@@ -330,6 +343,7 @@ class conditional_2dimpdf(object):
         -------
         pdf: xp.array
         '''
+        xp = get_module_array(x1)
         return xp.exp(self.log_pdf(x1,x2))
     
     def sample(self,N):
@@ -345,15 +359,15 @@ class conditional_2dimpdf(object):
         -------
         Samples: xp.array
         '''
-        sarray1=xp.linspace(self.pdf1.minval,self.pdf1.maxval,10000)
+        sarray1=np.linspace(self.pdf1.minval,self.pdf1.maxval,10000)
         cdfeval1=self.pdf1.cdf(sarray1)
-        randomcdf1=xp.random.rand(N)
+        randomcdf1=np.random.rand(N)
 
-        sarray2=xp.linspace(self.pdf2.minval,self.pdf2.maxval,10000)
+        sarray2=np.linspace(self.pdf2.minval,self.pdf2.maxval,10000)
         cdfeval2=self.pdf2.cdf(sarray2)
-        randomcdf2=xp.random.rand(N)
-        x1samp=xp.interp(randomcdf1,cdfeval1,sarray1)
-        x2samp=xp.interp(randomcdf2*self.pdf2.cdf(x1samp),cdfeval2,sarray2)
+        randomcdf2=np.random.rand(N)
+        x1samp=np.interp(randomcdf1,cdfeval1,sarray1)
+        x2samp=np.interp(randomcdf2*self.pdf2.cdf(x1samp),cdfeval2,sarray2)
         return x1samp,x2samp
 
 class SmoothedProb(basic_1dimpdf):
@@ -372,17 +386,20 @@ class SmoothedProb(basic_1dimpdf):
         super().__init__(originprob.minval,originprob.maxval)
         
         # Find the values of the integrals in the region of the window function before and after the smoothing
-        int_array = xp.linspace(originprob.minval,originprob.minval+bottomsmooth,1000)
-        integral_before = trapz(self.origin_prob.pdf(int_array),int_array)
-        integral_now = trapz(self.origin_prob.pdf(int_array)*_S_factor(int_array, self.bottom,self.bottom_smooth),int_array)
+        int_array = np.linspace(originprob.minval,originprob.minval+bottomsmooth,1000)
+        integral_before = np.trapz(self.origin_prob.pdf(int_array),int_array)
+        integral_now = np.trapz(self.origin_prob.pdf(int_array)*_S_factor(int_array, self.bottom,self.bottom_smooth),int_array)
 
         self.integral_before = integral_before
         self.integral_now = integral_now
         # Renormalize the smoother function.
         self.norm = 1 - integral_before + integral_now
 
-        self.x_eval = xp.linspace(self.bottom,self.bottom+self.bottom_smooth,1000)
-        self.cdf_numeric = xp.cumsum(self.pdf((self.x_eval[:-1:]+self.x_eval[1::])*0.5))*(self.x_eval[1::]-self.x_eval[:-1:])
+        self.x_eval_cpu = np.linspace(self.bottom,self.bottom+self.bottom_smooth,1000)
+        self.cdf_numeric_cpu = np.cumsum(self.pdf((self.x_eval_cpu[:-1:]+self.x_eval_cpu[1::])*0.5))*(self.x_eval_cpu[1::]-self.x_eval_cpu[:-1:])
+        
+        self.x_eval_gpu = np2cp(self.x_eval_cpu)
+        self.cdf_numeric_gpu = np2cp(self.cdf_numeric_cpu)
         
     def _log_pdf(self,x):
         '''
@@ -397,6 +414,7 @@ class SmoothedProb(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(x)
         # Return the window function
         window = _S_factor(x, self.bottom,self.bottom_smooth)
         # The line below might raise warnings for log(0), however python is able to handle it.
@@ -416,6 +434,14 @@ class SmoothedProb(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
+        xp = get_module_array(x)
+        
+        if iscupy(x):
+            cdf_numeric = self.cdf_numeric_gpu
+            x_eval = self.x_eval_gpu
+        else:
+            cdf_numeric = self.cdf_numeric_cpu
+            x_eval = self.x_eval_cpu
         
         origin=x.shape
         ravelled=xp.ravel(x)
@@ -423,7 +449,7 @@ class SmoothedProb(basic_1dimpdf):
         toret = xp.ones_like(ravelled)
         toret[ravelled<self.bottom] = 0.        
         toret[(ravelled>=self.bottom) & (ravelled<=(self.bottom+self.bottom_smooth))] = xp.interp(ravelled[(ravelled>=self.bottom) & (ravelled<=(self.bottom+self.bottom_smooth))]
-                           ,(self.x_eval[:-1:]+self.x_eval[1::])*0.5,self.cdf_numeric)
+                           ,(x_eval[:-1:]+x_eval[1::])*0.5,cdf_numeric)
         # The line below might contain some log 0, which is automatically accounted for in python
         toret[ravelled>=(self.bottom+self.bottom_smooth)]=(self.integral_now+self.origin_prob.cdf(
         ravelled[ravelled>=(self.bottom+self.bottom_smooth)])-self.origin_prob.cdf(xp.array([self.bottom+self.bottom_smooth])))/self.norm
@@ -439,9 +465,9 @@ def PL_normfact(minpl,maxpl,alpha):
     minpl, maxpl,alpha: Minimum, maximum and power law exponent of the distribution
     '''
     if alpha == -1:
-        norm_fact=xp.log(maxpl/minpl)
+        norm_fact=np.log(maxpl/minpl)
     else:
-        norm_fact=(xp.power(maxpl,alpha+1.)-xp.power(minpl,alpha+1))/(alpha+1)
+        norm_fact=(np.power(maxpl,alpha+1.)-np.power(minpl,alpha+1))/(alpha+1)
     return norm_fact
 
 class PowerLaw(basic_1dimpdf):
@@ -472,6 +498,7 @@ class PowerLaw(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(x)
         toret=self.alpha*xp.log(x)-xp.log(self.norm_fact)
         return toret
     
@@ -488,6 +515,7 @@ class PowerLaw(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
+        xp = get_module_array(x)
         if self.alpha == -1.:
             toret = xp.log(xp.log(x/self.minval)/self.norm_fact)
         else:
@@ -507,7 +535,7 @@ def get_beta_norm(alpha, beta):
     '''
     
     # Get the Beta norm as in Wiki Beta function https://en.wikipedia.org/wiki/Beta_distribution
-    return gamma(alpha)*gamma(beta)/gamma(alpha+beta)
+    return sn.special.gamma(alpha)*sn.special.gamma(beta)/sn.special.gamma(alpha+beta)
 
 class BetaDistribution(basic_1dimpdf):
     
@@ -539,6 +567,7 @@ class BetaDistribution(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(x)
         toret=(self.alpha-1.)*xp.log(x)+(self.beta-1.)*xp.log1p(-x)-xp.log(self.norm_fact)
         return toret
     
@@ -555,7 +584,9 @@ class BetaDistribution(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
-        toret = xp.log(betainc(self.alpha,self.beta,x))
+        xp = get_module_array(x)
+        sx = get_module_array_scipy(x)
+        toret = xp.log(sx.special.betainc(self.alpha,self.beta,x))
         return toret
         
         
@@ -574,7 +605,7 @@ class TruncatedBetaDistribution(basic_1dimpdf):
         super().__init__(0.,maximum)
         self.alpha, self.beta, self.maximum = alpha, beta, maximum
         # Get the norm  (as described in https://en.wikipedia.org/wiki/Beta_distribution)
-        self.norm_fact = get_beta_norm(self.alpha, self.beta)*betainc(self.alpha,self.beta,self.maximum)
+        self.norm_fact = get_beta_norm(self.alpha, self.beta)*sn.special.betainc(self.alpha,self.beta,self.maximum)
         
     def _log_pdf(self,x):
         '''
@@ -589,6 +620,7 @@ class TruncatedBetaDistribution(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(x)
         toret=(self.alpha-1.)*xp.log(x)+(self.beta-1.)*xp.log1p(-x)-xp.log(self.norm_fact)
         return toret
     
@@ -605,7 +637,9 @@ class TruncatedBetaDistribution(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
-        toret = xp.log(betainc(self.alpha,self.beta,x)/betainc(self.alpha,self.beta,self.maximum))
+        xp = get_module_array(x)
+        sx = get_module_array_scipy(x)
+        toret = xp.log(sx.special.betainc(self.alpha,self.beta,x)/sx.special.betainc(self.alpha,self.beta,self.maximum))
         return toret
         
 
@@ -617,10 +651,9 @@ def get_gaussian_norm(ming,maxg,meang,sigmag):
     ----------
     ming, maxg, meang,sigmag: Minimum, maximum, mean and standard deviation of the gaussian distribution
     '''
-    
-    max_point = (maxg-meang)/(sigmag*xp.sqrt(2.))
-    min_point = (ming-meang)/(sigmag*xp.sqrt(2.))
-    return 0.5*erf(max_point)-0.5*erf(min_point)
+    max_point = (maxg-meang)/(sigmag*np.sqrt(2.))
+    min_point = (ming-meang)/(sigmag*np.sqrt(2.))
+    return 0.5*sn.special.erf(max_point)-0.5*sn.special.erf(min_point)
 
 class TruncatedGaussian(basic_1dimpdf):
     
@@ -650,6 +683,7 @@ class TruncatedGaussian(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(x)
         toret=-xp.log(self.sigmag)-0.5*xp.log(2*xp.pi)-0.5*xp.power((x-self.meang)/self.sigmag,2.)-xp.log(self.norm_fact)
         return toret
     
@@ -666,9 +700,11 @@ class TruncatedGaussian(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
+        xp = get_module_array(x)
+        sx = get_module_array_scipy(x)
         max_point = (x-self.meang)/(self.sigmag*xp.sqrt(2.))
         min_point = (self.ming-self.meang)/(self.sigmag*xp.sqrt(2.))
-        toret = xp.log((0.5*erf(max_point)-0.5*erf(min_point))/self.norm_fact)
+        toret = xp.log((0.5*sx.special.erf(max_point)-0.5*sx.special.erf(min_point))/self.norm_fact)
         return toret
 
 # Overwrite most of the methods of the parent class
@@ -702,6 +738,7 @@ class Bivariate2DGaussian(conditional_2dimpdf):
             log pdf values updates to -xp.inf outside the boundaries
             
         '''
+        xp = get_module_array(x1)
         y[(x1<self.x1min) | (x1>self.x1max) | (x2<self.x2min) | (x2>self.x2max)]=-xp.inf
         return y
     
@@ -719,6 +756,7 @@ class Bivariate2DGaussian(conditional_2dimpdf):
         log_pdf: xp.array 
             formulas from https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Bivariate_case_2
         '''
+        xp = get_module_array(x1)
         marginal_log=-0.5*xp.log(2*xp.pi*self.x1variance)-0.5*xp.power(x1-self.x1mean,2.)/self.x1variance-xp.log(self.norm_marginal_1)
         
         conditioned_mean=self.x2mean+(self.x12covariance/self.x1variance)*(x1-self.x1mean)
@@ -742,10 +780,10 @@ class Bivariate2DGaussian(conditional_2dimpdf):
         -------
         Samples: xp.array
         '''
-        x1samp=xp.random.uniform(self.x1min,self.x1max,size=10000)
-        x2samp=xp.random.uniform(self.x2min,self.x2max,size=10000)
+        x1samp=np.random.uniform(self.x1min,self.x1max,size=10000)
+        x2samp=np.random.uniform(self.x2min,self.x2max,size=10000)
         pdfeval=self.pdf(x1samp,x2samp)
-        idx=xp.random.choice(len(x1samp),size=N,replace=True,p=pdfeval/pdfeval.sum())
+        idx=np.random.choice(len(x1samp),size=N,replace=True,p=pdfeval/pdfeval.sum())
         return x1samp[idx],x2samp[idx]
 
 class PowerLawGaussian(basic_1dimpdf):
@@ -777,6 +815,7 @@ class PowerLawGaussian(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(x)
         toret=xp.logaddexp(xp.log1p(-self.lambdag)+self.PL.log_pdf(x),xp.log(self.lambdag)+self.TG.log_pdf(x))
         return toret
     
@@ -793,6 +832,7 @@ class PowerLawGaussian(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
+        xp = get_module_array(x)
         toret=xp.log((1-self.lambdag)*self.PL.cdf(x)+self.lambdag*self.TG.cdf(x))
         return toret
 
@@ -812,7 +852,7 @@ class BrokenPowerLaw(basic_1dimpdf):
         self.break_point = minpl+b*(maxpl-minpl)
         self.PL1=PowerLaw(minpl,self.break_point,alpha_1)
         self.PL2=PowerLaw(self.break_point,maxpl,alpha_2)
-        self.norm_fact=(1+self.PL1.pdf(xp.array([self.break_point]))/self.PL2.pdf(xp.array([self.break_point])))
+        self.norm_fact=(1+self.PL1.pdf(np.array([self.break_point]))[0]/self.PL2.pdf(np.array([self.break_point]))[0])
         
     def _log_pdf(self,x):
         '''
@@ -827,6 +867,7 @@ class BrokenPowerLaw(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(x)
         toret=xp.logaddexp(self.PL1.log_pdf(x),self.PL2.log_pdf(x)+self.PL1.log_pdf(xp.array([self.break_point]))
             -self.PL2.log_pdf(xp.array([self.break_point])))-xp.log(self.norm_fact)
         return toret
@@ -844,6 +885,7 @@ class BrokenPowerLaw(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
+        xp = get_module_array(x)
         toret=xp.log((self.PL1.cdf(x)+self.PL2.cdf(x)*
         (self.PL1.pdf(xp.array([self.break_point]))
         /self.PL2.pdf(xp.array([self.break_point]))))/self.norm_fact)
@@ -884,6 +926,7 @@ class PowerLawTwoGaussians(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(x)
         pl_part = xp.log1p(-self.lambdag)+self.PL.log_pdf(x)
         g_low = self.TGlow.log_pdf(x)+xp.log(self.lambdag)+xp.log(self.lambdaglow)
         g_high = self.TGhigh.log_pdf(x)+xp.log(self.lambdag)+xp.log1p(-self.lambdaglow)
@@ -902,6 +945,7 @@ class PowerLawTwoGaussians(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
+        xp = get_module_array(x)
         pl_part = (1.-self.lambdag)*self.PL.cdf(x)
         g_part =self.TGlow.cdf(x)*self.lambdag*self.lambdaglow+self.TGhigh.cdf(x)*self.lambdag*(1-self.lambdaglow)
         return xp.log(pl_part+g_part)
@@ -919,7 +963,7 @@ class absL_PL_inM(basic_1dimpdf):
         self.L_PL_CDF=PowerLaw(self.Lmin,self.Lmax,alpha)
         self.alpha=alpha
 
-        self.extrafact=0.4*xp.log(10)*PL_normfact(self.Lmin,self.Lmax,alpha+1.)/PL_normfact(self.Lmin,self.Lmax,alpha)
+        self.extrafact=0.4*np.log(10)*PL_normfact(self.Lmin,self.Lmax,alpha+1.)/PL_normfact(self.Lmin,self.Lmax,alpha)
     
     def _log_pdf(self,M):
         '''
@@ -934,6 +978,7 @@ class absL_PL_inM(basic_1dimpdf):
         -------
         log_pdf: xp.array
         '''
+        xp = get_module_array(M)
         toret=self.L_PL.log_pdf(M2L(M))+xp.log(self.extrafact)
         return toret
     
@@ -950,6 +995,7 @@ class absL_PL_inM(basic_1dimpdf):
         -------
         log_cdf: xp.array
         '''
+        xp = get_module_array(M)
         toret=xp.log(1.-self.L_PL_CDF.cdf(M2L(M)))
         return toret
       

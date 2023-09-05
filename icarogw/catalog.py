@@ -1,4 +1,4 @@
-from .cupy_pal import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, is_there_cupy
 from .conversions import radec2indeces, indices2radec, M2m, m2M
 from .cosmology import galaxy_MF, kcorr, log_powerlaw_absM_rate
 
@@ -23,6 +23,7 @@ def user_normal(x,mu,sigma):
     Values
     
     '''
+    xp=get_module_array(x)
     return xp.power(2*xp.pi*(sigma**2),-0.5)*xp.exp(-0.5*xp.power((x-mu)/sigma,2.))
 
 def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,ptype='uniform'):
@@ -49,7 +50,7 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
     Values of the EM likelihood times the prior evaluated on z
     
     '''
-    
+    xp=get_module_array(z)
     # Lower limit for the integration. A galaxy must be at a positive redshift
     zvalmin=xp.array([1e-6,zobs-Numsigma*sigmaz]).max()
     #zvalmax=xp.array([z.max(),zobs+Numsigma*sigmaz]).min()    
@@ -103,55 +104,6 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
         prior_eval/=normfact
 
     return prior_eval
-
-    
-def generate_fake_catalog(zmin,zmax,sigmaz,maglim,band,cosmology,outname='fake_cat.hdf5'):
-    '''
-    Generates a fake catalog
-    
-    Parameters
-    ----------
-    zmin,zmax,maglim: floats
-        Minimum, maximum of redshift and magnitude limit for the galaxy catalog
-    band: string
-        name of the band, use W1, K or bJ
-    cosmology: cosmology class
-        The cosmology class from icarogwCAT
-    outname: string
-        Name of the output file, must be an hdf5 file.
-    '''
-    
-    MF_gal=galaxy_MF(band=band)
-    MF_gal.build_MF(cosmology)
-    Mcheck=xp.linspace(MF_gal.Mminobs,MF_gal.Mmaxobs,1000)
-    dM=Mcheck[1]-Mcheck[0]
-    Numdensity=trapz(MF_gal.evaluate(Mcheck),Mcheck)
-    
-    kcorr_gal=kcorr(band)
-    zarr=np.linspace(zmin,zmax,10000)
-    dz=zarr[1]-zarr[0]
-    output_dict = {'ra':[],'dec':[],'z':[],'sigmaz':[],'m_'+band:[]}
-    for zz in tqdm(zarr):
-        dVc=(cosmology.dVc_by_dzdOmega_at_z(xp.array([zz+dz]))+cosmology.dVc_by_dzdOmega_at_z(xp.array([zz])))*0.5*dz*xp.pi*4.  
-        Numgal=Numdensity*dVc        
-        Mvals=MF_gal.sample(int(cp2np(Numgal))) 
-        zvals=np.ones_like(Mvals)*zz
-        mvals=M2m(Mvals,cosmology.z2dl(zvals),kcorr_gal(zvals))
-        to_save=np.where(mvals<=maglim)[0]
-        output_dict['ra'].append(np.random.uniform(0,2*np.pi,size=len(to_save)))
-        output_dict['dec'].append(np.arccos(np.random.uniform(-1.,1.,size=len(to_save)))-np.pi/2.)
-        output_dict['z'].append(zvals[to_save])
-        output_dict['sigmaz'].append(np.ones_like(to_save)*sigmaz)
-        output_dict['m_'+band].append(mvals[to_save])
-    
-    for key in output_dict.keys():
-        output_dict[key]=cp2np(np.hstack(output_dict[key]))
-        
-    hf = h5py.File(outname, 'w')
-    for key in output_dict.keys():
-        hf.create_dataset(key, data=output_dict[key])
-    hf.close()
-    return output_dict
 
 class galaxy_catalog(object):
     '''
@@ -225,9 +177,14 @@ class galaxy_catalog(object):
         # Stores it internally
         try:
             if self.hdf5pointer['catalog/mthr_map'].attrs['mthr_percentile'] == 'empty':
-                self.mthr_map = 'empty'
+                self.mthr_map_cpu = 'empty'
+                if is_there_cupy:
+                    self.mthr_map_gpu = 'empty'
             else:
-                self.mthr_map = np2cp(self.hdf5pointer['catalog/mthr_map/mthr_sky'][:])
+                self.mthr_map_cpu = self.hdf5pointer['catalog/mthr_map/mthr_sky'][:]
+                if is_there_cupy:
+                    self.mthr_map_gpu = np2cp(self.hdf5pointer['catalog/mthr_map/mthr_sky'][:])
+                
             print('Loading apparent magnitude threshold map')
         except:
             print('Apparent magnitude threshold not present')
@@ -246,21 +203,25 @@ class galaxy_catalog(object):
                 self.hdf5pointer['catalog/dNgal_dzdOm_interpolant'].attrs['epsilon'])
             interpogroup = self.hdf5pointer['catalog/dNgal_dzdOm_interpolant']
             
-            self.dNgal_dzdOm_vals = []
+            dNgal_dzdOm_vals = []
             for i in range(self.hdf5pointer['catalog'].attrs['npixels']):
-                self.dNgal_dzdOm_vals.append(interpogroup['vals_pixel_{:d}'.format(i)][:])
-            self.dNgal_dzdOm_vals = np.column_stack(self.dNgal_dzdOm_vals)
-            self.dNgal_dzdOm_vals = np2cp(self.dNgal_dzdOm_vals)
+                dNgal_dzdOm_vals.append(interpogroup['vals_pixel_{:d}'.format(i)][:])
 
-            self.dNgal_dzdOm_vals[xp.isnan(self.dNgal_dzdOm_vals)] = -xp.inf
-            self.dNgal_dzdOm_vals = xp.exp(self.dNgal_dzdOm_vals.astype(float))
-
-            self.dNgal_dzdOm_sky_mean = xp.mean(self.dNgal_dzdOm_vals,axis=1)
-            self.z_grid = np2cp(interpogroup['z_grid'][:])
-            self.pixel_grid = xp.arange(0,self.hdf5pointer['catalog'].attrs['npixels'],1).astype(int)
+            self.dNgal_dzdOm_vals_cpu = np.column_stack(dNgal_dzdOm_vals)
+            self.dNgal_dzdOm_vals_cpu[np.isnan(self.dNgal_dzdOm_vals_cpu)] = -np.inf
+            self.dNgal_dzdOm_vals_cpu = np.exp(self.dNgal_dzdOm_vals_cpu.astype(float))
+            
+            self.dNgal_dzdOm_sky_mean_cpu = np.mean(self.dNgal_dzdOm_vals_cpu,axis=1)
+            self.z_grid_cpu = interpogroup['z_grid'][:]
+            self.pixel_grid_cpu = np.arange(0,self.hdf5pointer['catalog'].attrs['npixels'],1).astype(int)
             
             print('Loading Galaxy density interpolant')
             
+            if is_there_cupy:
+                self.dNgal_dzdOm_vals_gpu=np2cp(self.dNgal_dzdOm_vals_cpu)
+                self.dNgal_dzdOm_sky_mean_gpu=np2cp(self.dNgal_dzdOm_sky_mean_cpu)
+                self.z_grid_gpu = np2cp(self.z_grid_cpu)
+                self.pixel_grid_gpu=np2cp(self.pixel_grid_cpu)
             
         except:
             print('interpolant not loaded')
@@ -321,11 +282,15 @@ class galaxy_catalog(object):
 
             self.hdf5pointer['catalog'].attrs['Ngal']=len(tokeep)
             # Stores it internally
-            self.mthr_map = np2cp(self.hdf5pointer['catalog/mthr_map/mthr_sky'][:])
+            self.mthr_map_cpu = self.hdf5pointer['catalog/mthr_map/mthr_sky'][:]
+            if is_there_cupy:
+                self.mthr_map_gpu=np2cp(self.mthr_map_cpu)
         else:
             # Set the counter to the last loop point
             mthgroup.attrs['sky_checkpoint']=self.hdf5pointer['catalog'].attrs['npixels']-1
-            self.mthr_map='empty'
+            self.mthr_map_cpu='empty'
+            if is_there_cupy:
+                self.mthr_map_gpu='empty'
     
     def return_counts_map(self):
         '''
@@ -379,10 +344,16 @@ class galaxy_catalog(object):
             Apparent magnitude threshold
         '''
         
+        
         if dl is None:
             dl=cosmology.z2dl(z)
         
-        mthr_arrays=self.mthr_map[radec_indices]
+        if iscupy(z):
+            mthr_map = self.mthr_map_gpu
+        else:
+            mthr_map = self.mthr_map_cpu
+        
+        mthr_arrays=mthr_map[radec_indices]
         return m2M(mthr_arrays,dl,self.calc_kcorr(z))
     
         
@@ -527,6 +498,8 @@ class galaxy_catalog(object):
         average: bool
             Use the sky averaged differential of effective number of galaxies in each pixel
         '''
+        xp=get_module_array(z)
+        sx=get_module_array_scipy(z)
        
         originshape=z.shape
         z=z.flatten()
@@ -537,18 +510,29 @@ class galaxy_catalog(object):
             dl=cosmology.z2dl(z)
         dl=dl.flatten()
         
-        if isinstance(self.mthr_map, str):
+        if isinstance(self.mthr_map_cpu, str):
             return xp.zeros(len(z)).reshape(originshape), (self.sch_fun.background_effective_galaxy_density(-xp.inf*xp.ones_like(z))*cosmology.dVc_by_dzdOmega_at_z(z)).reshape(originshape)
+        
+        if iscupy(z):
+            z_grid = self.z_grid_gpu
+            dNgal_dzdOm_sky_mean = self.dNgal_dzdOm_sky_mean_gpu
+            dNgal_dzdOm_vals = self.dNgal_dzdOm_vals_gpu
+            pixel_grid = self.pixel_grid_gpu
+        else:
+            z_grid = self.z_grid_cpu
+            dNgal_dzdOm_sky_mean = self.dNgal_dzdOm_sky_mean_cpu
+            dNgal_dzdOm_vals = self.dNgal_dzdOm_vals_cpu
+            pixel_grid = self.pixel_grid_cpu
         
         Mthr_array=self.calc_Mthr(z,skypos,cosmology,dl=dl)
         # Baiscally tells that if you are above the maximum interpolation range, you detect nothing
-        Mthr_array[z>self.z_grid[-1]]=-xp.inf
+        Mthr_array[z>z_grid[-1]]=-xp.inf
         gcpart,bgpart=xp.zeros_like(z),xp.zeros_like(z)
         
         if average:
-            gcpart=xp.interp(z,self.z_grid,self.dNgal_dzdOm_sky_mean,left=0.,right=0.)
-        else:        
-            gcpart=interpn((self.z_grid,self.pixel_grid),self.dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
+            gcpart=xp.interp(z,z_grid,dNgal_dzdOm_sky_mean,left=0.,right=0.)
+        else:
+            gcpart=sx.interpolate.interpn((z_grid,pixel_grid),dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
                                 fill_value=0.,method='linear') # If a posterior samples fall outside, then you return 0
         
         bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array)*cosmology.dVc_by_dzdOmega_at_z(z)
@@ -562,20 +546,20 @@ class galaxy_catalog(object):
         
         Parameters
         ----------
-        z: xp.array
+        z: np.array
             Array of redshifts where to evaluate the effective galaxy density
-        radec_indices: xp.array
+        radec_indices: np.array
             Array of pixels on which you wish to average the galaxy density
         cosmology: class
             cosmology class to use
             
         Returns
         -------
-        gcp: xp.array
+        gcp: np.array
             Effective galaxy density from the catalog
-        bgp: xp.array
+        bgp: np.array
             Effective galaxy density from the background correction
-        inco: xp.array
+        inco: np.array
             Incompliteness array
         fig: object
             Handle to the figure object
@@ -583,35 +567,35 @@ class galaxy_catalog(object):
             Handle to the axis object
         '''
         
-        gcp,bgp,inco=xp.zeros([len(z),len(radec_indices_list)]),xp.zeros([len(z),len(radec_indices_list)]),xp.zeros([len(z),len(radec_indices_list)])
+        gcp,bgp,inco=bp.zeros([len(z),len(radec_indices_list)]),bp.zeros([len(z),len(radec_indices_list)]),bp.zeros([len(z),len(radec_indices_list)])
         
         for i,skypos in enumerate(radec_indices_list):
-            gcp[:,i],bgp[:,i]=self.effective_galaxy_number_interpolant(z,skypos*xp.ones_like(z).astype(int),cosmology)
-            Mthr_array=self.calc_Mthr(z,xp.ones_like(z,dtype=int)*skypos,cosmology)
-            Mthr_array[z>self.z_grid[-1]]=-xp.inf
-            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array)/self.sch_fun.background_effective_galaxy_density(-xp.ones_like(Mthr_array)*xp.inf)
+            gcp[:,i],bgp[:,i]=self.effective_galaxy_number_interpolant(z,skypos*bp.ones_like(z).astype(int),cosmology)
+            Mthr_array=self.calc_Mthr(z,bp.ones_like(z,dtype=int)*skypos,cosmology)
+            Mthr_array[z>self.z_grid[-1]]=-bp.inf
+            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array)/self.sch_fun.background_effective_galaxy_density(-bp.ones_like(Mthr_array)*bp.inf)
             
         fig,ax=plt.subplots(2,1,sharex=True)
         
-        theo=self.sch_fun.background_effective_galaxy_density(-xp.inf*xp.ones_like(z))*cosmology.dVc_by_dzdOmega_at_z(z)
+        theo=self.sch_fun.background_effective_galaxy_density(-bp.inf*bp.ones_like(z))*cosmology.dVc_by_dzdOmega_at_z(z)
                 
-        ax[0].fill_between(cp2np(z),cp2np(xp.percentile(gcp,5,axis=1)),cp2np(xp.percentile(gcp,95,axis=1)),color='limegreen',alpha=0.2)
-        ax[0].plot(cp2np(z),cp2np(xp.median(gcp,axis=1)),label='Catalog part',color='limegreen',lw=2)
+        ax[0].fill_between(z,bp.percentile(gcp,5,axis=1),bp.percentile(gcp,95,axis=1),color='limegreen',alpha=0.2)
+        ax[0].plot(z,bp.median(gcp,axis=1),label='Catalog part',color='limegreen',lw=2)
         
-        ax[0].plot(cp2np(z),cp2np(xp.median(bgp,axis=1)),label='Background part',color='slateblue',lw=2)
+        ax[0].plot(z,bp.median(bgp,axis=1),label='Background part',color='slateblue',lw=2)
         
-        ax[0].fill_between(cp2np(z),cp2np(xp.percentile(bgp+gcp,5,axis=1)),cp2np(xp.percentile(bgp+gcp,95,axis=1)),color='tomato',alpha=0.2)
-        ax[0].plot(cp2np(z),cp2np(xp.median(bgp+gcp,axis=1)),label='Sum',color='tomato',lw=2)        
+        ax[0].fill_between(z,bp.percentile(bgp+gcp,5,axis=1),bp.percentile(bgp+gcp,95,axis=1),color='tomato',alpha=0.2)
+        ax[0].plot(z,bp.median(bgp+gcp,axis=1),label='Sum',color='tomato',lw=2)        
         
-        ax[0].plot(cp2np(z),cp2np(theo),label='Theoretical',color='k',lw=2,ls='--')
+        ax[0].plot(z,theo,label='Theoretical',color='k',lw=2,ls='--')
         ax[0].set_ylim([10,1e7])
         
         ax[0].legend()
         
         ax[0].set_yscale('log')
                 
-        ax[1].fill_between(cp2np(z),cp2np(xp.percentile(1-inco,5,axis=1)),cp2np(xp.percentile(1-inco,95,axis=1)),color='dodgerblue',alpha=0.5)
-        ax[1].plot(cp2np(z),cp2np(xp.median(1-inco,axis=1)),label='Completeness',color='dodgerblue',lw=1)
+        ax[1].fill_between(z,bp.percentile(1-inco,5,axis=1),bp.percentile(1-inco,95,axis=1),color='dodgerblue',alpha=0.5)
+        ax[1].plot(z,bp.median(1-inco,axis=1),label='Completeness',color='dodgerblue',lw=1)
         ax[1].legend()
         
         return gcp,bgp,inco,fig,ax

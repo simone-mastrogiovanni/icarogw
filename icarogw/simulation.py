@@ -1,7 +1,6 @@
-from .cupy_pal import *
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .cosmology import astropycosmology
 from .wrappers import massprior_PowerLawPeak
-from .wrappers import *
 from scipy import stats
 from scipy import interpolate
 from astropy.cosmology import Planck15
