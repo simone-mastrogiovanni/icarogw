@@ -567,25 +567,27 @@ class galaxy_catalog(object):
             Handle to the axis object
         '''
         
-        gcp,bgp,inco=bp.zeros([len(z),len(radec_indices_list)]),bp.zeros([len(z),len(radec_indices_list)]),bp.zeros([len(z),len(radec_indices_list)])
+        
+        
+        gcp,bgp,inco=np.zeros([len(z),len(radec_indices_list)]),np.zeros([len(z),len(radec_indices_list)]),np.zeros([len(z),len(radec_indices_list)])
         
         for i,skypos in enumerate(radec_indices_list):
-            gcp[:,i],bgp[:,i]=self.effective_galaxy_number_interpolant(z,skypos*bp.ones_like(z).astype(int),cosmology)
-            Mthr_array=self.calc_Mthr(z,bp.ones_like(z,dtype=int)*skypos,cosmology)
-            Mthr_array[z>self.z_grid[-1]]=-bp.inf
-            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array)/self.sch_fun.background_effective_galaxy_density(-bp.ones_like(Mthr_array)*bp.inf)
+            gcp[:,i],bgp[:,i]=self.effective_galaxy_number_interpolant(z,skypos*np.ones_like(z).astype(int),cosmology)
+            Mthr_array=self.calc_Mthr(z,np.ones_like(z,dtype=int)*skypos,cosmology)
+            Mthr_array[z>self.z_grid_cpu[-1]]=-np.inf
+            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array)/self.sch_fun.background_effective_galaxy_density(-np.ones_like(Mthr_array)*np.inf)
             
         fig,ax=plt.subplots(2,1,sharex=True)
         
-        theo=self.sch_fun.background_effective_galaxy_density(-bp.inf*bp.ones_like(z))*cosmology.dVc_by_dzdOmega_at_z(z)
+        theo=self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(z))*cosmology.dVc_by_dzdOmega_at_z(z)
                 
-        ax[0].fill_between(z,bp.percentile(gcp,5,axis=1),bp.percentile(gcp,95,axis=1),color='limegreen',alpha=0.2)
-        ax[0].plot(z,bp.median(gcp,axis=1),label='Catalog part',color='limegreen',lw=2)
+        ax[0].fill_between(z,np.percentile(gcp,5,axis=1),np.percentile(gcp,95,axis=1),color='limegreen',alpha=0.2)
+        ax[0].plot(z,np.median(gcp,axis=1),label='Catalog part',color='limegreen',lw=2)
         
-        ax[0].plot(z,bp.median(bgp,axis=1),label='Background part',color='slateblue',lw=2)
+        ax[0].plot(z,np.median(bgp,axis=1),label='Background part',color='slateblue',lw=2)
         
-        ax[0].fill_between(z,bp.percentile(bgp+gcp,5,axis=1),bp.percentile(bgp+gcp,95,axis=1),color='tomato',alpha=0.2)
-        ax[0].plot(z,bp.median(bgp+gcp,axis=1),label='Sum',color='tomato',lw=2)        
+        ax[0].fill_between(z,np.percentile(bgp+gcp,5,axis=1),np.percentile(bgp+gcp,95,axis=1),color='tomato',alpha=0.2)
+        ax[0].plot(z,np.median(bgp+gcp,axis=1),label='Sum',color='tomato',lw=2)        
         
         ax[0].plot(z,theo,label='Theoretical',color='k',lw=2,ls='--')
         ax[0].set_ylim([10,1e7])
@@ -594,8 +596,8 @@ class galaxy_catalog(object):
         
         ax[0].set_yscale('log')
                 
-        ax[1].fill_between(z,bp.percentile(1-inco,5,axis=1),bp.percentile(1-inco,95,axis=1),color='dodgerblue',alpha=0.5)
-        ax[1].plot(z,bp.median(1-inco,axis=1),label='Completeness',color='dodgerblue',lw=1)
+        ax[1].fill_between(z,np.percentile(1-inco,5,axis=1),np.percentile(1-inco,95,axis=1),color='dodgerblue',alpha=0.5)
+        ax[1].plot(z,np.median(1-inco,axis=1),label='Completeness',color='dodgerblue',lw=1)
         ax[1].legend()
         
         return gcp,bgp,inco,fig,ax

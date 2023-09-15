@@ -32,11 +32,13 @@ class ligo_skymap(object):
 
         Parameters
         ----------
-        ra: xp.array
+        ra: np.array
             Right ascension in radians
-        dec: xp.array
+        dec: np.array
             Declination in radians
         '''
+        
+        xp = np
 
         if not self.intersected:
             ra*=u.rad
@@ -75,13 +77,14 @@ class ligo_skymap(object):
 
         Parameters
         ----------
-        dl: xp.array
+        dl: np.array
             Luminosity distance in Mpc
 
         Returns
         -------
         p(dL,RA,DEC)
         '''
+        xp = np
         pdl_radec = xp.power(2*xp.pi*(self.dl_sigmas**2.),-2.)*xp.exp(-0.5*xp.power((dl-self.dl_means)/self.dl_sigmas,2.))
         prob = self.sky_prob_rad2 * pdl_radec    
         return prob
@@ -93,13 +96,14 @@ class ligo_skymap(object):
 
         Parameters
         ----------
-        dl: xp.array
+        dl: np.array
             Luminosity distance in Mpc
 
         Returns
         -------
         Sky likelihood
         '''
+        xp = np
         # The prior on the sky is 1/pixels_area (that is divided), the other term is the dl2 prior
         return self.evaluate_3D_posterior_intersected(dl)*self.pixels_area/xp.power(dl,2.)
     
@@ -109,18 +113,18 @@ class ligo_skymap(object):
         
         Parameters
         ----------
-        dl: xp.array
+        dl: np.array
             Luminosity distance in Mpc
-        ra: xp.array
+        ra: np.array
             Right ascension radians
-        dec: xp.array
+        dec: np.array
             Declination radians
 
         Returns
         -------
         Posterior in [Mpc-1 sr-1] and likelihood.
         '''
-        
+        xp = np
         ra*=u.rad
         dec*=u.rad
         
@@ -171,6 +175,8 @@ class ligo_skymap(object):
             Declination in radians
         '''
         
+        xp = np
+        
         level, ipix = ah.uniq_to_level_ipix(self.table['UNIQ'])
         nside = ah.level_to_nside(level)    
         px_area = ah.nside_to_pixel_area(ah.level_to_nside(level)).value # Pixel area in steradians
@@ -195,7 +201,7 @@ class ligo_skymap(object):
                 dldraw = xp.random.randn()*dl_sigma+dl_mean
             dl[i] = dldraw
         
-        return dl, np2cp(ra.rad), np2cp(dec.rad)
+        return dl, ra.rad, dec.rad
 
 
 def cartestianspins2chis(s1x,s1y,s1z,s2x,s2y,s2z,q):

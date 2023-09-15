@@ -180,6 +180,9 @@ class CBC_low_latency_skymap_EM_counterpart(object):
             The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
+        xp = get_module_array(prior)
+        sx = get_module_array_scipy(prior)
+        
         if len(kwargs['z_EM'].shape) != 2:
             raise ValueError('The EM counterpart rate wants N_ev x N_samples arrays')
 
@@ -194,7 +197,7 @@ class CBC_low_latency_skymap_EM_counterpart(object):
         for i in range(n_ev): 
             self.list_of_skymaps[i].intersect_EM_PE(kwargs['right_ascension'][i,:],kwargs['declination'][i,:])
             log_l_skymap = xp.log(self.list_of_skymaps[i].evaluate_3D_likelihood_intersected(dl_samples[i,:]))            
-            lwtot[i,:] = logsumexp(log_weights[i,:]+log_l_skymap)-xp.log(kwargs['z_EM'].shape[1])
+            lwtot[i,:] = sx.special.logsumexp(log_weights[i,:]+log_l_skymap)-xp.log(kwargs['z_EM'].shape[1])
 
         if not self.scale_free:
             log_out = lwtot + xp.log(self.R0)
@@ -215,6 +218,8 @@ class CBC_low_latency_skymap_EM_counterpart(object):
             The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
         '''
         
+        xp = get_module_array(prior)
+       
         z = self.cw.cosmology.dl2z(kwargs['luminosity_distance']) 
         log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
         
