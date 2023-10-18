@@ -895,3 +895,115 @@ class absL_PL_inM(basic_1dimpdf):
         toret=xp.log(1.-self.L_PL_CDF.cdf(M2L(M)))
         return toret
       
+
+class piecewise_constant_2d_distribution_normalized():
+
+    def __init__(self, dist_min, dist_max, weights):
+
+        self.dist_min, self.dist_max = dist_min, dist_max
+        self.n_bins = len(weights)
+
+        # use formula n * (n+1) / 2 to invert for n
+        self.n_bins_1d = int(-1/2 + xp.sqrt(1/4 + 2 * self.n_bins))
+    
+        self.weights = xp.array(weights)
+    
+        self.grid_x1 = xp.linspace(self.dist_min, self.dist_max, self.n_bins_1d + 1)
+        self.grid_x2 = xp.linspace(self.dist_min, self.dist_max, self.n_bins_1d + 1)
+        
+        # compute normalization
+        self.delta_bin_x1 = self.grid_x1[1] - self.grid_x1[0]
+        self.delta_bin_x2 = self.grid_x2[1] - self.grid_x2[0]
+
+        self.norm = self.compute_norm()  
+
+        self.weights_normalized = self.norm * self.weights
+
+    def compute_norm(self):
+        # the weights on the diagonal should get a factor half, since they only contribute a triangle
+        # Determine the indices of the upper triangle elements
+        upper_triangle_indices = xp.triu_indices(self.n_bins_1d, k=0)
+
+        # Create an empty square matrix filled with zeros
+        weights_upper_triangle_matrix = xp.zeros((self.n_bins_1d, self.n_bins_1d))
+
+        # Assign the weights to the upper triangle elements
+        weights_upper_triangle_matrix[upper_triangle_indices] = self.weights
+        
+        for i in range(self.n_bins_1d):
+            weights_upper_triangle_matrix[i,i] *= 1/2
+        
+        norm = 1 / xp.sum(weights_upper_triangle_matrix) * 1 / self.delta_bin_x1 / self.delta_bin_x2
+
+        return norm
+
+    def outside_domain_1d(self, x):
+
+        x_smaller = x < self.dist_min 
+        x_larger = x > self.dist_max
+        
+        return xp.logical_or(x_smaller, x_larger)
+
+    def outside_domain_2d(self, x1, x2):
+
+        x1_outside = self.outside_domain_1d(x1)
+        x2_outside = self.outside_domain_1d(x2)
+
+        x1_smaller_than_x2 = x1 < x2
+
+        point_outside_grid = xp.logical_or(x1_outside, x2_outside)
+        
+        return xp.logical_or(point_outside_grid, x1_smaller_than_x2)
+
+    def compute_conditions(self, positions):
+
+        return [positions == i for i in range(self.n_bins)]
+
+    def compute_flat_position(self, position_in_grid):
+
+        """
+        We want to go from the 2d positions in the triangle to a unique numbering in 1d.
+
+        For example: 
+
+        No    | No    | (2,2)
+        No    | (1,1) | (2,1) 
+        (0,0) | (1,0) | (2,0) 
+
+        To the numbering
+        No| No| 5
+        No| 3 | 4
+        0 | 1 | 2
+        
+        """
+
+        flat_position_in_square = position_in_grid[0] + self.n_bins_1d * position_in_grid[1]
+        subtract_triangle_constraint = position_in_grid[1] * (position_in_grid[1] + 1) / 2
+        
+        return flat_position_in_square - subtract_triangle_constraint
+    
+    def pdf(self, x1, x2):
+
+        position_in_grid = self.determine_grid_position(x1, x2)
+
+        # compute the arbitrary number that corresponds to the unique weight
+        positions_flat = self.compute_flat_position(position_in_grid)
+
+        self.conditions = self.compute_conditions(positions_flat)
+
+        self.pdf_func = lambda x1: xp.piecewise(x1, self.conditions, self.weights_normalized)
+
+        pdf = self.pdf_func(positions_flat)
+        
+        return xp.where(self.outside_domain_2d(x1, x2), 0, pdf)
+
+    def log_pdf(self, x1, x2):
+        
+        return xp.log(self.pdf(x1, x2))
+
+    def determine_grid_position(self, x1, x2):
+
+        n1 = (x1 - self.dist_min) // self.delta_bin_x1
+        n2 = (x2 - self.dist_min) // self.delta_bin_x2
+        
+        return (n1, n2)
