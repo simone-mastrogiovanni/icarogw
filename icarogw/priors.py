@@ -721,7 +721,7 @@ class Bivariate2DGaussian(conditional_2dimpdf):
         
         self.x1min,self.x1max,self.x1mean,self.x2min,self.x2max,self.x2mean=x1min,x1max,x1mean,x2min,x2max,x2mean
         self.x1variance,self.x12covariance,self.x2variance=x1variance,x12covariance,x2variance
-        self.norm_marginal_1=get_gaussian_norm(self.x1min,self.x1max,self.x1mean,xp.sqrt(self.x1variance))
+        self.norm_marginal_1=get_gaussian_norm(self.x1min,self.x1max,self.x1mean,self.x1variance**0.5)
         
     def _check_bound_pdf(self,x1,x2,y):
         '''
