@@ -8,7 +8,9 @@ Special thanks LIGO-Virgo-KAGRA / Aaron Geller / Northwestern who made possible 
 
 ## Installation
 
-Simply run
+You will need a `python 3.10` environment created with conda. 
+
+Then, simply run
 
 ```
 pip install git+https://github.com/simone-mastrogiovanni/icarogw.git
