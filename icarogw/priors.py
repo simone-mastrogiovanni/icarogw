@@ -898,15 +898,33 @@ class absL_PL_inM(basic_1dimpdf):
 
 class piecewise_constant_2d_distribution_normalized():
 
+    """
+    Class for a piecewise constant source frame mass distribution. 
+    The 2d mass distribution is divided in a 2d checkerboard pattern, with the 
+    constraint m1 > m2. The checkerboard boxes along the diagonal are cut in half. 
+
+    Parameters
+    ----------
+
+    dist_min: float
+        The minimum of the distribution
+    dist_max: float
+        The maximum of the distribution
+    weights: 1d array
+        The array determining the individual weights of each bin. 
+    
+    """
+
     def __init__(self, dist_min, dist_max, weights):
 
         self.dist_min, self.dist_max = dist_min, dist_max
         self.n_bins = len(weights)
 
         # use formula n * (n+1) / 2 to invert for n
-        self.n_bins_1d = int(-1/2 + xp.sqrt(1/4 + 2 * self.n_bins))
-    
-        self.weights = xp.array(weights)
+        self.n_bins_1d = int(-1/2 + np.sqrt(1/4 + 2 * self.n_bins))
+
+        self.weights = weights
+        xp = get_module_array(weights)
     
         self.grid_x1 = xp.linspace(self.dist_min, self.dist_max, self.n_bins_1d + 1)
         self.grid_x2 = xp.linspace(self.dist_min, self.dist_max, self.n_bins_1d + 1)
@@ -920,6 +938,14 @@ class piecewise_constant_2d_distribution_normalized():
         self.weights_normalized = self.norm * self.weights
 
     def compute_norm(self):
+
+        """
+        Computes the normalization for the PDF. 
+
+        """
+
+        xp = get_module_array(self.weights)
+
         # the weights on the diagonal should get a factor half, since they only contribute a triangle
         # Determine the indices of the upper triangle elements
         upper_triangle_indices = xp.triu_indices(self.n_bins_1d, k=0)
@@ -939,6 +965,22 @@ class piecewise_constant_2d_distribution_normalized():
 
     def outside_domain_1d(self, x):
 
+        """
+        Determines elementwise if x is outside the 1d domain. 
+
+        Parameters
+        ----------
+        x: array 
+
+        Returns
+        -------
+
+        An array that is true for elements of x outside the 1d domain and false otherwise. 
+        
+        """
+
+        xp = get_module_array(self.weights)
+
         x_smaller = x < self.dist_min 
         x_larger = x > self.dist_max
         
@@ -946,13 +988,34 @@ class piecewise_constant_2d_distribution_normalized():
 
     def outside_domain_2d(self, x1, x2):
 
+        """
+        Determines whether the elemnts in the arrays x1 and x2 are outside the 1d domain and
+        whether x1 < x2 (elementwise). The two arrays must be of the same shape. 
+
+        Parameters
+        ----------
+        x1: array 
+        x2: array 
+
+        Returns
+        -------
+
+        An array that is true if either the respective x1 or x2 elements are outside 
+        the 1d domain and if x1 < x2 (elementwise). 
+        
+        """
+
+        # check whether x1 (or x2) is elementwise outside the domain
         x1_outside = self.outside_domain_1d(x1)
         x2_outside = self.outside_domain_1d(x2)
 
+        # check whether x1 is smaller than x2 (elementwise)
         x1_smaller_than_x2 = x1 < x2
 
+        # determine the elemtwise pairs of x1 and x2 that are outside the domain 
         point_outside_grid = xp.logical_or(x1_outside, x2_outside)
         
+        # additionally return only true if x1 < x2 (elementwise)
         return xp.logical_or(point_outside_grid, x1_smaller_than_x2)
 
     def compute_conditions(self, positions):
@@ -962,6 +1025,8 @@ class piecewise_constant_2d_distribution_normalized():
     def compute_flat_position(self, position_in_grid):
 
         """
+        Computes the numbered bin for a 2d tuple (see example below for the numbering convention). 
+
         We want to go from the 2d positions in the triangle to a unique numbering in 1d.
 
         For example: 
@@ -974,6 +1039,11 @@ class piecewise_constant_2d_distribution_normalized():
         No| No| 5
         No| 3 | 4
         0 | 1 | 2
+
+        Parameters
+        ----------
+        position_in_grid 2d tuple
+            The tuple determining the position in the grid. 
         
         """
 
@@ -983,6 +1053,22 @@ class piecewise_constant_2d_distribution_normalized():
         return flat_position_in_square - subtract_triangle_constraint
     
     def pdf(self, x1, x2):
+
+        """
+        Computes the PDF for the arrays x1, x2
+
+        Parameters
+        ----------
+        x1: array 
+        x2: array 
+
+        Returns
+        -------
+        An array of the PDF evaluated at p(x1, x2)
+        
+        """
+
+        xp = get_module_array( self.weights_normalized)
 
         position_in_grid = self.determine_grid_position(x1, x2)
 
@@ -998,7 +1084,23 @@ class piecewise_constant_2d_distribution_normalized():
         return xp.where(self.outside_domain_2d(x1, x2), 0, pdf)
 
     def log_pdf(self, x1, x2):
+
+        """
+        Computes the logarithm of the PDF for the arrays x1, x2
+
+        Parameters
+        ----------
+        x1: array 
+        x2: array 
+
+        Returns
+        -------
+        An array of the log PDF evaluated at p(x1, x2)
         
+        """
+         
+        xp = get_module_array(x1)
+    
         return xp.log(self.pdf(x1, x2))
 
     def determine_grid_position(self, x1, x2):
