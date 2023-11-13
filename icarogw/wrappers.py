@@ -841,7 +841,7 @@ class massprior_BinModel2d(source_mass_default):
         self.bin_parameter_list = ['bin_' + str(i) for i in range(n_bins_total)]
         self.population_parameters += self.bin_parameter_list
     def update(self,**kwargs):
-        kwargs_bin_parameters = [kwargs[key] for key in self.bin_parameter_list]
+        kwargs_bin_parameters = xp.array([kwargs[key] for key in self.bin_parameter_list])
         
         pdf_dist = piecewise_constant_2d_distribution_normalized(
             kwargs['mmin'], 
