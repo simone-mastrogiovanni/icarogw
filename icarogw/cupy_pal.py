@@ -69,7 +69,7 @@ def check_bounds_2D(x1,x2,y):
     else:
         return (x1<x2) | np.isnan(y)
     
-
+# LVK Reviewed
 def cp2np(array):
     '''Cast any array to numpy'''
     if CUPY_LOADED:
@@ -77,7 +77,7 @@ def cp2np(array):
     else:
         return array
         
-
+# LVK Reviewed
 def np2cp(array):
     '''Cast any array to cupy'''
     if CUPY_LOADED:

@@ -5,6 +5,7 @@ import bilby
 import icarogw
 from .wrappers import FlatLambdaCDM_wrap
 
+# LVK Reviewed
 class hierarchical_likelihood(bilby.Likelihood):
     def __init__(self, posterior_samples_dict, injections, rate_model, nparallel=None, neffPE=20,neffINJ=None):
         '''

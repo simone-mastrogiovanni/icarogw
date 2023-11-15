@@ -5,6 +5,7 @@ import mpmath
 
 COST_C= 299792.458 # Speed of light in km/s
 
+# LVK Reviewed
 class base_cosmology(object):
     def __init__(self,zmax):
         '''
@@ -214,7 +215,7 @@ class base_cosmology(object):
         cdf_samps=np.random.rand(Nsamp)
         return np.interp(cdf_samps,cdf,zproxy)
     
-
+# LVK Reviewed
 class astropycosmology(base_cosmology):
     def  build_cosmology(self,astropy_cosmo):
         '''
@@ -239,7 +240,8 @@ class astropycosmology(base_cosmology):
             self.log10_Vc_gpu=np2cp(self.log10_Vc_cpu)
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
-        
+
+# LVK Reviewed
 class extraD_astropycosmology(astropycosmology):
     def build_cosmology(self,astropy_cosmo,D,n,Rc):
         '''
@@ -268,6 +270,7 @@ class extraD_astropycosmology(astropycosmology):
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
 
+# LVK Reviewed
 class cM_astropycosmology(astropycosmology):
     def build_cosmology(self,astropy_cosmo,cM):
         '''
@@ -301,7 +304,7 @@ class cM_astropycosmology(astropycosmology):
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
         
-        
+# LVK Reviewed        
 class Xi0_astropycosmology(astropycosmology):
     def  build_cosmology(self,astropy_cosmo,Xi0,n):
         '''
@@ -325,7 +328,8 @@ class Xi0_astropycosmology(astropycosmology):
         if is_there_cupy():
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
-        
+
+# LVK Reviewed
 class alphalog_astropycosmology(astropycosmology):
     def  build_cosmology(self,astropy_cosmo,alphalog_1, alphalog_2, alphalog_3):
         '''
@@ -356,7 +360,7 @@ class alphalog_astropycosmology(astropycosmology):
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
 
-    
+# LVK Reviewed    
 class galaxy_MF(object):
     def __init__(self,band=None,Mmin=None,Mmax=None,Mstar=None,alpha=None,phistar=None):
         '''
@@ -539,7 +543,8 @@ class galaxy_MF(object):
         outp=self.phistarobs*xp.interp(ravelled,xvector_interpolant,effective_density_interpolant
                            ,left=effective_density_interpolant[0],right=effective_density_interpolant[-1])
         return xp.reshape(outp,origin)
-    
+
+# LVK Reviewed
 class kcorr(object):
     def __init__(self,band):
         '''
@@ -579,7 +584,8 @@ class kcorr(object):
             # Note that these corrections also includes evolution corrections
             k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
         return k_corr
-        
+
+# LVK Reviewed
 class basic_redshift_rate(object):
     '''
     Super class for the redshift rate
@@ -594,7 +600,8 @@ class basic_redshift_rate(object):
         '''
         xp = get_module_array(z)
         return xp.exp(self.log_evaluate(z))
-    
+
+# LVK Reviewed
 class powerlaw_rate(basic_redshift_rate):
     '''
     Class for a power-law redshift rate
@@ -605,6 +612,7 @@ class powerlaw_rate(basic_redshift_rate):
         xp = get_module_array(z)
         return self.gamma*xp.log1p(z)
 
+# LVK Reviewed
 class md_rate(basic_redshift_rate):
     '''
     Class for a MD like redshift rate
@@ -618,7 +626,7 @@ class md_rate(basic_redshift_rate):
         return xp.log1p(xp.power(1+self.zp,-self.gamma-self.kappa))+self.gamma*xp.log1p(z)-xp.log1p(xp.power((1+z)/(1+self.zp),self.gamma+self.kappa))
 
 
-    
+# LVK Reviewed
 class basic_absM_rate(object):
     '''Super class for the redshift rate
     '''
@@ -634,6 +642,7 @@ class basic_absM_rate(object):
         xp = get_module_array(M)
         return xp.exp(self.log_evaluate(sch,M))
 
+# LVK Reviewed
 class log_powerlaw_absM_rate(basic_absM_rate):
     def __init__(self,epsilon):
         self.epsilon=epsilon

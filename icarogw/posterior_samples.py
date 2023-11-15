@@ -1,7 +1,7 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .conversions import radec2indeces
 
-
+# LVK Reviewed
 class posterior_samples_catalog(object):
     
     def __init__(self,posterior_samples_dict):
@@ -124,7 +124,7 @@ class posterior_samples_catalog(object):
         name_ev = list(self.posterior_samples_dict.keys())
         return {key:self.posterior_dict[key].reweight_PE(rate_wrapper,Nsamp,replace=replace) for key in name_ev}
 
-
+# LVK Reviewed
 class posterior_samples(object):
     def __init__(self,posterior_dict,prior):
         '''

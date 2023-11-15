@@ -2,6 +2,7 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .conversions import L2M, M2L
 import copy
 
+# LVK Reviewed
 def betadistro_muvar2ab(mu,var):
     '''
     Calculates the a and b parameters of the beta distribution given mean and variance
@@ -22,6 +23,7 @@ def betadistro_muvar2ab(mu,var):
     a=(((1.-mu)/var)- 1./mu )*xp.power(mu,2.)
     return a,a* (1./mu -1.)
 
+# LVK Reviewed
 def betadistro_ab2muvar(a,b):
     '''
     Calculates the a and b parameters of the beta distribution given mean and variance
@@ -40,6 +42,7 @@ def betadistro_ab2muvar(a,b):
     
     return a/(a+b), a*b/(xp.power(a+b,2.) *(a+b+1.))
 
+# LVK Reviewed
 def _S_factor(mass, mmin,delta_m):
     '''
     This function returns the value of the window function defined as Eqs B6 and B7 of https://arxiv.org/pdf/2010.14533.pdf
@@ -81,6 +84,7 @@ def _S_factor(mass, mmin,delta_m):
     to_ret[select_one]=1.
     return to_ret
 
+# LVK Reviewed
 class basic_1dimpdf(object):
     
     def __init__(self,minval,maxval):
@@ -218,7 +222,6 @@ class basic_1dimpdf(object):
         randomcdf=np.random.rand(N)
         return np.interp(randomcdf,cdfeval,sarray)
 
-# Not reviewed    
 class paired_2dimpdf(object):
     
     def __init__(self,pdf,pairing_function):
@@ -277,6 +280,7 @@ class paired_2dimpdf(object):
         xp = get_module_array(x1)
         return xp.exp(self.log_pdf(x1,x2))
 
+# LVK Reviewed
 class conditional_2dimpdf(object):
     
     def __init__(self,pdf1,pdf2):
@@ -370,6 +374,7 @@ class conditional_2dimpdf(object):
         x2samp=np.interp(randomcdf2*self.pdf2.cdf(x1samp),cdfeval2,sarray2)
         return x1samp,x2samp
 
+# LVK Reviewed
 class SmoothedProb(basic_1dimpdf):
     
     def __init__(self,originprob,bottomsmooth):
@@ -456,6 +461,7 @@ class SmoothedProb(basic_1dimpdf):
         
         return xp.log(toret).reshape(origin)
 
+# LVK Reviewed
 def PL_normfact(minpl,maxpl,alpha):
     '''
     Returns the Powerlaw normalization factor
@@ -470,6 +476,7 @@ def PL_normfact(minpl,maxpl,alpha):
         norm_fact=(np.power(maxpl,alpha+1.)-np.power(minpl,alpha+1))/(alpha+1)
     return norm_fact
 
+# LVK Reviewed
 class PowerLaw(basic_1dimpdf):
     
     def __init__(self,minpl,maxpl,alpha):
@@ -521,7 +528,8 @@ class PowerLaw(basic_1dimpdf):
         else:
             toret =xp.log(((xp.power(x,self.alpha+1)-xp.power(self.minpl,self.alpha+1))/(self.alpha+1))/self.norm_fact)
         return toret
-    
+
+# LVK Reviewed
 def get_beta_norm(alpha, beta):
     ''' 
     This function returns the normalization factor of the Beta PDF
@@ -537,6 +545,7 @@ def get_beta_norm(alpha, beta):
     # Get the Beta norm as in Wiki Beta function https://en.wikipedia.org/wiki/Beta_distribution
     return sn.special.gamma(alpha)*sn.special.gamma(beta)/sn.special.gamma(alpha+beta)
 
+# LVK Reviewed
 class BetaDistribution(basic_1dimpdf):
     
     def __init__(self,alpha,beta):
@@ -589,7 +598,7 @@ class BetaDistribution(basic_1dimpdf):
         toret = xp.log(sx.special.betainc(self.alpha,self.beta,x))
         return toret
         
-        
+# LVK Reviewed       
 class TruncatedBetaDistribution(basic_1dimpdf):
     
     def __init__(self,alpha,beta,maximum):
@@ -642,7 +651,7 @@ class TruncatedBetaDistribution(basic_1dimpdf):
         toret = xp.log(sx.special.betainc(self.alpha,self.beta,x)/sx.special.betainc(self.alpha,self.beta,self.maximum))
         return toret
         
-
+# LVK Reviewed
 def get_gaussian_norm(ming,maxg,meang,sigmag):
     '''
     Returns the normalization of the gaussian distribution
@@ -655,6 +664,7 @@ def get_gaussian_norm(ming,maxg,meang,sigmag):
     min_point = (ming-meang)/(sigmag*np.sqrt(2.))
     return 0.5*sn.special.erf(max_point)-0.5*sn.special.erf(min_point)
 
+# LVK Reviewed
 class TruncatedGaussian(basic_1dimpdf):
     
     def __init__(self,meang,sigmag,ming,maxg):
@@ -709,6 +719,7 @@ class TruncatedGaussian(basic_1dimpdf):
 
 # Overwrite most of the methods of the parent class
 # Idea from https://stats.stackexchange.com/questions/30588/deriving-the-conditional-distributions-of-a-multivariate-normal-distribution
+# LVK Reviewed
 class Bivariate2DGaussian(conditional_2dimpdf):
     
     def __init__(self,x1min,x1max,x1mean,x2min,x2max,x2mean,x1variance,x12covariance,x2variance):
@@ -785,7 +796,8 @@ class Bivariate2DGaussian(conditional_2dimpdf):
         pdfeval=self.pdf(x1samp,x2samp)
         idx=np.random.choice(len(x1samp),size=N,replace=True,p=pdfeval/pdfeval.sum())
         return x1samp[idx],x2samp[idx]
-
+        
+# LVK Reviewed
 class PowerLawGaussian(basic_1dimpdf):
     
     def __init__(self,minpl,maxpl,alpha,lambdag,meang,sigmag,ming,maxg):
@@ -836,6 +848,7 @@ class PowerLawGaussian(basic_1dimpdf):
         toret=xp.log((1-self.lambdag)*self.PL.cdf(x)+self.lambdag*self.TG.cdf(x))
         return toret
 
+# LVK Reviewed
 class BrokenPowerLaw(basic_1dimpdf):
     
     def __init__(self,minpl,maxpl,alpha_1,alpha_2,b):
@@ -891,6 +904,7 @@ class BrokenPowerLaw(basic_1dimpdf):
         /self.PL2.pdf(xp.array([self.break_point]))))/self.norm_fact)
         return toret
 
+# LVK Reviewed
 class PowerLawTwoGaussians(basic_1dimpdf):
     
     def __init__(self,minpl,maxpl,alpha,lambdag,lambdaglow,meanglow,sigmaglow,minglow,maxglow,
@@ -950,6 +964,7 @@ class PowerLawTwoGaussians(basic_1dimpdf):
         g_part =self.TGlow.cdf(x)*self.lambdag*self.lambdaglow+self.TGhigh.cdf(x)*self.lambdag*(1-self.lambdaglow)
         return xp.log(pl_part+g_part)
 
+# LVK Reviewed
 class absL_PL_inM(basic_1dimpdf):
     
     def __init__(self,Mmin,Mmax,alpha):

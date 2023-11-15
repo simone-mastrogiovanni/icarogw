@@ -2,6 +2,7 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 import copy as cp
 from .conversions import  radec2indeces
 
+# LVK Reviewed
 class injections(object):
     def __init__(self,injections_dict,prior,ntotal,Tobs):
 

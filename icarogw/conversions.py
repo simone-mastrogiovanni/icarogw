@@ -4,9 +4,58 @@ from scipy.stats import gaussian_kde
 from scipy.special import spence as PL
 from tqdm import tqdm
 from ligo.skymap.io.fits import read_sky_map
-
 import astropy_healpix as ah
 from astropy import units as u
+
+def chirp_mass(m1,m2):
+    '''
+    Calculated the chirp mass
+
+    Parameters
+    ----------
+    m1,m2: xp.array
+        Masses in solar masses
+
+    Returns
+    -------
+    Chirp mass
+    '''
+
+    xp = get_module_array(m1)
+    return xp.power(m1*m2,3./5)/xp.power(m1+m2,1./5)
+
+def mass_ratio(m1,m2):
+    '''
+    Computes the mass ratio (convention used is m1>m2 et q <1)
+
+    Parameters
+    ----------
+    m1,m2: xp.array
+        Masses in solar masses
+
+    Returns
+    -------
+    mass ratio
+    '''
+    return m2/m1
+
+def f_GW_ISCO(m1,m2):
+    '''
+    Returns the innermost stable circular orbit (0PN) approximation
+
+    Parameters
+    ----------
+    m1,m2: xp.array
+        Detector frame masses in solar masses
+    
+    Returns
+    -------
+    GW frequency corresponding to innermost stable circular orbit
+    '''
+    M=m1+m2
+    f_ISCO = (2.20*(1/M))*10**3
+    to_ret = f_ISCO*2
+    return to_ret
 
 
 class ligo_skymap(object):
@@ -203,7 +252,7 @@ class ligo_skymap(object):
         
         return dl, ra.rad, dec.rad
 
-
+# LVK Reviewed
 def cartestianspins2chis(s1x,s1y,s1z,s2x,s2y,s2z,q):
     '''
     Returns chi_1, chi_2, cosines with orbital angular momentum, chi_eff and chi_p 
@@ -229,6 +278,7 @@ def cartestianspins2chis(s1x,s1y,s1z,s2x,s2y,s2z,q):
     
     return chi_1, chi_2, cos_t_1, cos_t_2, chi_eff, chi_p
 
+# LVK Reviewed
 def Di(z):
     '''
     Function from https://github.com/tcallister/effective-spin-priors. Credit: T. Callister
@@ -249,6 +299,7 @@ def Di(z):
 
     return PL(1.-z+0j)
 
+# LVK Reviewed
 def chi_effective_prior_from_aligned_spins(q,aMax,xs):
     '''
     Function from https://github.com/tcallister/effective-spin-priors. Credit: T. Callister
@@ -294,6 +345,7 @@ def chi_effective_prior_from_aligned_spins(q,aMax,xs):
 
     return pdfs.reshape(origin_shape)
 
+# LVK Reviewed
 def chi_effective_prior_from_isotropic_spins(q,aMax,xs):
     '''
     Function from https://github.com/tcallister/effective-spin-priors. Credit: T. Callister
@@ -405,6 +457,7 @@ def chi_effective_prior_from_isotropic_spins(q,aMax,xs):
 
     return xp.real(pdfs).reshape(origin_shape)
 
+# LVK Reviewed
 def chi_p_prior_from_isotropic_spins(q,aMax,xs):
     '''
     Function from https://github.com/tcallister/effective-spin-priors. Credit: T. Callister
@@ -458,6 +511,7 @@ def chi_p_prior_from_isotropic_spins(q,aMax,xs):
 
     return pdfs.reshape(origin_shape)
 
+# LVK Reviewed
 def joint_prior_from_isotropic_spins(q,aMax,xeffs,xps,ndraws=10000,bw_method='scott'):
     '''
     Function from https://github.com/tcallister/effective-spin-priors. Credit: T. Callister
@@ -500,6 +554,7 @@ def joint_prior_from_isotropic_spins(q,aMax,xeffs,xps,ndraws=10000,bw_method='sc
 
     return joint_p_chi_p_chi_eff.reshape(origin_shape)
 
+# LVK Reviewed
 def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
     '''
     Function from https://github.com/tcallister/effective-spin-priors. Credit: T. Callister
@@ -575,6 +630,7 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
     p_chi_p = xp.interp(xp,reference_grid,reference_vals/norm_constant)
     return p_chi_p
 
+# LVK Reviewed
 def chi_eff_from_spins(chi1, chi2, cos1, cos2, q):
     '''
     Function to tranform the usual spins parameters chi, chi2, cos1, cos2
@@ -596,6 +652,7 @@ def chi_eff_from_spins(chi1, chi2, cos1, cos2, q):
     to_ret = (chi1*cos1 + q*chi2*cos2)/(1.+q)
     return to_ret
 
+# LVK Reviewed
 def chi_p_from_spins(chi1, chi2, cos1, cos2, q):
     '''
     Function to tranform the usual spins parameters chi, chi2, cos1, cos2
@@ -621,6 +678,7 @@ def chi_p_from_spins(chi1, chi2, cos1, cos2, q):
     
     return to_ret
 
+# LVK Reviewed
 def radec2skymap(ra,dec,nside):
     '''
     Converts RA and DEC samples to a skymap with normalized probability, i.e. integral of skymap in dArea =1
@@ -654,7 +712,7 @@ def radec2skymap(ra,dec,nside):
     counts_map/=(len(ra)*dOmega_sterad)
     return counts_map, dOmega_sterad
 
-
+# LVK Reviewed
 def L2M(L):
     '''
     Converts Luminosity in Watt to Absolute bolometric magnitude
@@ -673,6 +731,7 @@ def L2M(L):
     # From Resolution B2 proposed by IAU, see e.g. Pag. 2, Eq. 2 of https://www.iau.org/static/resolutions/IAU2015_English.pdf
     return -2.5*xp.log10(L)+71.197425
 
+# LVK Reviewed
 def M2L(M):
     '''
     Converts Absolute bolometric magnitude to Luminosity in Watt 
@@ -691,6 +750,7 @@ def M2L(M):
     # From Pag. 2, Eq. 1-2 of https://www.iau.org/static/resolutions/IAU2015_English.pdf
     return 3.0128e28*xp.power(10.,-0.4*M)
 
+# LVK Reviewed
 def radec2indeces(ra,dec,nside):
     '''
     Converts RA and DEC to healpy indeces
@@ -710,6 +770,7 @@ def radec2indeces(ra,dec,nside):
     phi = ra
     return hp.ang2pix(nside, theta, phi)
 
+# LVK Reviewed
 def indices2radec(indices,nside):
     '''
     Converts healpy indeces to RA DEC
@@ -730,6 +791,7 @@ def indices2radec(indices,nside):
     theta,phi= hp.pix2ang(nside,indices)
     return phi, np.pi/2.0-theta
 
+# LVK Reviewed
 def M2m(M,dl,kcorr):
     '''
     Converts Absolute bolometric magnitude to apparent magnitude
@@ -753,6 +815,7 @@ def M2m(M,dl,kcorr):
     dist_modulus=5*xp.log10(dl)+25.
     return M+dist_modulus+kcorr
 
+# LVK Reviewed
 def m2M(m,dl,kcorr):
     '''
     Converts apparent magnitude to Absolute bolometric magnitude
@@ -776,6 +839,7 @@ def m2M(m,dl,kcorr):
     dist_modulus=5*xp.log10(dl)+25.
     return m-dist_modulus-kcorr
 
+# LVK Reviewed
 def source2detector(mass1_source,mass2_source,z,cosmology):
     '''
     Converts from Source frame to detector frame quantities
@@ -797,6 +861,7 @@ def source2detector(mass1_source,mass2_source,z,cosmology):
     '''
     return mass1_source*(1+z),mass2_source*(1+z),cosmology.z2dl(z)
 
+# LVK Reviewed
 def detector2source(mass1,mass2,dl,cosmology):
     '''
     Converts from Source frame to detector frame quantities
@@ -820,7 +885,7 @@ def detector2source(mass1,mass2,dl,cosmology):
     z=cosmology.dl2z(dl)
     return mass1/(1+z),mass2/(1+z),z
 
-
+# LVK Reviewed
 def detector2source_jacobian(z, cosmology):
     '''
     Calculates the detector frame to source frame Jacobian d_det/d_sour
@@ -834,7 +899,8 @@ def detector2source_jacobian(z, cosmology):
     '''
     xp=get_module_array(z)
     return xp.abs(xp.power(1+z,2.)*cosmology.ddl_by_dz_at_z(z))
-    
+
+# LVK Reviewed
 def source2detector_jacobian(z, cosmology):
     '''
     Calculates the detector frame to source frame Jacobian d_sour/d_det
