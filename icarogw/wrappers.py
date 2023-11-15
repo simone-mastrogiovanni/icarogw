@@ -1,74 +1,10 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
 from .cosmology import  md_rate, powerlaw_rate
-from .priors import SmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian
-from .priors import PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized
+from .priors import LowpassSmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb
+from .priors import PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
-
-# LVK Reviewed
-def mass_wrappers_init(name):
-    if name == 'PowerLaw':
-        mass_wrap=massprior_PowerLaw()
-    elif name == 'PowerLawPeak':
-        mass_wrap=massprior_PowerLawPeak()
-    elif name == 'BrokenPowerLaw':
-        mass_wrap=massprior_BrokenPowerLaw()
-    elif name == 'MultiPeak':
-        mass_wrap=massprior_MultiPeak()
-    elif name == 'PowerLaw_NSBH':
-        mass_wrap=massprior_PowerLaw_NSBH()
-    elif name == 'PowerLawPeak_NSBH':
-        mass_wrap=massprior_PowerLawPeak_NSBH()
-    elif name == 'BrokenPowerLaw_NSBH':
-        mass_wrap=massprior_BrokenPowerLaw_NSBH()
-    elif name == 'MultiPeak_NSBH':
-        mass_wrap=massprior_MultiPeak_NSBH()    
-    else:
-        raise ValueError('Mass model not known') 
-    return mass_wrap
-
-# LVK Reviewed
-def rate_wrappers_init(name):
-    if name == 'PowerLaw':
-        rate_wrap=rateevolution_PowerLaw()
-    elif name == 'Madau':
-        rate_wrap=rateevolution_Madau()
-    else:
-        raise ValueError('Rate model not known')    
-    return rate_wrap
-
-# LVK Reviewed
-def cosmology_wrappers_init(name,zmax):
-    if name == 'FlatLambdaCDM':
-        cosmology_wrap=FlatLambdaCDM_wrap(zmax=zmax)
-    elif name == 'FlatwCDM':
-        cosmology_wrap=FlatwCDM_wrap(zmax=zmax)
-    else:
-        raise ValueError('Cosmology model not known')
-    return cosmology_wrap
-
-# LVK Reviewed
-def modGR_wrappers_init(name,bgwrap):
-    if name == 'Xi0':
-        cosmology_wrap=Xi0_mod_wrap(bgwrap)
-    elif name == 'cM':
-        cosmology_wrap=cM_mod_wrap(bgwrap)
-    elif name == 'extraD':
-        cosmology_wrap=extraD_mod_wrap(bgwrap)
-    elif name == 'alphalog':
-        cosmology_wrap=alphalog_mod_wrap(bgwrap)
-    else:
-        raise ValueError('ModGR model not known')
-    return cosmology_wrap
-
-# A parent class for the standard mass probabilities
-# LVK Reviewed
-class source_mass_default(object):
-    def pdf(self,mass_1_source,mass_2_source):
-        return self.prior.pdf(mass_1_source,mass_2_source)
-    def log_pdf(self,mass_1_source,mass_2_source):
-        return self.prior.log_pdf(mass_1_source,mass_2_source)
 
 # A parent class for the rate
 # LVK Reviewed
@@ -151,22 +87,82 @@ class alphalog_mod_wrap(object):
         self.cosmology.build_cosmology(self.bgwrap.astropycosmo(**bgdict),alphalog_1=kwargs['alphalog_1']
                                        ,alphalog_2=kwargs['alphalog_2'],alphalog_3=kwargs['alphalog_3'])
 
+# A parent class for the standard 1 D mass probabilities
+class pm_prob(object):
+    def pdf(self,mass_1_source):
+        return self.prior.pdf(mass_1_source)
+    def log_pdf(self,mass_1_source):
+        return self.prior.log_pdf(mass_1_source)
+
+# A parent class for the standard mass probabilities
 # LVK Reviewed
-class massprior_PowerLaw(source_mass_default):
+class pm1m2_prob(object):
+    def pdf(self,mass_1_source,mass_2_source):
+        return self.prior.pdf(mass_1_source,mass_2_source)
+    def log_pdf(self,mass_1_source,mass_2_source):
+        return self.prior.log_pdf(mass_1_source,mass_2_source)
+
+class massprior_PowerLaw(pm_prob):
     def __init__(self):
-        self.population_parameters=['alpha','beta','mmin','mmax']
+        self.population_parameters=['alpha','mmin','mmax']
     def update(self,**kwargs):
-        p1,p2=PowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha']),PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta'])
+        self.prior=PowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'])
+        
+class massprior_PowerLawPeak(pm_prob):
+    def __init__(self):
+        self.population_parameters=['alpha','mmin','mmax','mu_g','sigma_g','lambda_peak']
+    def update(self,**kwargs):
+        self.prior=PowerLawGaussian(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],kwargs['lambda_peak'],kwargs['mu_g'],
+                                         kwargs['sigma_g'],kwargs['mmin'],kwargs['mu_g']+5*kwargs['sigma_g'])
+        
+class massprior_BrokenPowerLaw(pm_prob):
+    def __init__(self):
+        self.population_parameters=['alpha_1','alpha_2','mmin','mmax','b']
+    def update(self,**kwargs):
+        self.prior=BrokenPowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha_1'],-kwargs['alpha_2'],kwargs['b'])
+        
+class massprior_MultiPeak(pm_prob):
+    def __init__(self):
+        self.population_parameters=['alpha','mmin','mmax','mu_g_low','sigma_g_low','lambda_g_low','mu_g_high','sigma_g_high','lambda_g']
+    def update(self,**kwargs):
+        self.prior=PowerLawTwoGaussians(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],
+                                             kwargs['lambda_g'],kwargs['lambda_g_low'],kwargs['mu_g_low'],
+                                             kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
+                                             kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high'])
+
+class m1m2_conditioned(pm1m2_prob):
+    def __init__(self,wrapper_m):
+        self.population_parameters = wrapper_m.population_parameters+['beta']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
+        p1 = self.wrapper_m.prior
+        p2 = PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta'])
         self.prior=conditional_2dimpdf(p1,p2)
 
-class massprior_pairedQ_PowerLawPeak(source_mass_default):
-    def __init__(self):
-        self.population_parameters=['alpha','beta','mmin','mmax','delta_m','mu_g','sigma_g','lambda_peak']
+class m1m2_conditioned_lowpass(pm1m2_prob):
+    def __init__(self,wrapper_m):
+        self.population_parameters = wrapper_m.population_parameters+['beta','delta_m']
+        self.wrapper_m = wrapper_m
     def update(self,**kwargs):
-        p=SmoothedProb(PowerLawGaussian(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],kwargs['lambda_peak'],kwargs['mu_g'],
-                                         kwargs['sigma_g'],kwargs['mmin'],kwargs['mu_g']+5*kwargs['sigma_g']),kwargs['delta_m'])
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
+        p1 = LowpassSmoothedProb(self.wrapper_m.prior,kwargs['delta_m'])
+        p2 = LowpassSmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
+        self.prior=conditional_2dimpdf(p1,p2)
 
+class m1m2_paired_massratio_dip(pm1m2_prob):
+    def __init__(self,wrapper_m):
+        self.population_parameters = wrapper_m.population_parameters + ['beta','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
+        p = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
         def pairing_function(m1,m2,beta=kwargs['beta']):
+            xp = get_module_array(m1)
             q = m2/m1
             toret = xp.power(q,beta)
             toret[q>1] = 0.
@@ -174,85 +170,14 @@ class massprior_pairedQ_PowerLawPeak(source_mass_default):
         
         self.prior=paired_2dimpdf(p,pairing_function)
 
-# LVK Reviewed
-class massprior_PowerLawPeak(source_mass_default):
-    def __init__(self):
-        self.population_parameters=['alpha','beta','mmin','mmax','delta_m','mu_g','sigma_g','lambda_peak']
-    def update(self,**kwargs):
-        p1=SmoothedProb(PowerLawGaussian(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],kwargs['lambda_peak'],kwargs['mu_g'],
-                                         kwargs['sigma_g'],kwargs['mmin'],kwargs['mu_g']+5*kwargs['sigma_g']),kwargs['delta_m'])
-        p2=SmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
-        self.prior=conditional_2dimpdf(p1,p2)
-
-# LVK Reviewed
-class massprior_BrokenPowerLaw(source_mass_default):
-    def __init__(self):
-        self.population_parameters=['alpha_1','alpha_2','beta','mmin','mmax','delta_m','b']
-    def update(self,**kwargs):
-        p1=SmoothedProb(BrokenPowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha_1'],-kwargs['alpha_2'],kwargs['b']),kwargs['delta_m'])
-        p2=SmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
-        self.prior=conditional_2dimpdf(p1,p2)
-
-# LVK Reviewed
-class massprior_MultiPeak(source_mass_default):
-    def __init__(self):
-        self.population_parameters=['alpha','beta','mmin','mmax','delta_m','mu_g_low','sigma_g_low','lambda_g_low','mu_g_high','sigma_g_high','lambda_g']
-    def update(self,**kwargs):
-        p1=SmoothedProb(PowerLawTwoGaussians(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],
-                                             kwargs['lambda_g'],kwargs['lambda_g_low'],kwargs['mu_g_low'],
-                                             kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
-                                             kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high']),kwargs['delta_m'])
-        p2=SmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
-        self.prior=conditional_2dimpdf(p1,p2)
-
-# LVK Reviewed
-class massprior_PowerLaw_NSBH(source_mass_default):
-    def __init__(self):
-        self.population_parameters=['alpha','beta','mmin','mmax','mmin_NS','mmax_NS']
-    def update(self,**kwargs):
-        p1,p2=PowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha']),PowerLaw(kwargs['mmin_NS'],kwargs['mmax_NS'],kwargs['beta'])
-        self.prior=conditional_2dimpdf(p1,p2)
-
-# LVK Reviewed
-class massprior_PowerLawPeak_NSBH(source_mass_default):
-    def __init__(self):
-        self.population_parameters=['alpha','beta','mmin','mmax','delta_m','mu_g','sigma_g','lambda_peak','mmin_NS','mmax_NS','delta_m_NS']
-    def update(self,**kwargs):
-        p1=SmoothedProb(PowerLawGaussian(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],kwargs['lambda_peak'],kwargs['mu_g'],
-                                         kwargs['sigma_g'],kwargs['mmin'],kwargs['mu_g']+5*kwargs['sigma_g']),kwargs['delta_m'])
-        p2=SmoothedProb(PowerLaw(kwargs['mmin_NS'],kwargs['mmax_NS'],kwargs['beta']),kwargs['delta_m_NS'])
-        self.prior=conditional_2dimpdf(p1,p2)
-
-# LVK Reviewed
-class massprior_BrokenPowerLaw_NSBH(source_mass_default):
-    def __init__(self):
-        self.population_parameters=['alpha_1','alpha_2','beta','mmin','mmax','delta_m','b','mmin_NS','mmax_NS','delta_m_NS']
-    def update(self,**kwargs):
-        p1=SmoothedProb(BrokenPowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha_1'],-kwargs['alpha_2'],kwargs['b']),kwargs['delta_m'])
-        p2=SmoothedProb(PowerLaw(kwargs['mmin_NS'],kwargs['mmax_NS'],kwargs['beta']),kwargs['delta_m_NS'])
-        self.prior=conditional_2dimpdf(p1,p2)
-
-# LVK Reviewed
-class massprior_MultiPeak_NSBH(source_mass_default):
-    def __init__(self):
-        self.population_parameters=['alpha','beta','mmin','mmax','delta_m','mu_g_low','sigma_g_low','lambda_g_low','mu_g_high','sigma_g_high','lambda_g',
-                        'mmin_NS','mmax_NS','delta_m_NS']
-    def update(self,**kwargs):
-        p1=SmoothedProb(PowerLawTwoGaussians(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],
-                                             kwargs['lambda_g'],kwargs['lambda_g_low'],kwargs['mu_g_low'],
-                                             kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
-                                             kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high']),kwargs['delta_m'])
-        p2=SmoothedProb(PowerLaw(kwargs['mmin_NS'],kwargs['mmax_NS'],kwargs['beta']),kwargs['delta_m_NS'])
-        self.prior=conditional_2dimpdf(p1,p2)
-
-class massprior_BinModel2d(source_mass_default):
+class massprior_BinModel2d(pm1m2_prob):
     def __init__(self, n_bins_1d):
         self.population_parameters=['mmin','mmax']
         n_bins_total = int(n_bins_1d * (n_bins_1d + 1) / 2)
         self.bin_parameter_list = ['bin_' + str(i) for i in range(n_bins_total)]
         self.population_parameters += self.bin_parameter_list
     def update(self,**kwargs):
-        kwargs_bin_parameters = xp.array([kwargs[key] for key in self.bin_parameter_list])
+        kwargs_bin_parameters = np.array([kwargs[key] for key in self.bin_parameter_list])
         
         pdf_dist = piecewise_constant_2d_distribution_normalized(
             kwargs['mmin'], 
