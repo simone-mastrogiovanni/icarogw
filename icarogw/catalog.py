@@ -73,7 +73,7 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
     
         prior_eval=cosmology.dVc_by_dzdOmega_at_z(z)*user_normal(z,zobs,sigmaz)
         zproxy=xp.linspace(zvalmin,zvalmax,5000)
-        normfact=trapz(cosmology.dVc_by_dzdOmega_at_z(zproxy)*user_normal(zproxy,zobs,sigmaz),zproxy)
+        normfact=xp.trapz(cosmology.dVc_by_dzdOmega_at_z(zproxy)*user_normal(zproxy,zobs,sigmaz),zproxy)
         
         if normfact==0.:
             print(zobs,sigmaz)
@@ -93,7 +93,7 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
     
         prior_eval=user_normal(z,zobs,sigmaz)
         zproxy=xp.linspace(zvalmin,zvalmax,5000)
-        normfact=trapz(user_normal(zproxy,zobs,sigmaz),zproxy)
+        normfact=xp.trapz(user_normal(zproxy,zobs,sigmaz),zproxy)
         
         if normfact==0.:
             print(zobs,sigmaz)
@@ -461,7 +461,7 @@ class galaxy_catalog(object):
         
         for i in tqdm(skyloop,desc='Calculating interpolant'):
             interpogroup.attrs['sky_checkpoint']=i
-            gal_index=xp.where(cpind==i)[0]
+            gal_index=np.where(cpind==i)[0]
             if len(gal_index)==0:
                 tos = np.zeros_like(z_grid)
                 tos[:] = np.nan
