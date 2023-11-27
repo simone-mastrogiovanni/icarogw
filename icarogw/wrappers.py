@@ -2,9 +2,44 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
 from .cosmology import  md_rate, powerlaw_rate
 from .priors import LowpassSmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb
-from .priors import PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
+from .priors import PLsigmoid, PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
+
+
+class massprior_PLsigmoid(object):
+    '''
+    Parameters
+    ----------
+    alpha : float
+        Powerlaw index
+    delta_m : float
+        Smoothing parameter at low masses
+    mu0 : float
+        mean of the gaussian at z=0
+    sigma0 : float
+        std of the gaussian at z=0
+    alpha_1 : float
+        coeff of the Taylor expantion of mu(z)
+    beta_1 : float
+        coeff of the Taylor expantion of sigma(z)
+    mmin : float
+        minimal mass of the Truncated gaussian
+    mmax : float
+        maximal mass of the Truncated gaussian
+    x0 : float
+        Transition point of the sigmoid
+    k : float
+        Slope of the sigmoid
+    '''
+    def __init__(self):
+        self.population_parameters=['alpha','mmin','mmax','delta_m','mu0','sigma0','alpha_1','beta_1','x0','k']
+        
+    def update(self,**kwargs):
+        self.prior=PLsigmoid(-kwargs['alpha'],kwargs['mmin'],kwargs['mmax'],kwargs['delta_m'],kwargs['mu0'],
+                             kwargs['sigma0'],kwargs['alpha_1'],kwargs['beta_1'],kwargs['x0'],kwargs['k'])
+    def pdf(self,m,z):
+        self.prior.pdf(m,z)
 
 # A parent class for the rate
 # LVK Reviewed

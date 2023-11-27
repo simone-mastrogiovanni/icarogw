@@ -7,6 +7,15 @@ from ligo.skymap.io.fits import read_sky_map
 import astropy_healpix as ah
 from astropy import units as u
 
+def cred_interval(sigma):
+    '''
+    Convert sigma error of a gaussian into a credible interval percentage
+    Parameters
+    ----------
+    sigma : float
+    '''
+    return norm.cdf(sigma) - norm.cdf(-sigma)
+
 def chirp_mass(m1,m2):
     '''
     Calculated the chirp mass
