@@ -2,44 +2,36 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
 from .cosmology import  md_rate, powerlaw_rate
 from .priors import LowpassSmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb
-from .priors import PLsigmoid, PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
+from .priors import  PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
+from .priors import _lowpass_filter 
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
 
-
-class massprior_PLsigmoid(object):
-    '''
-    Parameters
-    ----------
-    alpha : float
-        Powerlaw index
-    delta_m : float
-        Smoothing parameter at low masses
-    mu0 : float
-        mean of the gaussian at z=0
-    sigma0 : float
-        std of the gaussian at z=0
-    alpha_1 : float
-        coeff of the Taylor expantion of mu(z)
-    beta_1 : float
-        coeff of the Taylor expantion of sigma(z)
-    mmin : float
-        minimal mass of the Truncated gaussian
-    mmax : float
-        maximal mass of the Truncated gaussian
-    x0 : float
-        Transition point of the sigmoid
-    k : float
-        Slope of the sigmoid
-    '''
-    def __init__(self):
-        self.population_parameters=['alpha','mmin','mmax','delta_m','mu0','sigma0','alpha_1','beta_1','x0','k']
-        
+class mixed_mass_redshift_evolving(object):
+    def __init__(self,mw):
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
+        self.mw_red_ind = mw
     def update(self,**kwargs):
-        self.prior=PLsigmoid(-kwargs['alpha'],kwargs['mmin'],kwargs['mmax'],kwargs['delta_m'],kwargs['mu0'],
-                             kwargs['sigma0'],kwargs['alpha_1'],kwargs['beta_1'],kwargs['x0'],kwargs['k'])
+        self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
+        self.zt=kwargs['zt']
+        self.delta_zt=kwargs['delta_zt']
+        self.mu_z0=kwargs['mu_z0']
+        self.mu_z1=kwargs['mu_z1']
+        self.sigma_z0=kwargs['sigma_z0']
+        self.sigma_z1=kwargs['sigma_z1']
     def pdf(self,m,z):
-        self.prior.pdf(m,z)
+        xp = get_module_array(m)
+        sx = get_module_array_scipy(m)
+        wz = _lowpass_filter(z,self.zt,self.delta_zt)
+        muz=self.mu_z0+self.mu_z1*z
+        sigmaz=self.sigma_z0+self.sigma_z1*z
+        min_point = (0.-muz)/(sigmaz*xp.sqrt(2.))
+        normz = 0.5*(1-sx.special.erf(min_point))
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz)*xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+        return wz*self.mw_red_ind.pdf(m)+(1-wz)*gaussian_part
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
 
 # A parent class for the rate
 # LVK Reviewed
