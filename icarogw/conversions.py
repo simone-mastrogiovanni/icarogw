@@ -1,6 +1,6 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 import healpy as hp
-from scipy.stats import gaussian_kde
+from scipy.stats import gaussian_kde, norm
 from scipy.special import spence as PL
 from tqdm import tqdm
 from ligo.skymap.io.fits import read_sky_map

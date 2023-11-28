@@ -13,16 +13,8 @@ def sigmoid(xdata, x0, k):
     '''
 
     xp = get_module_array(xdata)
-
-    #if xp.isscalar(xdata):
-     #   xdata = xp.array([xdata])
-
     return xp.exp(-k * (xdata - x0)) / (1 + xp.exp(-k * (xdata - x0)))
 
-    #if len(to_ret) == 1:
-     #   return to_ret.item()
-    #else:
-     #   return to_ret
 
 
 

@@ -40,21 +40,37 @@ class CBC_spinpop_rate(object):
         
         self.cw = cosmology_wrapper
         self.rw = rate_wrapper
+
         self.mw_pop1 = mw_pop1
-        self.sw_pop1 = sw_pop1
+        mw_pop1.population_parameters = ['alpha_pop1', 'mmin_pop1', 'mmax_pop1', 'mu_g_pop1', 'sigma_g_pop1',
+                                         'lambda_peak_pop1', 'beta_pop1', 'delta_m_pop1']
         self.mw_pop2 = mw_pop2
+        mw_pop2.population_parameters = ['alpha_pop2', 'mmin_pop2', 'mmax_pop2', 'mu_g_pop2', 'sigma_g_pop2',
+                                         'lambda_peak_pop2', 'beta_pop2', 'delta_m_pop2']
+        self.sw_pop1 = sw_pop1
+        sw_pop1.population_parameters = ['alpha_chi_pop1', 'beta_chi_pop1', 'sigma_t_pop1', 'csi_spin_pop1']
+        
         self.sw_pop2 = sw_pop2
+        sw_pop2.population_parameters = ['alpha_chi_pop2', 'beta_chi_pop2', 'sigma_t_pop2', 'csi_spin_pop2']
+        
         self.scale_free = scale_free
+
+        self.lambda_pop = ['lambda_pop']
+
         
         if scale_free:
-            self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters
+            self.population_parameters =  self.cw.population_parameters+self.rw.population_parameters \
+            + self.mw_pop1.population_parameters + self.sw_pop1.population_parameters \
+            + self.mw_pop2.population_parameters + self.sw_pop2.population_parameters \
+            + self.lambda_pop
         else:
-            self.population_parameters =  self.cw.population_parameters+self.mw.population_parameters+self.rw.population_parameters + ['R0']
+            self.population_parameters =  self.cw.population_parameters+self.rw.population_parameters \
+            + self.mw_pop1.population_parameters + self.sw_pop1.population_parameters \
+            + self.mw_pop2.population_parameters + self.sw_pop2.population_parameters \
+            + self.lambda_pop + ['R0']
             
         event_parameters = ['mass_1', 'mass_2', 'luminosity_distance']
-        
-        self.population_parameters = self.population_parameters+self.sw.population_parameters
-        event_parameters = event_parameters + self.sw.event_parameters
+        event_parameters = event_parameters + self.sw_pop1.event_parameters
 
         self.PEs_parameters = event_parameters.copy()
         self.injections_parameters = event_parameters.copy()
@@ -69,12 +85,16 @@ class CBC_spinpop_rate(object):
             The kwargs passed should be the population parameters given in self.population_parameters
         '''
         self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
-        self.mw.update(**{key: kwargs[key] for key in self.mw.population_parameters})
         self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
+
+        self.mw_pop1.update(**{key: kwargs[key] for key in self.mw_pop1.population_parameters})
+        self.mw_pop2.update(**{key: kwargs[key] for key in self.mw_pop2.population_parameters})
         
-        if self.sw is not None:
-            self.sw.update(**{key: kwargs[key] for key in self.sw.population_parameters})
-            
+        self.sw_pop1.update(**{key: kwargs[key] for key in self.sw_pop1.population_parameters})
+        self.sw_pop2.update(**{key: kwargs[key] for key in self.sw_pop2.population_parameters})
+        
+        self.lambda_pop = kwargs['lambda_pop']
+
         if not self.scale_free:
             self.R0 = kwargs['R0']
         
@@ -94,12 +114,11 @@ class CBC_spinpop_rate(object):
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
         log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
         
-        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
-        log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
-        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
-        
-        if self.sw is not None:
-            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
+
+        log_weights = self.rw.rate.log_evaluate(z) + log_dVc_dz \
+                    + xp.log(self.lambda_pop*self.mw_pop1.pdf(ms1,ms2)*self.sw_pop1.pdf(**{key:kwargs[key] for key in self.sw_pop1.event_parameters}) \
+                    + (1-self.lambda_pop)*self.mw_pop2.pdf(ms1,ms2)*self.sw_pop2.pdf(**{key:kwargs[key] for key in self.sw_pop2.event_parameters})) \
+                    - xp.log(prior) - xp.log(detector2source_jacobian(z,self.cw.cosmology)) - xp.log1p(z)
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.R0)
@@ -123,13 +142,13 @@ class CBC_spinpop_rate(object):
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
         log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
-        
-        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
-        log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
-        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
-        
-        if self.sw is not None:
-            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
+    
+    
+        log_weights = self.rw.rate.log_evaluate(z) + log_dVc_dz \
+                    + xp.log(self.lambda_pop*self.mw_pop1.pdf(ms1,ms2)*self.sw_pop1.pdf(**{key:kwargs[key] for key in self.sw_pop1.event_parameters}) \
+                    + (1-self.lambda_pop)*self.mw_pop2.pdf(ms1,ms2)*self.sw_pop2.pdf(**{key:kwargs[key] for key in self.sw_pop2.event_parameters})) \
+                    - xp.log(prior) - xp.log(detector2source_jacobian(z,self.cw.cosmology)) - xp.log1p(z)
+
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.R0)
