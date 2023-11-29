@@ -22,7 +22,7 @@ class mixed_mass_redshift_evolving(object):
     def pdf(self,m,z):
         xp = get_module_array(m)
         sx = get_module_array_scipy(m)
-        wz = _lowpass_filter(z,self.zt,self.delta_zt)
+        wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
         muz=self.mu_z0+self.mu_z1*z
         sigmaz=self.sigma_z0+self.sigma_z1*z
         min_point = (0.-muz)/(sigmaz*xp.sqrt(2.))
@@ -120,6 +120,13 @@ class pm_prob(object):
         return self.prior.pdf(mass_1_source)
     def log_pdf(self,mass_1_source):
         return self.prior.log_pdf(mass_1_source)
+
+class mass_ratio_prior_Gaussian(pm_prob):
+    def __init__(self):
+        self.population_parameters=['mu_q','sigma_q']
+    def update(self,**kwargs):
+        p1=TruncatedGaussian(kwargs['mu_q'],kwargs['sigma_q'],0.,1.)
+        self.prior=p1
 
 # A parent class for the standard mass probabilities
 # LVK Reviewed
