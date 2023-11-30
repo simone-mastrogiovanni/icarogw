@@ -909,6 +909,20 @@ def detector2source_jacobian(z, cosmology):
     xp=get_module_array(z)
     return xp.abs(xp.power(1+z,2.)*cosmology.ddl_by_dz_at_z(z))
 
+def detector2source_jacobian_q(z, cosmology):
+    '''
+    Calculates the detector frame to source frame Jacobian d_det/d_sour
+
+    Parameters
+    ----------
+    z: xp. arrays
+        Redshift
+    cosmo:  class from the cosmology module
+        Cosmology class from the cosmology module
+    '''
+    xp=get_module_array(z)
+    return xp.abs(xp.power(1+z,1.)*cosmology.ddl_by_dz_at_z(z))
+
 # LVK Reviewed
 def source2detector_jacobian(z, cosmology):
     '''

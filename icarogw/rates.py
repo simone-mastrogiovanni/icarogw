@@ -1,5 +1,5 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
-from .conversions import detector2source_jacobian, detector2source
+from .conversions import detector2source_jacobian, detector2source, detector2source_jacobian_q
 from scipy.stats import gaussian_kde
 
 
@@ -531,7 +531,6 @@ class CBC_vanilla_EM_counterpart(object):
             
         return log_out
 
-# LVK Reviewed
 class CBC_rate_m1_given_redshift_q(object):
     def __init__(self,cosmology_wrapper,mass_redshift_wrapper,
                  q_wrapper,rate_wrapper,spin_wrapper=None,scale_free=False):
