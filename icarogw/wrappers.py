@@ -129,11 +129,16 @@ class mass_ratio_prior_Gaussian(pm_prob):
         self.prior=p1
 
 class lowSmoothedwrapper(object):
-   def __init__(self,mw,**kwargs):
-        self.p1 = LowpassSmoothedProb(mw.prior,kwargs['delta_m'])
+   def __init__(self, mw):
         self.population_parameters = ['delta_m'] + mw.population_parameters
-   def log_pdf(self,m):
+        self.mw = mw
+   def update(self,**kwargs):
+        self.mw.update(**{key:kwargs[key] for key in self.mw.population_parameters})
+        self.p1 = LowpassSmoothedProb(self.mw.prior,kwargs['delta_m'])
+   def pdf(self,m):
         return self.p1.pdf(m)
+   def log_pdf(self,m):
+        return self.p1.log_pdf(m)
 
 # A parent class for the standard mass probabilities
 # LVK Reviewed
