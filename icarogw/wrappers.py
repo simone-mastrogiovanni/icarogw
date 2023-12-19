@@ -2,7 +2,7 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
 from .cosmology import  md_rate, powerlaw_rate
 from .priors import LowpassSmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb
-from .priors import  PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
+from .priors import  EvolvingPowerLawPeak, PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, conditional_2dimz_pdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
 from .priors import _lowpass_filter 
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
@@ -29,6 +29,7 @@ class mixed_mass_redshift_evolving(object):
     def log_pdf(self,m,z):
         xp = get_module_array(m)
         return xp.log(self.pdf(m,z))
+
 
 # A parent class for the rate
 # LVK Reviewed
@@ -144,6 +145,12 @@ class pm1m2_prob(object):
         return self.prior.pdf(mass_1_source,mass_2_source)
     def log_pdf(self,mass_1_source,mass_2_source):
         return self.prior.log_pdf(mass_1_source,mass_2_source)
+    
+class pm1m2z_prob(object):
+    def pdf(self,mass_1_source,mass_2_source,z):
+        return self.prior.pdf(mass_1_source,mass_2_source,z)
+    def log_pdf(self,mass_1_source,mass_2_source,z):
+        return self.prior.log_pdf(mass_1_source,mass_2_source,z)
 
 class massprior_PowerLaw(pm_prob):
     def __init__(self):
@@ -172,6 +179,20 @@ class massprior_MultiPeak(pm_prob):
                                              kwargs['lambda_g'],kwargs['lambda_g_low'],kwargs['mu_g_low'],
                                              kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
                                              kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high'])
+        
+class massprior_EvolvingPowerLawPeak(object):
+    def __init__(self,mw):
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
+        self.mw_nonevolving = mw
+    def update(self,**kwargs):
+        self.mw_nonevolving.update(**{key:kwargs[key] for key in self.mw_nonevolving.population_parameters})
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+        self.prior = EvolvingPowerLawPeak(self.mw_nonevolving, self.zt, self.delta_zt, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
 
 class m1m2_conditioned(pm1m2_prob):
     def __init__(self,wrapper_m):
@@ -183,7 +204,7 @@ class m1m2_conditioned(pm1m2_prob):
         p2 = PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta'])
         self.prior=conditional_2dimpdf(p1,p2)
 
-class m1m2_conditioned_lowpass_m2(pm1m2_prob):
+class m1m2_conditioned_lowpass_m2(pm1m2z_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters+['beta']
         self.wrapper_m = wrapper_m
@@ -191,7 +212,7 @@ class m1m2_conditioned_lowpass_m2(pm1m2_prob):
         self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
         p1 = self.wrapper_m.prior
         p2 = LowpassSmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
-        self.prior=conditional_2dimpdf(p1,p2)
+        self.prior=conditional_2dimz_pdf(p1,p2)
 
 class m1m2_conditioned_lowpass(pm1m2_prob):
     def __init__(self,wrapper_m):
