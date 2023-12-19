@@ -11,7 +11,7 @@ class CBC_mixte_pop_rate(object):
         self.rate2 = rate2
         self.lambda_pop = ['lambda_pop']
         self.scale_free = self.rate1.scale_free
-        
+
         # Fill up the dict mapping1 with all non common param, adding the _pop1 tag at the end
         for param in self.rate1.population_parameters:
             if param not in common_parameters:
@@ -53,10 +53,8 @@ class CBC_mixte_pop_rate(object):
         log_rate_PE_2 = self.rate2.log_rate_PE(prior,**kwargs)
 
         xp = get_module_array(log_rate_PE_2)
-        #sx = get_module_array_scipy(log_rate_PE_2)
 
         toret = xp.logaddexp(xp.log(self.lambda_pop)+log_rate_PE_1, xp.log(1-self.lambda_pop)+log_rate_PE_2)
-        #toret = sx.special.logsumexp([xp.log(self.lambda_pop)+log_rate_PE_1, xp.log(1-self.lambda_pop)+log_rate_PE_2])
         return toret
 
     def log_rate_injections(self,prior,**kwargs):
@@ -64,10 +62,8 @@ class CBC_mixte_pop_rate(object):
         log_rate_injections_2 = self.rate2.log_rate_injections(prior,**kwargs)
 
         xp = get_module_array(log_rate_injections_2)
-        #sx = get_module_array_scipy(log_rate_injections_2)
 
         toret = xp.logaddexp(xp.log(self.lambda_pop)+log_rate_injections_1,xp.log(1-self.lambda_pop)+log_rate_injections_2)
-        #toret = sx.special.logsumexp([xp.log(self.lambda_pop)+log_rate_injections_1, xp.log(1-self.lambda_pop)+log_rate_injections_2])
         return toret
 
 

@@ -564,7 +564,7 @@ def joint_prior_from_isotropic_spins(q,aMax,xeffs,xps,ndraws=10000,bw_method='sc
     return joint_p_chi_p_chi_eff.reshape(origin_shape)
 
 # LVK Reviewed
-def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
+def chi_p_prior_given_chi_eff_q(q,aMax,xeffs,xps,ndraws=10000,bw_method='scott'):
     '''
     Function from https://github.com/tcallister/effective-spin-priors. Credit: T. Callister
     Derivation of equations can be found in arxiv:2104.09508
@@ -603,7 +603,7 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
 
     # Finally, given our conditional value for chi_eff, we can solve for cost1
     # Note, though, that we still must require that the implied value of cost1 be *physical*
-    cost1 = (xeff*(1.+q) - q*a2*cost2)/a1
+    cost1 = (xeffs*(1.+q) - q*a2*cost2)/a1
 
     # While any cost1 values remain unphysical, redraw a1, a2, and cost2, and recompute
     # Repeat as necessary
@@ -612,7 +612,7 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
         a1[to_replace] = xp.random.random(to_replace.size)*aMax
         a2[to_replace] = xp.random.random(to_replace.size)*aMax
         cost2[to_replace] = 2.*xp.random.random(to_replace.size)-1.
-        cost1 = (xeff*(1.+q) - q*a2*cost2)/a1
+        cost1 = (xeffs*(1.+q) - q*a2*cost2)/a1
 
     # Compute precessing spins and corresponding weights, build KDE
     # See `Joint-ChiEff-ChiP-Prior.ipynb` for a discussion of these weights
@@ -621,10 +621,10 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
     prior_kde = gaussian_kde(Xp_draws,weights=jacobian_weights,bw_method=bw_method)
 
     # Compute maximum chi_p
-    if (1.+q)*xp.abs(xeff)/q<aMax:
+    if (1.+q)*xp.abs(xeffs)/q<aMax:
         max_Xp = aMax
     else:
-        max_Xp = xp.sqrt(aMax**2 - ((1.+q)*xp.abs(xeff)-q)**2.)
+        max_Xp = xp.sqrt(aMax**2 - ((1.+q)*xp.abs(xeffs)-q)**2.)
 
     # Set up a grid slightly inside (0,max chi_p) and evaluate KDE
     reference_grid = xp.linspace(0.05*max_Xp,0.95*max_Xp,50)
@@ -636,7 +636,7 @@ def chi_p_prior_given_chi_eff_q(q,aMax,xeff,xp,ndraws=10000,bw_method='scott'):
     norm_constant = xp.trapz(reference_vals,reference_grid)
 
     # Interpolate!
-    p_chi_p = xp.interp(xp,reference_grid,reference_vals/norm_constant)
+    p_chi_p = xp.interp(xps,reference_grid,reference_vals/norm_constant)
     return p_chi_p
 
 # LVK Reviewed
