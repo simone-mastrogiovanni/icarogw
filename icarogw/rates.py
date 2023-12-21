@@ -3,159 +3,69 @@ from .conversions import detector2source_jacobian, detector2source, detector2sou
 from scipy.stats import gaussian_kde
 
 
-class CBC_spinpop_rate(object):
-    '''
-    This is a rate model that parametrizes the CBC rate per year at the detector in terms of source-frame
-    masses, spin parameters and redshift rate evolution times differential of comoving volume. Source-frame mass distribution,
-    spin distribution and redshift distribution are summed to be independent from each other.
-    It is specifically designed for a two population rate in spin and masses
-
-    .. math::
-    \frac{d \rm N_{\rm CBC}}{d \vec{\rm m_{s}} d \vec{\chi} d z d t_{s}} = R_{0}\psi(z;\Lambda)\frac{d V_{c}}{d z} \left[\lambda_{\rm iso} \
-    \rm p_{\rm iso}(\vec{\rm m_{s}}|\Lambda_{\rm iso})p_{\rm iso}(\vec{ \chi}|\Lambda_{\rm iso})  + (1-\lambda_{\rm iso}) \ 
-    \rm p_{\rm H}(\vec{\rm m_{s}}|\Lambda_{\rm H})p_{\rm H}(\vec{ \chi}|\Lambda_{\rm H}) \right]
-    The wrapper works with luminosity distances and detector frame masses and optionally with some chosen spin parameters, used to compute the rate.
-
-    Parameters
-    ----------
-    cosmology_wrapper: class
-        Wrapper for the cosmological model
-    rate_wrapper: class
-        Wrapper for the rate evolution model
-
-    mass_wrapper_pop1: class
-        Wrapper for the source-frame mass distribution (population 1)
-    mass_wrapper_pop2: class
-        Wrapper for the source-frame mass distribution (population 2)
-
-    spin_wrapper_pop1: class
-        Wrapper for the spin model (population 1)
-    Spin_wrapper_pop2: class
-        Wrapper for the spin model (population 2)
-
-    scale_free: bool
-        True if you want to use the model for scale-free likelihood (no R0)
-    '''
-    def __init__(self,cosmology_wrapper,rate_wrapper,mw_pop1,sw_pop1,mw_pop2,sw_pop2,scale_free=False):
-        
-        self.cw = cosmology_wrapper
-        self.rw = rate_wrapper
-
-        self.mw_pop1 = mw_pop1
-        mw_pop1.population_parameters = ['alpha_pop1', 'mmin_pop1', 'mmax_pop1', 'mu_g_pop1', 'sigma_g_pop1',
-                                         'lambda_peak_pop1', 'beta_pop1', 'delta_m_pop1']
-        self.mw_pop2 = mw_pop2
-        mw_pop2.population_parameters = ['alpha_pop2', 'mmin_pop2', 'mmax_pop2', 'mu_g_pop2', 'sigma_g_pop2',
-                                         'lambda_peak_pop2', 'beta_pop2', 'delta_m_pop2']
-        self.sw_pop1 = sw_pop1
-        sw_pop1.population_parameters = ['alpha_chi_pop1', 'beta_chi_pop1', 'sigma_t_pop1', 'csi_spin_pop1']
-        
-        self.sw_pop2 = sw_pop2
-        sw_pop2.population_parameters = ['alpha_chi_pop2', 'beta_chi_pop2', 'sigma_t_pop2', 'csi_spin_pop2']
-        
-        self.scale_free = scale_free
-
+class CBC_mixte_pop_rate(object):
+    def __init__(self,rate1, rate2, common_parameters):
+        mapping_1 = {}
+        mapping_2 = {}
+        self.rate1 = rate1
+        self.rate2 = rate2
         self.lambda_pop = ['lambda_pop']
+        self.scale_free = self.rate1.scale_free
 
+        # Fill up the dict mapping1 with all non common param, adding the _pop1 tag at the end
+        for param in self.rate1.population_parameters:
+            if param not in common_parameters:
+                mapping_1[param+'_pop1'] = param
+
+        # Fill up the dict mapping2 with all non common param, adding the _pop2 tag at the end
+        for param in self.rate2.population_parameters:
+            if param not in common_parameters:
+                mapping_2[param+'_pop2'] = param
+
+        # Create the list of strings with the population parameters from mapping1, mapping2 and common param and the mixing param
+        self.population_parameters = list(mapping_1.keys())+list(mapping_2.keys())+self.lambda_pop+common_parameters
+
+        # Add the common param to both mapping1 and mapping2
+        for param in common_parameters:
+            mapping_1[param]=param
+            mapping_2[param]=param
         
-        if scale_free:
-            self.population_parameters =  self.cw.population_parameters+self.rw.population_parameters \
-            + self.mw_pop1.population_parameters + self.sw_pop1.population_parameters \
-            + self.mw_pop2.population_parameters + self.sw_pop2.population_parameters \
-            + self.lambda_pop
-        else:
-            self.population_parameters =  self.cw.population_parameters+self.rw.population_parameters \
-            + self.mw_pop1.population_parameters + self.sw_pop1.population_parameters \
-            + self.mw_pop2.population_parameters + self.sw_pop2.population_parameters \
-            + self.lambda_pop + ['R0']
-            
-        event_parameters = ['mass_1', 'mass_2', 'luminosity_distance']
-        event_parameters = event_parameters + self.sw_pop1.event_parameters
+        # Create the self of mapping1, mapping2 and event_parameters (m1s,m2s,z)
+        self.mapping_1=mapping_1
+        self.mapping_2=mapping_2
+        self.event_parameters = self.rate1.PEs_parameters
+        
+        # Create the PEs and Injections param self
+        self.PEs_parameters = self.event_parameters.copy()
+        self.injections_parameters = self.rate1.injections_parameters.copy()
 
-        self.PEs_parameters = event_parameters.copy()
-        self.injections_parameters = event_parameters.copy()
-            
     def update(self,**kwargs):
-        '''
-        This method updates the population models encoded in the wrapper. 
-        
-        Parameters
-        ----------
-        kwargs: flags
-            The kwargs passed should be the population parameters given in self.population_parameters
-        '''
-        self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
-        self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
+        # Update both rates using their parameters from mapping1 and mapping2
+        self.rate1.update(**{self.mapping_1[key]:kwargs[key] for key in self.mapping_1})
+        self.rate2.update(**{self.mapping_2[key]:kwargs[key] for key in self.mapping_2})
 
-        self.mw_pop1.update(**{key: kwargs[key] for key in self.mw_pop1.population_parameters})
-        self.mw_pop2.update(**{key: kwargs[key] for key in self.mw_pop2.population_parameters})
-        
-        self.sw_pop1.update(**{key: kwargs[key] for key in self.sw_pop1.population_parameters})
-        self.sw_pop2.update(**{key: kwargs[key] for key in self.sw_pop2.population_parameters})
-        
+        # Update the mixing parameter
         self.lambda_pop = kwargs['lambda_pop']
-
-        if not self.scale_free:
-            self.R0 = kwargs['R0']
-        
+    
     def log_rate_PE(self,prior,**kwargs):
-        '''
-        This method calculates the weights (CBC merger rate per year at detector) for the posterior samples.
-        
-        Parameters
-        ----------
-        prior: array
-            Prior written in terms of the variables identified by self.event_parameters
-        kwargs: flags
-            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
-        '''
-        xp = get_module_array(prior)
-        
-        ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
-        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
-        
 
-        log_weights = self.rw.rate.log_evaluate(z) + log_dVc_dz \
-                    + xp.log(self.lambda_pop*self.mw_pop1.pdf(ms1,ms2)*self.sw_pop1.pdf(**{key:kwargs[key] for key in self.sw_pop1.event_parameters}) \
-                    + (1-self.lambda_pop)*self.mw_pop2.pdf(ms1,ms2)*self.sw_pop2.pdf(**{key:kwargs[key] for key in self.sw_pop2.event_parameters})) \
-                    - xp.log(prior) - xp.log(detector2source_jacobian(z,self.cw.cosmology)) - xp.log1p(z)
-            
-        if not self.scale_free:
-            log_out = log_weights + xp.log(self.R0)
-        else:
-            log_out = log_weights
-            
-        return log_out
-    
+        log_rate_PE_1 = self.rate1.log_rate_PE(prior,**kwargs)
+        log_rate_PE_2 = self.rate2.log_rate_PE(prior,**kwargs)
+
+        xp = get_module_array(log_rate_PE_2)
+
+        toret = xp.logaddexp(xp.log(self.lambda_pop)+log_rate_PE_1, xp.log(1-self.lambda_pop)+log_rate_PE_2)
+        return toret
+
     def log_rate_injections(self,prior,**kwargs):
-        '''
-        This method calculates the weights (CBC merger rate per year at detector) for the injections.
-        
-        Parameters
-        ----------
-        prior: array
-            Prior written in terms of the variables identified by self.event_parameters
-        kwargs: flags
-            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
-        '''
-        xp = get_module_array(prior)
-        
-        ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
-        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
-    
-    
-        log_weights = self.rw.rate.log_evaluate(z) + log_dVc_dz \
-                    + xp.log(self.lambda_pop*self.mw_pop1.pdf(ms1,ms2)*self.sw_pop1.pdf(**{key:kwargs[key] for key in self.sw_pop1.event_parameters}) \
-                    + (1-self.lambda_pop)*self.mw_pop2.pdf(ms1,ms2)*self.sw_pop2.pdf(**{key:kwargs[key] for key in self.sw_pop2.event_parameters})) \
-                    - xp.log(prior) - xp.log(detector2source_jacobian(z,self.cw.cosmology)) - xp.log1p(z)
+        log_rate_injections_1 = self.rate1.log_rate_injections(prior,**kwargs)
+        log_rate_injections_2 = self.rate2.log_rate_injections(prior,**kwargs)
 
-            
-        if not self.scale_free:
-            log_out = log_weights + xp.log(self.R0)
-        else:
-            log_out = log_weights
-            
-        return log_out
+        xp = get_module_array(log_rate_injections_2)
+
+        toret = xp.logaddexp(xp.log(self.lambda_pop)+log_rate_injections_1,xp.log(1-self.lambda_pop)+log_rate_injections_2)
+        return toret
+
 
 
 
