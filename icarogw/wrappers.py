@@ -3,10 +3,35 @@ from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_as
 from .cosmology import  md_rate, powerlaw_rate
 from .priors import LowpassSmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb
 from .priors import  PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
+from .priors import _lowpass_filter 
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
 
-
+class mixed_mass_redshift_evolving(object):
+    def __init__(self,mw):
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
+        self.mw_red_ind = mw
+    def update(self,**kwargs):
+        self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
+        self.zt=kwargs['zt']
+        self.delta_zt=kwargs['delta_zt']
+        self.mu_z0=kwargs['mu_z0']
+        self.mu_z1=kwargs['mu_z1']
+        self.sigma_z0=kwargs['sigma_z0']
+        self.sigma_z1=kwargs['sigma_z1']
+    def pdf(self,m,z):
+        xp = get_module_array(m)
+        sx = get_module_array_scipy(m)
+        wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
+        muz=self.mu_z0+self.mu_z1*z
+        sigmaz=self.sigma_z0+self.sigma_z1*z
+        min_point = (0.-muz)/(sigmaz*xp.sqrt(2.))
+        normz = 0.5*(1-sx.special.erf(min_point))
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz)*xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+        return wz*self.mw_red_ind.pdf(m)+(1-wz)*gaussian_part
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
 
 # A parent class for the rate
 # LVK Reviewed
@@ -95,6 +120,13 @@ class pm_prob(object):
         return self.prior.pdf(mass_1_source)
     def log_pdf(self,mass_1_source):
         return self.prior.log_pdf(mass_1_source)
+
+class mass_ratio_prior_Gaussian(pm_prob):
+    def __init__(self):
+        self.population_parameters=['mu_q','sigma_q']
+    def update(self,**kwargs):
+        p1=TruncatedGaussian(kwargs['mu_q'],kwargs['sigma_q'],0.,1.)
+        self.prior=p1
 
 # A parent class for the standard mass probabilities
 # LVK Reviewed

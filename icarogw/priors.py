@@ -3,7 +3,6 @@ from .conversions import L2M, M2L
 import copy
 
 
-
 def _notch_filter(mass, mlow, delta_low, mhigh, delta_high, A):
     '''
     This function returns a notch filter based on the one defined in eq. (4) of https://arxiv.org/pdf/2111.03498.pdf, but using low and high pass filters based on the S
@@ -1364,6 +1363,8 @@ class piecewise_constant_2d_distribution_normalized():
         the 1d domain and if x1 < x2 (elementwise). 
         
         """
+
+        xp = get_module_array(x1)
 
         # check whether x1 (or x2) is elementwise outside the domain
         x1_outside = self.outside_domain_1d(x1)
