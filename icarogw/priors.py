@@ -2,6 +2,8 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .conversions import L2M, M2L
 import copy
 
+
+
 def _notch_filter(mass, mlow, delta_low, mhigh, delta_high, A):
     '''
     This function returns a notch filter based on the one defined in eq. (4) of https://arxiv.org/pdf/2111.03498.pdf, but using low and high pass filters based on the S

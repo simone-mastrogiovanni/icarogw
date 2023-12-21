@@ -2,9 +2,11 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
 from .cosmology import  md_rate, powerlaw_rate
 from .priors import LowpassSmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb
-from .priors import PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
+from .priors import  PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
+
+
 
 # A parent class for the rate
 # LVK Reviewed

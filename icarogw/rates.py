@@ -2,6 +2,73 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .conversions import detector2source_jacobian, detector2source
 from scipy.stats import gaussian_kde
 
+
+class CBC_mixte_pop_rate(object):
+    def __init__(self,rate1, rate2, common_parameters):
+        mapping_1 = {}
+        mapping_2 = {}
+        self.rate1 = rate1
+        self.rate2 = rate2
+        self.lambda_pop = ['lambda_pop']
+        self.scale_free = self.rate1.scale_free
+
+        # Fill up the dict mapping1 with all non common param, adding the _pop1 tag at the end
+        for param in self.rate1.population_parameters:
+            if param not in common_parameters:
+                mapping_1[param+'_pop1'] = param
+
+        # Fill up the dict mapping2 with all non common param, adding the _pop2 tag at the end
+        for param in self.rate2.population_parameters:
+            if param not in common_parameters:
+                mapping_2[param+'_pop2'] = param
+
+        # Create the list of strings with the population parameters from mapping1, mapping2 and common param and the mixing param
+        self.population_parameters = list(mapping_1.keys())+list(mapping_2.keys())+self.lambda_pop+common_parameters
+
+        # Add the common param to both mapping1 and mapping2
+        for param in common_parameters:
+            mapping_1[param]=param
+            mapping_2[param]=param
+        
+        # Create the self of mapping1, mapping2 and event_parameters (m1s,m2s,z)
+        self.mapping_1=mapping_1
+        self.mapping_2=mapping_2
+        self.event_parameters = self.rate1.PEs_parameters
+        
+        # Create the PEs and Injections param self
+        self.PEs_parameters = self.event_parameters.copy()
+        self.injections_parameters = self.rate1.injections_parameters.copy()
+
+    def update(self,**kwargs):
+        # Update both rates using their parameters from mapping1 and mapping2
+        self.rate1.update(**{self.mapping_1[key]:kwargs[key] for key in self.mapping_1})
+        self.rate2.update(**{self.mapping_2[key]:kwargs[key] for key in self.mapping_2})
+
+        # Update the mixing parameter
+        self.lambda_pop = kwargs['lambda_pop']
+    
+    def log_rate_PE(self,prior,**kwargs):
+
+        log_rate_PE_1 = self.rate1.log_rate_PE(prior,**kwargs)
+        log_rate_PE_2 = self.rate2.log_rate_PE(prior,**kwargs)
+
+        xp = get_module_array(log_rate_PE_2)
+
+        toret = xp.logaddexp(xp.log(self.lambda_pop)+log_rate_PE_1, xp.log(1-self.lambda_pop)+log_rate_PE_2)
+        return toret
+
+    def log_rate_injections(self,prior,**kwargs):
+        log_rate_injections_1 = self.rate1.log_rate_injections(prior,**kwargs)
+        log_rate_injections_2 = self.rate2.log_rate_injections(prior,**kwargs)
+
+        xp = get_module_array(log_rate_injections_2)
+
+        toret = xp.logaddexp(xp.log(self.lambda_pop)+log_rate_injections_1,xp.log(1-self.lambda_pop)+log_rate_injections_2)
+        return toret
+
+
+
+
 # LVK Reviewed
 class CBC_catalog_vanilla_rate_skymap(object):
     
