@@ -556,7 +556,7 @@ def joint_prior_from_isotropic_spins(q,aMax,xeffs,xps,ndraws=10000,bw_method='sc
     p_chi_eff = chi_effective_prior_from_isotropic_spins(q,aMax,xeffs)
     p_chi_p_given_chi_eff = xp.zeros(len(p_chi_eff))
     
-    for i in range(len(p_chi_eff),desc='Calculating p(chi_p|chi_eff,q)'):
+    for i in range(len(p_chi_eff)):
         p_chi_p_given_chi_eff[i] = chi_p_prior_given_chi_eff_q(q[i],aMax,xeffs[i],xps[i],ndraws,bw_method)
     joint_p_chi_p_chi_eff = p_chi_eff*p_chi_p_given_chi_eff
 
