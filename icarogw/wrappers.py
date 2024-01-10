@@ -300,7 +300,7 @@ class spinprior_gaussian(object):
         xp = get_module_array(chi_eff)
         return xp.exp(self.log_pdf(chi_eff,chi_p))
       
-class spinprior_ECOs(object):
+class spinprior_ECOs_totally_reflective(object):
     def __init__(self):
         self.population_parameters=['alpha_chi','beta_chi','eps', 'f_eco', 'sigma_chi_ECO']
         self.event_parameters=['chi_1','chi_2'] 
@@ -309,7 +309,7 @@ class spinprior_ECOs(object):
     def get_chi_crit(self, eps):
         xp = get_module_array(eps)
         q = 1. # Value for polar perturbations, more conservative
-        return xp.pi*(1.+q)/(2*xp.abs(xp.log10(eps)))
+        return xp.pi*(1.+q)/(2*xp.abs(xp.log(eps)))
 
     def update(self,**kwargs):
         self.alpha_chi = kwargs['alpha_chi']
