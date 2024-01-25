@@ -1,13 +1,10 @@
-# Use the python3 env to use icarogw2.0 package written below (and uncomment it)
-import sys
-import icarogw
-import numpy as np
-import matplotlib.pyplot as plt
+from .cupy_pal import *
+from .cosmology import astropycosmology
+from .wrappers import massprior_PowerLawPeak
+from .wrappers import *
 from scipy import stats
 from scipy import interpolate
-from astropy.cosmology import FlatLambdaCDM, Planck15
-import corner
-from matplotlib import rc
+from astropy.cosmology import Planck15
 from tqdm import tqdm as _tqdm
 
 def chirp_mass_det(m1,m2,z):
@@ -45,12 +42,13 @@ def z_to_dl(z):
     '''
     Convert a redshift value into a luminosity distance value.
     The Planck15 cosmology is used here. (but can be changed)
+    
     Parameters:
     ----------
     z : float or array
         redshift to be converted
     '''
-    cosmo = icarogw.cosmology.astropycosmology(14)
+    cosmo = astropycosmology(14)
     cosmo.build_cosmology(Planck15)
     to_ret = cosmo.z2dl(z)
     return to_ret
@@ -59,12 +57,13 @@ def dl_to_z(z):
     '''
     Convert a dL value into a redshift value.
     The Planck15 cosmology is used here. (but can be changed)
+    
     Parameters:
     ----------
     dL : float or array
         dL to be converted
     '''
-    cosmo = icarogw.cosmology.astropycosmology(14)
+    cosmo = astropycosmology(14)
     cosmo.build_cosmology(Planck15)
     to_ret = cosmo.dl2z(z)
     return to_ret
@@ -73,7 +72,7 @@ def dVc_dz(z):
     '''
     Compute the differential comoving volume as function of z
     '''
-    cosmo = icarogw.cosmology.astropycosmology(14)
+    cosmo = astropycosmology(14)
     cosmo.build_cosmology(Planck15)
     
     # differential of comov volume in Gpc3
@@ -194,7 +193,7 @@ def snr_and_freq_cut(m1,m2,z,snr,snrthr=12,fgw_cut=15):
     
     freq_GW_astro = f_GW(m1,m2,z)
     indices = np.where((snr>=snrthr) & (freq_GW_astro>fgw_cut))[0]
-    print('Ninj =',len(indices))
+
     return indices
 
 def likelihood_evaluation(rhos,qs,Mds,thetas,rho_obs,q_obs,Md_obs,theta_obs,numdet=3):
@@ -209,26 +208,53 @@ def likelihood_evaluation(rhos,qs,Mds,thetas,rho_obs,q_obs,Md_obs,theta_obs,numd
     
     return likelihood_tot
 
-def generate_mass_inj(Nsamp):
+def generate_mass_inj(Nsamp,mass_model,dic_param):
     '''
-    Generate Samples of m1 and m2 with PL+peak distribution
+    Generate Samples of m1s and m2s the chosen mass_model and compute the prior associated in 
+    the source frame!
+    Models available : PowerLaw, PowerLawPeak, MultiPeak
+    Parameters
+    ----------
+    Nsamp : integer
+        The number of samples for m1s and m2s you want
+    mass_model : str
+        The name of the mass model desired
+    dic_param : dict
+        Dictionnary with the param needed for the model inside
     '''
-    mp = icarogw.wrappers.massprior_PowerLawPeak()
-    mp.update(alpha=5.63,beta=15.26,mmin=30,mmax=250,delta_m=12.82,mu_g=100.,sigma_g=40.,lambda_peak=0.50)
+    
+    if mass_model =='PowerLaw':
+        mp = massprior_PowerLaw()
+        mp.update(alpha=dic_param['alpha'],beta=dic_param['beta'],mmin=dic_param['mmin'],mmax=dic_param['mmax'])
+        
+    elif mass_model =='PowerLawPeak':
+        mp = massprior_PowerLawPeak()
+        mp.update(alpha=dic_param['alpha'],beta=dic_param['beta'],mmin=dic_param['mmin'],mmax=dic_param['mmax'],delta_m=dic_param['delta_m'],
+        mu_g=dic_param['mu_g'],sigma_g=dic_param['sigma_g'],lambda_peak=dic_param['lambda_peak'])
+
+    elif mass_model =='MultiPeak':
+        mp = massprior_MultiPeak()
+        mp.update(alpha=dic_param['alpha'],beta=dic_param['beta'],mmin=dic_param['mmin'],mmax=dic_param['mmax'],delta_m=dic_param['delta_m'],
+        mu_g_low=dic_param['mu_g_low'],sigma_g_low=dic_param['sigma_g_low'],lambda_g_low=dic_param['lambda_g_low'],
+        mu_g_high=dic_param['mu_g_high'],sigma_g_high=dic_param['sigma_g_high'],lambda_g=dic_param['lambda_g'])
+    else :
+        raise ValueError('The model you chose is not available! \n Choose in the following list : PowerLaw, PowerLawPeak, MultiPeak ')
+        
     m1,m2 = mp.prior.sample(Nsamp)
     pdf = mp.prior.pdf(m1,m2)
     
     return m1, m2, pdf
 
-def generate_dL_inj(alpha,beta,Nsamp):
+def generate_dL_inj(Nsamp,zmax):
     '''
     Generate Samples of dL propto a PL distribution (\prpto dL^2)
     The PL is defined in the interval [a,b]
     p(dL) \propto a*dL^(a-1) , with (a-1) =2
-    '''
-    dL_sample = stats.powerlaw.rvs(a=3,loc=alpha,scale=beta-alpha, size=Nsamp)
-    
-    pdf = stats.powerlaw.pdf(dL_sample, 3, loc=alpha, scale=beta-alpha)
+    '''   
+
+    beta = z_to_dl(np.array(zmax))
+    dL_sample = stats.powerlaw.rvs(a=3,loc=0.1,scale=beta-10., size=Nsamp)
+    pdf = stats.powerlaw.pdf(dL_sample, 3, loc=0.1, scale=beta-10.)
     
     return dL_sample, pdf
 
@@ -240,7 +266,7 @@ def snr_samples_det(m1,m2,dL,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):
     Parameters:
     ----------
     rho_s : float
-         Reference value of the SNR 
+        Reference value of the SNR 
     dL_s : float
         Reference value of the luminosity distance in [Gpc]
     Md_s : float
@@ -250,6 +276,7 @@ def snr_samples_det(m1,m2,dL,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):
     dL: float or array  
         Luminosity distance 
     theta : float or array
+        Projection factor
     '''
 
     Md = chirp_mass(m1,m2)
@@ -265,7 +292,7 @@ def snr_samples_det(m1,m2,dL,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):
     
     return rho_true , theta, rho_det
 
-def quick_data_preparation(m1_astro,m2_astro,zmerg_astro,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,snrthr=12,fgw_cut=15,theta=None):
+def quick_data_preparation(m1_astro,m2_astro,zmerg_astro,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,snrthr=12,fgw_cut=15,theta=None,reweight=True):
     '''
     Prepare the data that will be used as input in the function : PE_quick_generation_samples()
     
@@ -279,10 +306,13 @@ def quick_data_preparation(m1_astro,m2_astro,zmerg_astro,numdet=3,rho_s=9,dL_s=1
         True distribution of the redshift merger, flat in z
     '''
     
-    # Reweight by \frac{dV_{c}}{dz}\frac{1}{1+z}
-    # N.B : It is optionnal, only useful if all astro distributions have been generated flat in z
-    m1, m2, z = dVc_dz_reweight(m1_astro,m2_astro,zmerg_astro)
-    
+    if reweight == True:
+        # Reweight by \frac{dV_{c}}{dz}\frac{1}{1+z}
+        # N.B : It is optionnal, only useful if all astro distributions have been generated flat in z
+        m1, m2, z = dVc_dz_reweight(m1_astro,m2_astro,zmerg_astro)
+    else:
+        m1, m2, z = m1_astro, m2_astro, zmerg_astro
+
     # Compute associated : snr, Mc, q
     rho, theta, rho_obs = snr_samples(m1,m2,z,numdet=numdet,rho_s=rho_s,dL_s=dL_s,Md_s=Md_s,theta=theta)
     Md = chirp_mass_det(m1,m2,z)
@@ -358,7 +388,7 @@ def PE_quick_generation_samples(m1,m2,z,theta,idx,rho_obs,q_obs,Md_obs,theta_obs
         dLs = np.random.uniform(np.max([(1-uncdL)*z_to_dl(z)[i],1.]),(1+uncdL)*z_to_dl(z)[i],size=Ngen)
         zs = dl_to_z(dLs)
               
-        unctheta=15*4e-1/rho_obs[i]
+        #unctheta=15*4e-1/rho_obs[i]
         thetas = np.random.uniform(0,1.4,size=Ngen)
         
         qs = mass_ratio(m1s,m2s)
@@ -366,8 +396,10 @@ def PE_quick_generation_samples(m1,m2,z,theta,idx,rho_obs,q_obs,Md_obs,theta_obs
         
         rhos,_,_ =snr_samples(m1s,m2s,zs,numdet=numdet,rho_s=rho_s,dL_s=dL_s,Md_s=Md_s,theta=thetas)
 
+        #Prior to get masses in det frame and dL^2
+        prior = (dLs*(1+zs))**2
         # Total likelihood estimate
-        likelihood_tot=likelihood_evaluation(rhos,qs,Mds,thetas,rho_obs[i],q_obs[i],Md_obs[i],theta_obs[i],numdet=3)
+        likelihood_tot=likelihood_evaluation(rhos,qs,Mds,thetas,rho_obs[i],q_obs[i],Md_obs[i],theta_obs[i],numdet=numdet)*prior
         
         
         # Importance sampling
@@ -389,48 +421,70 @@ def PE_quick_generation_samples(m1,m2,z,theta,idx,rho_obs,q_obs,Md_obs,theta_obs
     return dict1, dict2, idx
 
 
-def injection_set_generator(Ntot):
+def injection_set_generator(Ninj,Ntot,mass_model,dic_param,zmax=5.,snrthr=12,fgw_cut=15,numdet=3,rho_s=9.,dL_s=1.5,Md_s=25.,theta=None):
     '''
     This function generate the injection set to be given to IcaroGW to estimate the 
     selection effects. 
     Only a list of true parameters and the prior associated to each p(m1d,m2d)*p(dL) have to be stored.
-    
-    Parameters :
-    -----------
-    N_tot : Integer
-        Total Number of injections we generate
 
-    return
-    ------
-    true_param : dictionnary
-        dictionnary that stores the true parameters of each injections that are detected
-    Ndet : interger
-        Number of detected injections
+    Paramters :
+    -----------
+    Ninj : Integer
+        Number of detected injections wanted
+    Ntot : integer
+        Trial number of injection before detection
+    zmax : float
+        Redshift max upto you want to generate samples of dL
+    mass_model : str
+        Mass model you want to use to generate samples of m1s and m2s
+    dic_param : dict
+        Dictionnary corresponding to the parameters you want to use in the mass model
     '''
-    true_param = {}
-    
-    # Generation of m1,m2 in det frame with a PL + peak
-    m1d_inj, m2d_inj, pdf_m = generate_mass_inj(Nsamp=Ntot)
-    # Generation of dL with a PL ( \propto dL^2)
-    alpha,beta = 44, 26039 # Mpc
-    dL_inj, pdf_dL = generate_dL_inj(alpha=alpha,beta=beta,Nsamp=Ntot)
-    # Store the associated total prior
-    prior_inj = pdf_m*pdf_dL
-    
-    # Compute the associated quantites to derive the true SNR
-    Mc_inj = chirp_mass(m1d_inj,m2d_inj)
-    q_inj = mass_ratio(m1d_inj,m2d_inj)
-    snr_inj,_,_ = snr_samples_det(m1d_inj,m2d_inj,dL_inj,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None)
-    
-    # Compute the true parameters to be able to cut over the freq and the snr
-    z_inj = dl_to_z(dL_inj)
-    m1s_inj, m2s_inj = m1d_inj/(1+z_inj), m2d_inj/(1+z_inj)
-    
-    # Cut on freq and SNR
-    idx_detected_inj = snr_and_freq_cut(m1s_inj,m2s_inj,z_inj,snr_inj,snrthr=12,fgw_cut=15)
-    Ndet = len(idx_detected_inj)
-    true_param = {'m1s':m1s_inj[idx_detected_inj],'m2s':m2s_inj[idx_detected_inj],'z':z_inj[idx_detected_inj],
-               'snr':snr_inj[idx_detected_inj],'m1d':m1d_inj[idx_detected_inj],'m2d':m2d_inj[idx_detected_inj],
-                 'dL':dL_inj[idx_detected_inj],'prior':prior_inj[idx_detected_inj]}
-    
-    return true_param, Ntot, Ndet
+
+    true_param = {'m1s':[],'m2s':[],'z':[],'snr':[],'m1d':[],'m2d':[],'dL':[],'prior':[]}
+    Ndet_inj = 0
+    c = 0
+    while Ndet_inj < Ninj:
+
+        # Generation of m1,m2 in source with a PL + peak
+        m1s_inj, m2s_inj, pdf_m = generate_mass_inj(Nsamp=Ntot,mass_model=mass_model,dic_param=dic_param)
+
+        # Generation of dL with a PL ( \propto dL^2)
+        dL_inj, pdf_dL = generate_dL_inj(Nsamp=Ntot,zmax=zmax)
+
+        # Store the associated total prior in det frame
+        z_inj = dl_to_z(dL_inj)
+        jacobian = (1+z_inj)**(-2)
+        prior_inj = pdf_m*pdf_dL*jacobian
+
+        # Compute the associated quantites to derive the true SNR
+        snr_inj,_,snr_obs = snr_samples(m1s_inj,m2s_inj,z_inj,numdet=numdet,rho_s=rho_s,dL_s=dL_s,Md_s=Md_s,theta=theta)
+
+        # Cut on freq and SNR
+        idx_detected_inj = snr_and_freq_cut(m1s_inj,m2s_inj,z_inj,snr_obs,snrthr=snrthr,fgw_cut=fgw_cut)
+
+        m1d_inj = m1s_inj[idx_detected_inj]*(1+z_inj[idx_detected_inj])
+        m2d_inj = m2s_inj[idx_detected_inj]*(1+z_inj[idx_detected_inj])
+
+        Ndet = len(idx_detected_inj)
+        Ndet_inj = Ndet_inj + Ndet
+        print(Ndet_inj)
+        c = c+1
+
+        true_param['m1s'].append(m1s_inj[idx_detected_inj])
+        true_param['m2s'].append(m2s_inj[idx_detected_inj])
+        true_param['z'].append(z_inj[idx_detected_inj])
+        true_param['snr'].append(snr_inj[idx_detected_inj])
+        true_param['m1d'].append(m1d_inj)
+        true_param['m2d'].append(m2d_inj)
+        true_param['dL'].append(dL_inj[idx_detected_inj])
+        true_param['prior'].append(prior_inj[idx_detected_inj])
+
+    # Concatenate and downselect event to Ninj wanted
+    for keys in true_param.keys():
+        true_param[keys] = np.concatenate(true_param[keys],axis=0)
+
+    Ndet_inj=len(true_param['m1s'])
+    Ntot_gen = Ntot*c
+
+    return true_param, Ntot_gen, Ndet_inj
