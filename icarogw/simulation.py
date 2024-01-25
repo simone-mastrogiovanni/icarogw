@@ -81,13 +81,14 @@ def dVc_dz(z):
     return to_ret
 
 
-def rvs_theta(Nsamp,a,b):
+def rvs_theta(Nsamp,a,b,path):
     '''
     Generate samples according to the CDF of theta in the range [a,b] with a<b
     By default, the full range is [0,1.4]
+    path : string toward the Pw_three.dat file
     
     '''
-    cdf_theta = np.loadtxt("/Users/pierra/Desktop/These_ip2i/Cosmology_researches/icaroGW/icarogw_2/Sub_pop_BBH_ananalysis/data/Pw_three.dat")
+    cdf_theta = np.loadtxt(path)
     cdf_theta[:,1] =cdf_theta[:,1]/cdf_theta[:,1].max() 
     cdf_theta_func = interpolate.interp1d(cdf_theta[:,0],cdf_theta[:,1]) 
     inv_cdf_theta_func = interpolate.interp1d(cdf_theta[:,1],cdf_theta[:,0]) 
