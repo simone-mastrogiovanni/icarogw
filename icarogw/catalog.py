@@ -416,7 +416,7 @@ class galaxy_catalog(object):
             zcut = cosmo_ref.zmax
         
         # Selects all the galaxies that have support below zcut and above 1e-6
-        idx_in_range = np.where((cat_data['z'][:]-Numsigma*cat_data['sigmaz'][:]<=zcut) & (cat_data['z'][:]+Numsigma*cat_data['sigmaz'][:]>=1e-6))[0]
+        idx_in_range = np.where(((cat_data['z'][:]-Numsigma*cat_data['sigmaz'][:])<=zcut) & ((cat_data['z'][:]+Numsigma*cat_data['sigmaz'][:])>=1e-6))[0]
         if len(idx_in_range)==0:
             raise ValueError('There are no galaxies in the redshift range 1e-6 - {:f}'.format(zmax))
                 
