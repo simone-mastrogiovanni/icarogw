@@ -1,4 +1,5 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, enable_cupy
+from .stochastic import spectral_siren_vanilla_omega_gw
 import time
 import copy
 import bilby
@@ -139,4 +140,32 @@ class hierarchical_likelihood_noevents(bilby.Likelihood):
             log_likeli = float(xp.nan_to_num(log_likeli))
             
         return float(cp2np(log_likeli))
-                
+
+
+class Poisson_times_Stochastic_CBC_likelihood(hierarchical_likelihood):
+    def __init__(self, posterior_samples_dict, injections, rate_model, freqs, look_up_Om0, stochastic_data, nparallel=None, neffPE=20, neffINJ=None):
+        super().__init__(posterior_samples_dict, injections, rate_model, nparallel, neffPE, neffINJ)
+        self.freqs = freqs
+        self.look_up_Om0 = look_up_Om0
+        self.stochastic_data = stochastic_data
+    def log_likelihood(self):
+        hierarchical_log_likelihood = super().log_likelihood()
+        stochastic_log_likelihood = self.stochastic_log_likelihood()
+        return hierarchical_log_likelihood + stochastic_log_likelihood
+    def stochastic_log_likelihood(self):
+        Cf = self.stochastic_data['Cf']
+        sigma2s = self.stochastic_data['sigma2s']
+        # Rate model is updated from the call of the poisson likelihood
+        omega_gw = spectral_siren_vanilla_omega_gw(self.freqs, self.look_up_Om0, self.rate_model)
+
+        # likelihood in eq. 23
+        diff = omega_gw - Cf
+        log_stoch = -0.5 * np.sum(((diff**2.) / sigma2s))
+
+        # Controls on the value of the log-likelihood. If the log-likelihood is -inf, then set it to the smallest
+        # python value 1e-309
+        log_stoch = np.nan_to_num(log_stoch, nan=-np.inf)
+        
+        return float(cp2np(log_stoch))
+
+    
