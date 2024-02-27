@@ -1,31 +1,72 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
-from .cosmology import  md_rate, powerlaw_rate
+from .cosmology import  md_rate, powerlaw_rate, beta_rate, beta_rate_line
 from .priors import LowpassSmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb
 from .priors import  EvolvingPowerLawPeak, PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, conditional_2dimz_pdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
-from .priors import _lowpass_filter 
+from .priors import _lowpass_filter, _mixed_sigmoid_function
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
 
+
 class mixed_mass_redshift_evolving(object):
+
     def __init__(self,mw):
         self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
         self.mw_red_ind = mw
+
     def update(self,**kwargs):
         self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
-        self.zt=kwargs['zt']
-        self.delta_zt=kwargs['delta_zt']
-        self.mu_z0=kwargs['mu_z0']
-        self.mu_z1=kwargs['mu_z1']
-        self.sigma_z0=kwargs['sigma_z0']
-        self.sigma_z1=kwargs['sigma_z1']
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+
     def pdf(self,m,z):
         xp = get_module_array(m)
         wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
-        muz=self.mu_z0+self.mu_z1*z
-        sigmaz=self.sigma_z0+self.sigma_z1*z
-        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz)*xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
-        return wz*self.mw_red_ind.pdf(m)+(1-wz)*gaussian_part
+        muz = self.mu_z0 + self.mu_z1*z
+        sigmaz = self.sigma_z0 + self.sigma_z1*z
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+        return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+    
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+
+
+class mixed_mass_redshift_evolving_sigmoid(object):
+
+    def __init__(self,mw):
+        
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1', 'mix_z0']
+        self.mw_red_ind = mw
+
+    def update(self,**kwargs):
+
+        self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+        self.mix_z0 = kwargs['mix_z0']
+
+    def pdf(self,m,z):
+
+        xp = get_module_array(m)
+        wz = _mixed_sigmoid_function(z, self.zt, self.delta_zt, self.mix_z0)
+        muz = self.mu_z0 + self.mu_z1*z
+        sigmaz = self.sigma_z0 + self.sigma_z1*z
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+
+        if xp.any((muz - 3*sigmaz) < 0):    # Check that the gaussian peak excludes negative values for the masses at 3 sigma
+            return xp.nan
+        else:
+            return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+    
     def log_pdf(self,m,z):
         xp = get_module_array(m)
         return xp.log(self.pdf(m,z))
@@ -52,6 +93,18 @@ class rateevolution_Madau(rate_default):
         self.population_parameters=['gamma','kappa','zp']
     def update(self,**kwargs):
         self.rate=md_rate(**kwargs)
+
+class rateevolution_beta(rate_default):
+    def __init__(self):
+        self.population_parameters=['a','b','c']
+    def update(self,**kwargs):
+        self.rate=beta_rate(**kwargs)
+
+class rateevolution_beta_line(rate_default):
+    def __init__(self):
+        self.population_parameters=['a','b','c','d']
+    def update(self,**kwargs):
+        self.rate=beta_rate_line(**kwargs)
 
 # LVK Reviewed
 class FlatLambdaCDM_wrap(object):

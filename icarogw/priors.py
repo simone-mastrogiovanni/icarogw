@@ -66,6 +66,12 @@ def _lowpass_filter(mass, mmax, delta_max):
     to_ret[select_one]=1.
     return to_ret
 
+def _mixed_sigmoid_function(x, xt, delta_xt, mix_x0):
+
+    sigma = mix_x0 / (1 + np.exp((x-xt) * delta_xt))
+
+    return sigma
+
 # LVK Reviewed
 def _highpass_filter(mass, mmin,delta_m):
     '''
