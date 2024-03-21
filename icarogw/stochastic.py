@@ -192,6 +192,7 @@ def precompute_omega_weights(freqs, tmp_min=2., tmp_max=100., N=20000,chimax=Non
 
 # Define the log likelihood for the SGWB
 def spectral_siren_vanilla_omega_gw(freqs,look_up_Om0,cbcrate):
+    import time
     '''
     This function calculates the stochastic GW background as function of frequency. Note that this rate is not valid in modified gravity with friction terms
 
@@ -214,20 +215,20 @@ def spectral_siren_vanilla_omega_gw(freqs,look_up_Om0,cbcrate):
     km= 1.0e3
     Mpc= astropy.constants.kpc.value*1e3
     year= 365.*24*3600
-
     # Not valid in MG
     mw = cbcrate.mw
     rw = cbcrate.rw
     cw = cbcrate.cw
     R0 = cbcrate.R0
-    H0 = cw.cosmology.little_h*100*km/Mpc    
+    H0 = cw.cosmology.little_h*100*km/Mpc  
     rhoC = 3.*np.power(H0*c,2.)/(8.*np.pi*G)*np.power(Mpc,3) 
     pmw=mw.pdf(look_up_Om0['m1s_drawn'],look_up_Om0['m2s_drawn'])
     prw=rw.evaluate(look_up_Om0['zs_drawn'])*R0
     p_rate_new = prw/cw.cosmology.astropy_cosmo.efunc(look_up_Om0['zs_drawn'])/(1.+look_up_Om0['zs_drawn']) 
     #formulae in the appendix
     w_i = p_rate_new*pmw/(look_up_Om0['p_z_old']*look_up_Om0['p_m1_old']*look_up_Om0['p_m2_old'])
-    Omega_spectrum_new = freqs*(np.einsum("if,i->if",look_up_Om0['dEdfs'],w_i))
-    Omega_spectrum_new_avged = 1/rhoC/H0/1e9/year*np.mean(Omega_spectrum_new, axis=0)  
+    Omega_spectrum_new = np.einsum("if,i->if",look_up_Om0['dEdfs'],w_i)
+    Omega_spectrum_new_avged = 1/rhoC/H0/1e9/year*freqs*np.mean(Omega_spectrum_new, axis=0)  
+ 
     Omega_f = Omega_spectrum_new_avged
     return Omega_f

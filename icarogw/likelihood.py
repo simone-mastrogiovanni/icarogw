@@ -151,20 +151,27 @@ class Poisson_times_Stochastic_CBC_likelihood(hierarchical_likelihood):
     def log_likelihood(self):
         hierarchical_log_likelihood = super().log_likelihood()
         stochastic_log_likelihood = self.stochastic_log_likelihood()
-        return hierarchical_log_likelihood + stochastic_log_likelihood
+        #return hierarchical_log_likelihood + stochastic_log_likelihood
+        return stochastic_log_likelihood
     def stochastic_log_likelihood(self):
-        Cf = self.stochastic_data['Cf']
-        sigma2s = self.stochastic_data['sigma2s']
+        import time 
+        Cf = self.stochastic_data['Cf']*np.power(self.parameters['H0']/100,-2)
+        sigma2s = self.stochastic_data['sigma2s']*np.power(self.parameters['H0']/100,-4)
         # Rate model is updated from the call of the poisson likelihood
+
         omega_gw = spectral_siren_vanilla_omega_gw(self.freqs, self.look_up_Om0, self.rate_model)
 
         # likelihood in eq. 23
         diff = omega_gw - Cf
-        log_stoch = -0.5 * np.sum(((diff**2.) / sigma2s))
-
+        log_stoch = -0.5 * np.sum(((diff**2.) / sigma2s)) -0.5*np.sum(np.log(2*np.pi*(sigma2s)))
         # Controls on the value of the log-likelihood. If the log-likelihood is -inf, then set it to the smallest
         # python value 1e-309
-        log_stoch = np.nan_to_num(log_stoch, nan=-np.inf)
+        if log_stoch == np.inf:
+            raise ValueError('LOG-likelihood must be smaller than infinite')
+        if np.isnan(log_stoch):
+            log_stoch = float(np.nan_to_num(-np.inf))
+        else:
+            log_stoch = float(np.nan_to_num(log_stoch))
         
         return float(cp2np(log_stoch))
 
