@@ -35,6 +35,37 @@ class mixed_mass_redshift_evolving(object):
         xp = get_module_array(m)
         return xp.log(self.pdf(m,z))
 
+class mixed_mass_redshift_evolving_model_trunc(object):
+
+    def __init__(self,mw):
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
+        self.mw_red_ind = mw
+
+    def update(self,**kwargs):
+        self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+
+    def pdf(self,m,z):
+        xp = get_module_array(m)
+        wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
+        muz = self.mu_z0 + self.mu_z1*z
+        sigmaz = self.sigma_z0 + self.sigma_z1*z
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+
+        if xp.any((muz - 3*sigmaz) < 0):    # Check that the gaussian peak excludes negative values for the masses at 3 sigma
+            return xp.nan # Return nans as the log-likelihood put them at -inf
+        else:
+            return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+    
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+
 
 class mixed_mass_redshift_evolving_sigmoid(object):
 
