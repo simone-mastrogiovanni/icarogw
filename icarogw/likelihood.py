@@ -151,8 +151,7 @@ class Poisson_times_Stochastic_CBC_likelihood(hierarchical_likelihood):
     def log_likelihood(self):
         hierarchical_log_likelihood = super().log_likelihood()
         stochastic_log_likelihood = self.stochastic_log_likelihood()
-        #return hierarchical_log_likelihood + stochastic_log_likelihood
-        return stochastic_log_likelihood
+        return hierarchical_log_likelihood + stochastic_log_likelihood
     def stochastic_log_likelihood(self):
         import time 
         Cf = self.stochastic_data['Cf']*np.power(self.parameters['H0']/100,-2)
