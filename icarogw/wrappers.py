@@ -57,15 +57,13 @@ class mixed_mass_redshift_evolving_sigmoid(object):
     def pdf(self,m,z):
 
         xp = get_module_array(m)
+        sx = get_module_array_scipy(m)
         wz = _mixed_sigmoid_function(z, self.zt, self.delta_zt, self.mix_z0)
-        muz = self.mu_z0 + self.mu_z1*z
+        muz = self.mu_z0 +  self.mu_z1*z
         sigmaz = self.sigma_z0 + self.sigma_z1*z
-        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
-
-        if xp.any((muz - 3*sigmaz) < 0):    # Check that the gaussian peak excludes negative values for the masses at 3 sigma
-            return xp.nan
-        else:
-            return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+        a, b = (0. - muz) / sigmaz, (xp.inf - muz) / sigmaz 
+        gaussian_part = sx.stats.truncnorm.pdf(m,a,b,loc=muz,scale=sigmaz)
+        return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)

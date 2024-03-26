@@ -68,7 +68,7 @@ def _lowpass_filter(mass, mmax, delta_max):
 
 def _mixed_sigmoid_function(x, xt, delta_xt, mix_x0):
 
-    sigma = mix_x0 / (1 + np.exp((x-xt) * delta_xt))
+    sigma = mix_x0 / (1 + np.exp((x-xt)/delta_xt))
 
     return sigma
 
