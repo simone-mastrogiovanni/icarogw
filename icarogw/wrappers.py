@@ -1,37 +1,105 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
-from .cosmology import  md_rate, powerlaw_rate
+from .cosmology import  md_rate, powerlaw_rate, beta_rate, beta_rate_line
 from .priors import LowpassSmoothedProb, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb
-from .priors import  PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
-from .priors import _lowpass_filter 
+from .priors import  EvolvingPowerLawPeak, PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, conditional_2dimz_pdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
+from .priors import _lowpass_filter, _mixed_sigmoid_function
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
 
+
 class mixed_mass_redshift_evolving(object):
+
     def __init__(self,mw):
         self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
         self.mw_red_ind = mw
+
     def update(self,**kwargs):
         self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
-        self.zt=kwargs['zt']
-        self.delta_zt=kwargs['delta_zt']
-        self.mu_z0=kwargs['mu_z0']
-        self.mu_z1=kwargs['mu_z1']
-        self.sigma_z0=kwargs['sigma_z0']
-        self.sigma_z1=kwargs['sigma_z1']
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+
     def pdf(self,m,z):
         xp = get_module_array(m)
-        sx = get_module_array_scipy(m)
         wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
-        muz=self.mu_z0+self.mu_z1*z
-        sigmaz=self.sigma_z0+self.sigma_z1*z
-        min_point = (0.-muz)/(sigmaz*xp.sqrt(2.))
-        normz = 0.5*(1-sx.special.erf(min_point))
-        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz)*xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
-        return wz*self.mw_red_ind.pdf(m)+(1-wz)*gaussian_part
+        muz = self.mu_z0 + self.mu_z1*z
+        sigmaz = self.sigma_z0 + self.sigma_z1*z
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+        return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+    
     def log_pdf(self,m,z):
         xp = get_module_array(m)
         return xp.log(self.pdf(m,z))
+
+class mixed_mass_redshift_evolving_model_trunc(object):
+
+    def __init__(self,mw):
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
+        self.mw_red_ind = mw
+
+    def update(self,**kwargs):
+        self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+
+    def pdf(self,m,z):
+        xp = get_module_array(m)
+        wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
+        muz = self.mu_z0 + self.mu_z1*z
+        sigmaz = self.sigma_z0 + self.sigma_z1*z
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+
+        if xp.any((muz - 3*sigmaz) < 0):    # Check that the gaussian peak excludes negative values for the masses at 3 sigma
+            return xp.nan # Return nans as the log-likelihood put them at -inf
+        else:
+            return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+    
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+
+
+class mixed_mass_redshift_evolving_sigmoid(object):
+
+    def __init__(self,mw):
+        
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1', 'mix_z0']
+        self.mw_red_ind = mw
+
+    def update(self,**kwargs):
+
+        self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+        self.mix_z0 = kwargs['mix_z0']
+
+    def pdf(self,m,z):
+
+        xp = get_module_array(m)
+        sx = get_module_array_scipy(m)
+        wz = _mixed_sigmoid_function(z, self.zt, self.delta_zt, self.mix_z0)
+        muz = self.mu_z0 +  self.mu_z1*z
+        sigmaz = self.sigma_z0 + self.sigma_z1*z
+        a, b = (0. - muz) / sigmaz, (xp.inf - muz) / sigmaz 
+        gaussian_part = sx.stats.truncnorm.pdf(m,a,b,loc=muz,scale=sigmaz)
+        return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+    
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+
 
 # A parent class for the rate
 # LVK Reviewed
@@ -54,6 +122,18 @@ class rateevolution_Madau(rate_default):
         self.population_parameters=['gamma','kappa','zp']
     def update(self,**kwargs):
         self.rate=md_rate(**kwargs)
+
+class rateevolution_beta(rate_default):
+    def __init__(self):
+        self.population_parameters=['a','b','c']
+    def update(self,**kwargs):
+        self.rate=beta_rate(**kwargs)
+
+class rateevolution_beta_line(rate_default):
+    def __init__(self):
+        self.population_parameters=['a','b','c','d']
+    def update(self,**kwargs):
+        self.rate=beta_rate_line(**kwargs)
 
 # LVK Reviewed
 class FlatLambdaCDM_wrap(object):
@@ -147,6 +227,12 @@ class pm1m2_prob(object):
         return self.prior.pdf(mass_1_source,mass_2_source)
     def log_pdf(self,mass_1_source,mass_2_source):
         return self.prior.log_pdf(mass_1_source,mass_2_source)
+    
+class pm1m2z_prob(object):
+    def pdf(self,mass_1_source,mass_2_source,z):
+        return self.prior.pdf(mass_1_source,mass_2_source,z)
+    def log_pdf(self,mass_1_source,mass_2_source,z):
+        return self.prior.log_pdf(mass_1_source,mass_2_source,z)
 
 class massprior_PowerLaw(pm_prob):
     def __init__(self):
@@ -175,6 +261,20 @@ class massprior_MultiPeak(pm_prob):
                                              kwargs['lambda_g'],kwargs['lambda_g_low'],kwargs['mu_g_low'],
                                              kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
                                              kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high'])
+        
+class massprior_EvolvingPowerLawPeak(object):
+    def __init__(self,mw):
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
+        self.mw_nonevolving = mw
+    def update(self,**kwargs):
+        self.mw_nonevolving.update(**{key:kwargs[key] for key in self.mw_nonevolving.population_parameters})
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+        self.prior = EvolvingPowerLawPeak(self.mw_nonevolving, self.zt, self.delta_zt, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
 
 class m1m2_conditioned(pm1m2_prob):
     def __init__(self,wrapper_m):
@@ -185,6 +285,16 @@ class m1m2_conditioned(pm1m2_prob):
         p1 = self.wrapper_m.prior
         p2 = PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta'])
         self.prior=conditional_2dimpdf(p1,p2)
+
+class m1m2_conditioned_lowpass_m2(pm1m2z_prob):
+    def __init__(self,wrapper_m):
+        self.population_parameters = wrapper_m.population_parameters+['beta']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
+        p1 = self.wrapper_m.prior
+        p2 = LowpassSmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
+        self.prior=conditional_2dimz_pdf(p1,p2)
 
 class m1m2_conditioned_lowpass(pm1m2_prob):
     def __init__(self,wrapper_m):

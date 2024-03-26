@@ -66,6 +66,12 @@ def _lowpass_filter(mass, mmax, delta_max):
     to_ret[select_one]=1.
     return to_ret
 
+def _mixed_sigmoid_function(x, xt, delta_xt, mix_x0):
+
+    sigma = mix_x0 / (1 + np.exp((x-xt)/delta_xt))
+
+    return sigma
+
 # LVK Reviewed
 def _highpass_filter(mass, mmin,delta_m):
     '''
@@ -463,6 +469,24 @@ class conditional_2dimpdf(object):
         x1samp=np.interp(randomcdf1,cdfeval1,sarray1)
         x2samp=np.interp(randomcdf2*self.pdf2.cdf(x1samp),cdfeval2,sarray2)
         return x1samp,x2samp
+    
+class conditional_2dimz_pdf(object):
+    
+    def __init__(self,pdf1z,pdf2):
+        self.pdf1z=pdf1z
+        self.pdf2=pdf2
+
+    def log_pdf1_z_marginalized(self,x1,zi):
+        self.pdf1=self.pdf1z.log_pdf_z_marginalized(x1,zi)
+
+    def log_pdf(self,x1,x2):
+        y=self.pdf1+self.pdf2.log_pdf(x2)-self.pdf2.log_cdf(x1)
+        return y 
+    
+    def pdf(self,x1,x2):
+        xp = get_module_array(x1)
+        return xp.exp(self.log_pdf(x1,x2))
+    
 
 # LVK Reviewed
 class LowpassSmoothedProb(basic_1dimpdf):
@@ -716,6 +740,41 @@ def PL_normfact(minpl,maxpl,alpha):
     else:
         norm_fact=(np.power(maxpl,alpha+1.)-np.power(minpl,alpha+1))/(alpha+1)
     return norm_fact
+
+class EvolvingPowerLawPeak(object):
+
+    def __init__(self,mass_wrapper,zt,delta_zt,mu_z0,mu_z1,sigma_z0,sigma_z1):
+        self.mass_wrapper = mass_wrapper
+        self.zt = zt
+        self.delta_zt = delta_zt
+        self.mu_z0 = mu_z0
+        self.mu_z1 = mu_z1
+        self.sigma_z0 = sigma_z0
+        self.sigma_z1 = sigma_z1
+
+    def pdf(self,x,z):
+        xp = get_module_array(x)
+        wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
+        muz = self.mu_z0+self.mu_z1*z
+        sigmaz = self.sigma_z0+self.sigma_z1*z
+        gaussian = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((x-muz)/sigmaz,2.))
+        toret = wz*self.mass_wrapper.pdf(x) + (1-wz)*gaussian   # w(z)*PL + (1-w(z))*G(mug(z),sigmag(z))
+        return toret
+    
+    def log_pdf(self,x,z):
+        xp = get_module_array(x)
+        return xp.log(self.pdf(x,z))
+    
+    def pdf_z_marginalized(self,x,z):
+        xp = get_module_array(x)
+        z_array = np.linspace(z.min(),z.max(),1000)
+        toret   = xp.trapz(self.pdf(x,z), z_array, axis=0)
+        return toret
+    
+    def log_pdf_z_marginalized(self,x,z):
+        xp = get_module_array(x)
+        toret   = xp.log(self.pdf_z_marginalized(x,z))
+        return toret
 
 # LVK Reviewed
 class PowerLaw(basic_1dimpdf):

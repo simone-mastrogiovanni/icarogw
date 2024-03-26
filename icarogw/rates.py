@@ -549,7 +549,6 @@ class CBC_rate_m1_given_redshift_q(object):
             
         return log_out
 
-
 class CBC_rate_m1_q(object):
     def __init__(self,cosmology_wrapper,mass_wrapper,
                  q_wrapper,rate_wrapper,spin_wrapper=None,scale_free=False):
@@ -655,7 +654,113 @@ class CBC_rate_m1_q(object):
             log_out = log_weights
             
         return log_out
+    
+class CBC_rate_m1_given_redshift_m2(object):
+    def __init__(self,cosmology_wrapper,mass_redshift_wrapper,
+                 mass2_wrapper,rate_wrapper,spin_wrapper=None,scale_free=False):
+        
+        self.cw = cosmology_wrapper
+        self.m1zw = mass_redshift_wrapper
+        self.m2w = mass2_wrapper
+        self.rw = rate_wrapper
+        self.sw = spin_wrapper
+        self.scale_free = scale_free
+        
+        if scale_free:
+            self.population_parameters = self.cw.population_parameters+self.m1zw.population_parameters+self.rw.population_parameters+self.m2w.population_parameters
+        else:
+            self.population_parameters = self.cw.population_parameters+self.m1zw.population_parameters+self.rw.population_parameters+self.m2w.population_parameters + ['R0']
+            
+        event_parameters = ['mass_1', 'mass_2', 'luminosity_distance']
+        
+        if self.sw is not None:
+            self.population_parameters = self.population_parameters+self.sw.population_parameters
+            event_parameters = event_parameters + self.sw.event_parameters
 
+        self.PEs_parameters = event_parameters.copy()
+        self.injections_parameters = event_parameters.copy()
+            
+    def update(self,**kwargs):
+        '''
+        This method updates the population models encoded in the wrapper. 
+        
+        Parameters
+        ----------
+        kwargs: flags
+            The kwargs passed should be the population parameters given in self.population_parameters
+        '''
+        self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
+        self.m1zw.update(**{key: kwargs[key] for key in self.m1zw.population_parameters})
+        self.m2w.update(**{key: kwargs[key] for key in self.m2w.population_parameters})
+        self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
+        
+        if self.sw is not None:
+            self.sw.update(**{key: kwargs[key] for key in self.sw.population_parameters})
+            
+        if not self.scale_free:
+            self.R0 = kwargs['R0']
+        
+    def log_rate_PE(self,prior,**kwargs):
+        '''
+        This method calculates the weights (CBC merger rate per year at detector) for the posterior samples.
+        
+        Parameters
+        ----------
+        prior: array
+            Prior written in terms of the variables identified by self.event_parameters
+        kwargs: flags
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+        '''
+        xp = get_module_array(prior)
+
+        ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
+        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
+        
+        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
+        # FIXME: Need to marginalize for m2 distribution
+        log_weights=self.m1zw.log_pdf(ms1,z)+self.m2w.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
+        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
+        
+        if self.sw is not None:
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
+            
+        if not self.scale_free:
+            log_out = log_weights + xp.log(self.R0)
+        else:
+            log_out = log_weights
+            
+        return log_out
+    
+    def log_rate_injections(self,prior,**kwargs):
+        '''
+        This method calculates the weights (CBC merger rate per year at detector) for the injections.
+        
+        Parameters
+        ----------
+        prior: array
+            Prior written in terms of the variables identified by self.event_parameters
+        kwargs: flags
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+        '''
+        xp = get_module_array(prior)
+        
+        ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
+        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
+        
+        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
+        # FIXME: Need to marginalize for m2 distribution
+        log_weights=self.m1zw.log_pdf(ms1,z)+self.m2w.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
+        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
+        
+        if self.sw is not None:
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
+            
+        if not self.scale_free:
+            log_out = log_weights + xp.log(self.R0)
+        else:
+            log_out = log_weights
+            
+        return log_out
 
 # LVK Reviewed
 class CBC_vanilla_rate(object):

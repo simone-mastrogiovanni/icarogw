@@ -2,6 +2,7 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from icarogw import cupy_pal
 from scipy.integrate import cumtrapz
 import mpmath
+import scipy.stats, scipy.misc
 
 COST_C= 299792.458 # Speed of light in km/s
 
@@ -625,6 +626,44 @@ class md_rate(basic_redshift_rate):
         xp = get_module_array(z)
         return xp.log1p(xp.power(1+self.zp,-self.gamma-self.kappa))+self.gamma*xp.log1p(z)-xp.log1p(xp.power((1+z)/(1+self.zp),self.gamma+self.kappa))
 
+class beta_rate():
+    '''
+    Class for a beta distribution redshift rate
+    '''
+    def __init__(self,a,b,c):
+        self.a = a
+        self.b = b
+        self.c = c
+    def log_evaluate(self,z):
+        return self.c * scipy.stats.beta.pdf(z, self.a, self.b)    # We want the log(rate) to be a beta distribution
+
+class beta_rate_line():
+    '''
+    Class for a beta distribution redshift rate with a line C1 attached from z=d
+    '''
+    def __init__(self,a,b,c,d):
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+    def beta_array(self,z):
+        return self.c * scipy.stats.beta.pdf(z, self.a, self.b)    # We want the log(rate) to be a beta distribution
+    def log_evaluate(self,z):
+        xp = get_module_array(z)
+        left = self.beta_array(z)
+        right = scipy.misc.derivative(self.beta_array, self.d, dx=1e-6) * (z - self.d) + self.beta_array(self.d)
+        if z.ndim == 1:
+            res = xp.empty(len(z))
+            idx = xp.array([z <= self.d]).sum()  
+            res[:idx] = left[ z <= self.d]
+            res[idx:] = right[z >  self.d]
+        else:
+            res = xp.empty((len(z), len(z[0])))
+            for i,zi in enumerate(z):
+                idx = xp.array([zi <= self.d]).sum()
+                res[i][:idx] = left[i][ zi <= self.d]
+                res[i][idx:] = right[i][zi >  self.d]
+        return res
 
 # LVK Reviewed
 class basic_absM_rate(object):
