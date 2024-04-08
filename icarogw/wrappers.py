@@ -328,6 +328,23 @@ class m1m2_paired_massratio_dip(pm1m2_prob):
         
         self.prior=paired_2dimpdf(p,pairing_function)
 
+
+class m1m2_paired(pm1m2_prob):
+    def __init__(self,wrapper_m):
+        self.population_parameters = wrapper_m.population_parameters + ['beta']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
+    
+        def pairing_function(m1,m2,beta=kwargs['beta']):
+            xp = get_module_array(m1)
+            q = m2/m1
+            toret = xp.power(q,beta)
+            toret[q>1] = 0.
+            return toret
+        self.prior=paired_2dimpdf(self.wrapper_m.prior,pairing_function)
+
+
 class massprior_BinModel2d(pm1m2_prob):
     def __init__(self, n_bins_1d):
         self.population_parameters=['mmin','mmax']
