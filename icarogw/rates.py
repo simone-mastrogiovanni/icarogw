@@ -979,6 +979,63 @@ class CBC_vanilla_rate(object):
             
         return log_out
 
+
+class CBC_vanilla_rate_spins(CBC_vanilla_rate):
+    def __init__(self,cosmology_wrapper,mass_wrapper,rate_wrapper,spin_wrapper=None,scale_free=False):
+        
+        super().__init__(cosmology_wrapper,mass_wrapper,
+                         rate_wrapper,spin_wrapper=spin_wrapper,
+                         scale_free=scale_free)
+                
+    def log_rate_PE(self,prior,**kwargs):
+        '''
+        This method calculates the weights (CBC merger rate per year at detector) for the posterior samples.
+        
+        Parameters
+        ----------
+        prior: array
+            Prior written in terms of the variables identified by self.event_parameters
+        kwargs: flags
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+        '''
+        xp = get_module_array(prior)
+        
+        ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology) 
+        log_dVc_dz=xp.log(self.cw.cosmology.dVc_by_dzdOmega_at_z(z)*4*xp.pi)
+        
+        # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
+        log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+log_dVc_dz \
+        -xp.log(prior)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log1p(z)
+        
+        if self.sw is not None:
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters}
+                                         ,mass_1_source=ms1,mass_2_source=ms2)
+            
+        if not self.scale_free:
+            log_out = log_weights + xp.log(self.R0)
+        else:
+            log_out = log_weights
+            
+        return log_out
+    
+    def log_rate_injections(self,prior,**kwargs):
+        '''
+        This method calculates the weights (CBC merger rate per year at detector) for the injections.
+        
+        Parameters
+        ----------
+        prior: array
+            Prior written in terms of the variables identified by self.event_parameters
+        kwargs: flags
+            The kwargs are identified by self.event_parameters. Note that if the prior is scale-free, the overall normalization will not be included.
+        '''
+        
+        return self.log_rate_PE(prior,**kwargs)
+
+
+
+
+
 # LVK Reviewed
 class CBC_catalog_vanilla_rate(object):
     '''
