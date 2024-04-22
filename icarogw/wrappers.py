@@ -372,7 +372,7 @@ class spinprior_default_evolving_gaussian(object):
 
     def update(self,**kwargs):
         self.mu_chi = kwargs['mu_chi']
-        self.sigma_chi = kwargs['mu_chi']
+        self.sigma_chi = kwargs['sigma_chi']
         self.mu_dot = kwargs['mu_dot']
         self.sigma_dot = kwargs['sigma_dot']     
         self.csi_spin = kwargs['csi_spin']
@@ -422,7 +422,7 @@ class spinprior_default_beta_window_gaussian(object):
         self.beta_pdf_chi = BetaDistribution(self.alpha_chi,self.beta_chi)
         
         self.mu_chi = kwargs['mu_chi']
-        self.sigma_chi = kwargs['mu_chi']
+        self.sigma_chi = kwargs['sigma_chi']
         self.csi_spin = kwargs['csi_spin']
         self.gaussian_pdf_chi = TruncatedGaussian(kwargs['mu_chi'],kwargs['sigma_chi'],0.,1.)
 
@@ -515,7 +515,7 @@ class spinprior_default_beta_window_gaussian_angular(object):
         self.beta_pdf_chi = BetaDistribution(self.alpha_chi,self.beta_chi)
         
         self.mu_chi = kwargs['mu_chi']
-        self.sigma_chi = kwargs['mu_chi']
+        self.sigma_chi = kwargs['sigma_chi']
         self.gaussian_pdf_chi = TruncatedGaussian(kwargs['mu_chi'],kwargs['sigma_chi'],0.,1.)
 
         self.mt, self.delta_mt, self.mix_f = kwargs['mt'], kwargs['delta_mt'], kwargs['mix_f']
