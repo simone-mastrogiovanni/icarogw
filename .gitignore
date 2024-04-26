@@ -4,3 +4,4 @@ icarogw.egg-info
 .ipynb_checkpoints
 icarogw/.ipynb_checkpoints
 icarogw/__pycache__
+.DS_Store
