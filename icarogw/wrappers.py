@@ -381,16 +381,17 @@ class spinprior_gaussian(object):
         xp = get_module_array(chi_eff)
         return xp.exp(self.log_pdf(chi_eff,chi_p))
       
-class spinprior_ECOs(object):
-    def __init__(self):
+class spinprior_ECOs_totally_reflective(object):
+    def __init__(self,q=1.):
+        # q=1 is the polar case, q = 2 is the axial case, m=2 fixed
+        self.q=q
         self.population_parameters=['alpha_chi','beta_chi','eps', 'f_eco', 'sigma_chi_ECO']
         self.event_parameters=['chi_1','chi_2'] 
         self.name='DEFAULT'
         
     def get_chi_crit(self, eps):
-        xp = get_module_array(eps)
-        q = 1. # Value for polar perturbations, more conservative
-        return xp.pi*(1.+q)/(2*xp.abs(xp.log10(eps)))
+        xp = get_module_array(eps)   
+        return xp.pi*(1.+self.q)/(2*xp.abs(xp.log(eps)))
 
     def update(self,**kwargs):
         self.alpha_chi = kwargs['alpha_chi']
@@ -404,7 +405,7 @@ class spinprior_ECOs(object):
             
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
         self.truncatedbeta_pdf = TruncatedBetaDistribution(self.alpha_chi,self.beta_chi,self.chi_crit)
-        self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., 1.)
+        self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., self.chi_crit)
         self.lambda_eco = 1-self.beta_pdf.cdf(np.array([self.get_chi_crit(self.eps)]))[0]
         
         

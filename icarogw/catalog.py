@@ -60,14 +60,14 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
     if ptype=='uniform':
         
         # higher limit for the integration. If it is localized  partialy above z_cut, it counts less
-        zvalmax=zobs+Numsigma*sigmaz
+        zvalmax=np.minimum(zobs+5.*sigmaz,cosmology.zmax)
         if zvalmax<=zvalmin:
             return xp.zeros_like(z)
     
         prior_eval=4*xp.pi*cosmology.dVc_by_dzdOmega_at_z(z)*((z>=(zobs-Numsigma*sigmaz)) & (z<=(zobs+Numsigma*sigmaz)))/(cosmology.z2Vc(zvalmax)-cosmology.z2Vc(zvalmin))
     elif ptype=='gaussian':
         
-        zvalmax=zobs+5.*sigmaz
+        zvalmax=np.minimum(zobs+5.*sigmaz,cosmology.zmax)
         if zvalmax<=zvalmin:
             return xp.zeros_like(z)
     
@@ -87,7 +87,7 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
         
     elif ptype=='gaussian_nocom':
         
-        zvalmax=zobs+5.*sigmaz
+        zvalmax=np.minimum(zobs+5.*sigmaz,cosmology.zmax)
         if zvalmax<=zvalmin:
             return xp.zeros_like(z)
     
@@ -384,6 +384,10 @@ class galaxy_catalog(object):
         
         self.sch_fun=galaxy_MF(band=self.hdf5pointer['catalog'].attrs['band'])
         self.sch_fun.build_effective_number_density_interpolant(epsilon)
+
+        # If zcut is none, it uses the maximum of the cosmology
+        if zcut is None:
+            zcut = cosmo_ref.zmax
         
         # Overrides the num of sigma for the gaussian
         if (ptype == 'gaussian') | (ptype == 'gaussian_nocom'):
@@ -412,9 +416,9 @@ class galaxy_catalog(object):
             zcut = cosmo_ref.zmax
         
         # Selects all the galaxies that have support below zcut and above 1e-6
-        idx_in_range = np.where((cat_data['z'][:]-Numsigma*cat_data['sigmaz'][:]<=zcut) & (cat_data['z'][:]+Numsigma*cat_data['sigmaz'][:]>=1e-6))[0]
+        idx_in_range = np.where(((cat_data['z'][:]-Numsigma*cat_data['sigmaz'][:])<=zcut) & ((cat_data['z'][:]+Numsigma*cat_data['sigmaz'][:])>=1e-6))[0]
         if len(idx_in_range)==0:
-            raise ValueError('There are no galaxies in the redshift range 1e-6 - {:f}'.format(maxz))
+            raise ValueError('There are no galaxies in the redshift range 1e-6 - {:f}'.format(zmax))
                 
         interpolation_width = np.empty(len(idx_in_range),dtype=np.float32)
         j = 0
@@ -422,7 +426,7 @@ class galaxy_catalog(object):
             zmin = np.max([cat_data['z'][i]-Numsigma*cat_data['sigmaz'][i],1e-6])
             zmax = np.min([cat_data['z'][i]+Numsigma*cat_data['sigmaz'][i],zcut])
             if zmax>=cosmo_ref.zmax:
-                print(minz,maxz)
+                print(zmin,zmax)
                 raise ValueError('The maximum redshift for interpolation is too high w.r.t the cosmology class')        
             interpolation_width[j]=zmax-zmin
             j+=1
