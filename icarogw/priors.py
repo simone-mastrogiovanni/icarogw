@@ -67,10 +67,24 @@ def _lowpass_filter(mass, mmax, delta_max):
     return to_ret
 
 def _mixed_sigmoid_function(x, xt, delta_xt, mix_x0):
-
     sigma = mix_x0 / (1 + np.exp((x-xt) * delta_xt))
-
     return sigma
+
+def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
+    sigma = sigma =  mix_x1 + (mix_x0 - mix_x1) / (1 + np.exp((x-xt) * delta_xt))
+    return sigma
+
+def _mixed_linear_function(x, mix_x0, mix_x1):
+    func = (mix_x1 - mix_x0) * x + mix_x0
+    return func
+
+def _mixed_linear_sinusoid_function(x, mix_x0, mix_x1, amp, freq):
+    func = ((mix_x1 - mix_x0) * x + mix_x0) + (amp * np.sin(x * freq))
+    return func
+
+def _mixed_quadratic_function(x, mix_x0, mix_x1, x_saddle):
+    func = (mix_x1 - mix_x0)/(1 - 2 * x_saddle) * x * (x - 2 * x_saddle) + mix_x0
+    return func
 
 # LVK Reviewed
 def _highpass_filter(mass, mmin,delta_m):
@@ -576,6 +590,57 @@ class LowpassSmoothedProb(basic_1dimpdf):
         ravelled[ravelled>=(self.bottom+self.bottom_smooth)])-self.origin_prob.cdf(xp.array([self.bottom+self.bottom_smooth])))/self.norm
         
         return xp.log(toret).reshape(origin)
+    
+class LowpassSmoothedProbEvolving(basic_1dimpdf):
+    def __init__(self,originprob,bottomsmooth):
+        '''
+        Class for a smoother probability
+        
+        Parameters
+        ----------
+        originprob: class
+            Original probability class
+        bottomsmooth: float
+            float corresponding to the smooth of the prior
+        '''
+        self.origin_prob = copy.deepcopy(originprob)
+        self.bottom_smooth = bottomsmooth
+        self.bottom = originprob.minval
+        super().__init__(originprob.minval,originprob.maxval)
+        
+        # Find the values of the integrals in the region of the window function before and after the smoothing
+        int_array = np.linspace(originprob.minval,originprob.minval+bottomsmooth,1000)
+        integral_before = np.trapz(self.origin_prob.pdf(int_array),int_array, axis=0)
+        integral_now = np.trapz(self.origin_prob.pdf(int_array)*_highpass_filter(int_array, self.bottom,self.bottom_smooth),int_array, axis=0)
+
+        self.integral_before = integral_before
+        self.integral_now = integral_now
+        # Renormalize the smoother function.
+        self.norm = 1 - integral_before + integral_now
+        
+    def _log_pdf(self,x):
+        '''
+        Evaluates the log_pdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_pdf
+        
+        Returns
+        -------
+        log_pdf: xp.array
+        '''
+        xp = get_module_array(x)
+        # Return the window function
+        window = _highpass_filter(x, self.bottom,self.bottom_smooth)
+        # The line below might raise warnings for log(0), however python is able to handle it.
+        prob_ret = self.origin_prob.log_pdf(x)+xp.log(window)-xp.log(self.norm)
+        return prob_ret
+
+    def _pdf(self,x):
+        xp = get_module_array(x)
+        return xp.exp(self._log_pdf(x))
 
 class SmoothedPlusDipProb(basic_1dimpdf):
     def __init__(self, originprob, bottomsmooth, topsmooth, leftdip, rightdip, leftdipsmooth, rightdipsmooth, deep):
@@ -1016,6 +1081,57 @@ class TruncatedGaussian(basic_1dimpdf):
         min_point = (self.ming-self.meang)/(self.sigmag*xp.sqrt(2.))
         toret = xp.log((0.5*sx.special.erf(max_point)-0.5*sx.special.erf(min_point))/self.norm_fact)
         return toret
+    
+class PositiveGaussian(basic_1dimpdf):
+    
+    def __init__(self,meang,sigmag,ming,maxg):
+        '''
+        Class for a Truncated gaussian probability
+        
+        Parameters
+        ----------
+        meang,sigmag,ming,maxg: float
+            mean, sigma, min value and max value for the gaussian
+        '''
+        super().__init__(ming,maxg)
+        self.meang,self.sigmag,self.ming,self.maxg=meang,sigmag,ming,maxg
+        self.norm_fact= get_gaussian_norm(ming,maxg,meang,sigmag)
+        
+    def _log_pdf(self,x):
+        '''
+        Evaluates the log_pdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_pdf
+        
+        Returns
+        -------
+        log_pdf: xp.array
+        '''
+        xp = get_module_array(x)
+        return xp.log(self.sigmag)-0.5*xp.log(2*xp.pi)-0.5*xp.power((x-self.meang)/self.sigmag,2.)-xp.log(self.norm_fact)
+    
+    def _log_cdf(self,x):
+        '''
+        Evaluates the log_cdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_cdf
+        
+        Returns
+        -------
+        log_cdf: xp.array
+        '''
+        xp = get_module_array(x)
+        sx = get_module_array_scipy(x)
+        max_point = (x-self.meang)/(self.sigmag*xp.sqrt(2.))
+        min_point = (self.ming-self.meang)/(self.sigmag*xp.sqrt(2.))
+        return xp.log((0.5*sx.special.erf(max_point)-0.5*sx.special.erf(min_point))/self.norm_fact)
+
 
 # Overwrite most of the methods of the parent class
 # Idea from https://stats.stackexchange.com/questions/30588/deriving-the-conditional-distributions-of-a-multivariate-normal-distribution
@@ -1147,6 +1263,7 @@ class PowerLawGaussian(basic_1dimpdf):
         xp = get_module_array(x)
         toret=xp.log((1-self.lambdag)*self.PL.cdf(x)+self.lambdag*self.TG.cdf(x))
         return toret
+
 
 # LVK Reviewed
 class BrokenPowerLaw(basic_1dimpdf):
