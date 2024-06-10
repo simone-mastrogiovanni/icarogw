@@ -137,9 +137,18 @@ class large_galaxy_catalog(object):
             pixel = list_of_pixels[ip]
             bigbool = np.isfinite(np.vstack([og_catalog['catalog'][pixel][key][:] for key in fields_to_take]))
             tokeep = np.all(bigbool,axis=0)
-            subcatalog.create_group(pixel)
+            try:
+                subcatalog.create_group(pixel)
+            except:
+                print('Group {:s} Existing, continuing'.format(pixel))
+                pass
             for subkey in fields_to_take:
-                subcatalog[pixel].create_dataset(subkey,data=og_catalog['catalog'][pixel][subkey][tokeep])
+                try:
+                    subcatalog[pixel].create_dataset(subkey,data=og_catalog['catalog'][pixel][subkey][tokeep])
+                except:
+                    print('Dataset {:s} Existing, continuing'.format(subkey))
+                    pass
+                    
             subcatalog[pixel].attrs['N_galaxies'] = len(subcatalog[pixel][subkey])            
             catalog.attrs['checkpoint_clean']=ip+1
 
