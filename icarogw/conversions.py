@@ -687,7 +687,7 @@ def chi_p_from_spins(chi1, chi2, cos1, cos2, q):
     return to_ret
 
 # LVK Reviewed
-def radec2skymap(ra,dec,nside):
+def radec2skymap(ra,dec,nside,nest=False):
     '''
     Converts RA and DEC samples to a skymap with normalized probability, i.e. integral of skymap in dArea =1
     
@@ -710,7 +710,7 @@ def radec2skymap(ra,dec,nside):
     xp=get_module_array(ra)
     dOmega_sterad=4*xp.pi/npixels
     dOmega_deg2=xp.power(180/xp.pi,2.)*dOmega_sterad
-    indices = radec2indeces(ra,dec,nside)
+    indices = radec2indeces(ra,dec,nside,nest=nest)
     counts_map = xp.zeros(npixels)
     for indx in range(npixels):
         ind=xp.where(indices==indx)[0]
@@ -759,7 +759,7 @@ def M2L(M):
     return 3.0128e28*xp.power(10.,-0.4*M)
 
 # LVK Reviewed
-def radec2indeces(ra,dec,nside):
+def radec2indeces(ra,dec,nside,nest=False):
     '''
     Converts RA and DEC to healpy indeces
     
@@ -776,10 +776,10 @@ def radec2indeces(ra,dec,nside):
     '''
     theta = np.pi/2.0 - dec
     phi = ra
-    return hp.ang2pix(nside, theta, phi)
+    return hp.ang2pix(nside, theta, phi,nest=nest)
 
 # LVK Reviewed
-def indices2radec(indices,nside):
+def indices2radec(indices,nside,nest=False):
     '''
     Converts healpy indeces to RA DEC
     
@@ -796,7 +796,7 @@ def indices2radec(indices,nside):
         arrays with RA and DEC in radians
     '''
     
-    theta,phi= hp.pix2ang(nside,indices)
+    theta,phi= hp.pix2ang(nside,indices,nest=nest)
     return phi, np.pi/2.0-theta
 
 # LVK Reviewed

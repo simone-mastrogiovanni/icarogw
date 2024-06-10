@@ -545,46 +545,7 @@ class galaxy_MF(object):
                            ,left=effective_density_interpolant[0],right=effective_density_interpolant[-1])
         return xp.reshape(outp,origin)
 
-# LVK Reviewed
-class kcorr(object):
-    def __init__(self,band):
-        '''
-        A class to handle K-corrections
-        
-        Parameters
-        ----------
-        band: string
-            W1, K or bJ band. Others are not implemented
-        '''
-        self.band=band
-        if self.band not in ['W1','K','bJ']:
-            raise ValueError('Band not known, please use W1 or K or bJ')
-    def __call__(self,z):
-        '''
-        Evaluates the K-corrections at a given redshift, See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
-        
-        Parameters
-        ----------
-        z: xp.array
-            Redshift
-        
-        Returns
-        -------
-        k_corrections: xp.array
-        '''
-        xp = get_module_array(z)
-        if self.band == 'W1':
-            k_corr = -1*(4.44e-2+2.67*z+1.33*(z**2.)-1.59*(z**3.)) #From Maciej email
-        elif self.band == 'K':
-            # https://iopscience.iop.org/article/10.1086/322488/pdf 4th page lhs
-            to_ret=-6.0*xp.log10(1+z)
-            to_ret[z>0.3]=-6.0*xp.log10(1+0.3)
-            k_corr=-6.0*xp.log10(1+z)
-        elif self.band == 'bJ':
-            # Fig 5 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
-            # Note that these corrections also includes evolution corrections
-            k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
-        return k_corr
+
 
 # LVK Reviewed
 class basic_redshift_rate(object):

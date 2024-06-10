@@ -72,7 +72,7 @@ class CBC_mixte_pop_rate(object):
 # LVK Reviewed
 class CBC_catalog_vanilla_rate_skymap(object):
     
-    def __init__(self,catalog,cosmology_wrapper,rate_wrapper, average=False,scale_free=False):
+    def __init__(self,catalog,cosmology_wrapper,rate_wrapper,scale_free=False):
         '''
         A wrapper for the CBC rate model that make use of of just the luminosity distance and position of GW events.
         Useful if you generate PE from skymaps
@@ -90,7 +90,6 @@ class CBC_catalog_vanilla_rate_skymap(object):
         self.catalog = catalog
         self.cw = cosmology_wrapper
         self.rw = rate_wrapper
-        self.average = average
         self.scale_free = scale_free
         
         if scale_free:
@@ -134,7 +133,7 @@ class CBC_catalog_vanilla_rate_skymap(object):
         
         z = self.cw.cosmology.dl2z(kwargs['luminosity_distance'])
         dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
-                                                    ,dl=kwargs['luminosity_distance'],average=False)
+                                                    ,dl=kwargs['luminosity_distance'])
 
         # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
         dNgaleff=dNgal_cat+dNgal_bg
@@ -166,11 +165,9 @@ class CBC_catalog_vanilla_rate_skymap(object):
         sx = get_module_array_scipy(prior)
         
         z = self.cw.cosmology.dl2z(kwargs['luminosity_distance'])
-        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
-                                                    ,dl=kwargs['luminosity_distance'],average=self.average)
-
-        # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
-        dNgaleff=dNgal_cat+dNgal_bg
+        
+        # We assume the galaxy catalog empty to apply completeness correction
+        dNgaleff=self.catalog.sch_fun.background_effective_galaxy_density(np.array([-xp.inf]))*self.cw.cosmology.dVc_by_dzdOmega_at_z(z)
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
         log_weights=self.rw.rate.log_evaluate(z)+xp.log(dNgaleff) \
@@ -918,14 +915,13 @@ class CBC_catalog_vanilla_rate(object):
     scale_free: bool
         True if you want to use the model for scale-free likelihood (no R0)
     '''
-    def __init__(self,catalog,cosmology_wrapper,mass_wrapper,rate_wrapper,spin_wrapper=None, average=False,scale_free=False):
+    def __init__(self,catalog,cosmology_wrapper,mass_wrapper,rate_wrapper,spin_wrapper=None,scale_free=False):
         
         self.catalog = catalog
         self.cw = cosmology_wrapper
         self.mw = mass_wrapper
         self.rw = rate_wrapper
         self.sw = spin_wrapper
-        self.average = average
         self.scale_free = scale_free
         
         if scale_free:
@@ -976,7 +972,7 @@ class CBC_catalog_vanilla_rate(object):
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology)
         dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
-                                                    ,dl=kwargs['luminosity_distance'],average=False)
+                                                    ,dl=kwargs['luminosity_distance'])
 
         # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
         dNgaleff=dNgal_cat+dNgal_bg
@@ -1009,11 +1005,10 @@ class CBC_catalog_vanilla_rate(object):
         xp = get_module_array(prior)
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology)
-        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
-                                                    ,dl=kwargs['luminosity_distance'],average=self.average)
+        
 
-        # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
-        dNgaleff=dNgal_cat+dNgal_bg
+        # We assume the galaxy catalog empty to apply completeness correction
+        dNgaleff=self.catalog.sch_fun.background_effective_galaxy_density(np.array([-xp.inf]))*self.cw.cosmology.dVc_by_dzdOmega_at_z(z)
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
         log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+xp.log(dNgaleff) \
