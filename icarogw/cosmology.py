@@ -586,6 +586,23 @@ class md_rate(basic_redshift_rate):
     def log_evaluate(self,z):
         xp = get_module_array(z)
         return xp.log1p(xp.power(1+self.zp,-self.gamma-self.kappa))+self.gamma*xp.log1p(z)-xp.log1p(xp.power((1+z)/(1+self.zp),self.gamma+self.kappa))
+    
+class md_gamma_rate(basic_redshift_rate):
+    '''
+    Class for a MD + gamma distribution redshift rate
+    '''
+    def __init__(self, gamma, kappa, zp, a, b, c):
+        self.gamma = gamma
+        self.kappa = kappa
+        self.zp    = zp
+        self.a     = a
+        self.b     = b
+        self.c     = c
+    def log_evaluate(self,z):
+        xp = get_module_array(z)
+        md_dist    = xp.log1p(xp.power(1+self.zp,-self.gamma-self.kappa))+self.gamma*xp.log1p(z)-xp.log1p(xp.power((1+z)/(1+self.zp),self.gamma+self.kappa))
+        gamma_dist = self.c * scipy.stats.gamma.pdf(self.b * z, self.a)
+        return md_dist + gamma_dist
 
 class beta_rate():
     '''
