@@ -103,6 +103,10 @@ class posterior_samples_catalog(object):
         '''
         for i,event in enumerate(list(self.posterior_samples_dict.keys())):
             self.posterior_samples_dict[event].pixelize(nside)
+
+    def pixelize_with_catalog(self,catalog):
+        for i,event in enumerate(list(self.posterior_samples_dict.keys())):
+            self.posterior_samples_dict[event].pixelize_with_catalog(catalog)
             
     def reweight_PE(self,rate_wrapper,Nsamp,replace=True):
         '''
@@ -152,6 +156,9 @@ class posterior_samples(object):
         '''
         self.posterior_data['sky_indices'] = radec2indeces(self.posterior_data['right_ascension'],self.posterior_data['declination'],nside)
         self.nside=nside
+
+    def pixelize_with_catalog(self,catalog):
+        self.posterior_data['sky_indices'] = catalog.get_NUNIQ_pixel(self.posterior_data['right_ascension'],self.posterior_data['declination'])
         
     def cupyfy(self):
         ''' Converts all the posterior samples to cupy'''

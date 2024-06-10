@@ -7,11 +7,11 @@ conda create -n env_name python=3.10
 conda activate env_name
 
 ### Step 3: 
-mdkir dossier_icarogw
+mdkir dossier_icarogw  
 cd dossier_icarogw
 
 ### Step 4:
-git clone git@github.com:icarogw-developers/icarogw.git
+git clone git@github.com:icarogw-developers/icarogw.git  
 cd icarogw
 
 ### Step 5: (To switch to an other branch)
@@ -26,7 +26,7 @@ pip install . --force
 Add follow the instructions to add brew to the Path
 
 ### Step 8: 
-brew reinstall hdf5
+brew reinstall hdf5  
 export export HDF5_DIR=/opt/homebrew/Cellar/hdf5/1.14.3/
 
 ### Step 9:

@@ -35,6 +35,37 @@ class mixed_mass_redshift_evolving(object):
         xp = get_module_array(m)
         return xp.log(self.pdf(m,z))
 
+class mixed_mass_redshift_evolving_model_trunc(object):
+
+    def __init__(self,mw):
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
+        self.mw_red_ind = mw
+
+    def update(self,**kwargs):
+        self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+
+    def pdf(self,m,z):
+        xp = get_module_array(m)
+        wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
+        muz = self.mu_z0 + self.mu_z1*z
+        sigmaz = self.sigma_z0 + self.sigma_z1*z
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+
+        if xp.any((muz - 3*sigmaz) < 0):    # Check that the gaussian peak excludes negative values for the masses at 3 sigma
+            return xp.nan # Return nans as the log-likelihood put them at -inf
+        else:
+            return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+    
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+
 
 class mixed_mass_redshift_evolving_sigmoid(object):
 
@@ -57,15 +88,13 @@ class mixed_mass_redshift_evolving_sigmoid(object):
     def pdf(self,m,z):
 
         xp = get_module_array(m)
+        sx = get_module_array_scipy(m)
         wz = _mixed_sigmoid_function(z, self.zt, self.delta_zt, self.mix_z0)
-        muz = self.mu_z0 + self.mu_z1*z
+        muz = self.mu_z0 +  self.mu_z1*z
         sigmaz = self.sigma_z0 + self.sigma_z1*z
-        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
-
-        if xp.any((muz - 3*sigmaz) < 0):    # Check that the gaussian peak excludes negative values for the masses at 3 sigma
-            return xp.nan
-        else:
-            return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+        a, b = (0. - muz) / sigmaz, (xp.inf - muz) / sigmaz 
+        gaussian_part = sx.stats.truncnorm.pdf(m,a,b,loc=muz,scale=sigmaz)
+        return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)
@@ -420,18 +449,20 @@ class mass_ratio_prior_Gaussian(pm_prob):
         p1=TruncatedGaussian(kwargs['mu_q'],kwargs['sigma_q'],0.,1.)
         self.prior=p1
 
-class lowSmoothedwrapper(object):
+class mass_ratio_prior_Powerlaw(pm_prob):
+    def __init__(self):
+        self.population_parameters=['alpha_q']
+    def update(self,**kwargs):
+        self.prior=PowerLaw(0.,1.,kwargs['alpha_q'])
+
+class lowSmoothedwrapper(pm_prob):
    def __init__(self, mw):
         self.population_parameters = ['delta_m'] + mw.population_parameters
         self.mw = mw
    def update(self,**kwargs):
         self.mw.update(**{key:kwargs[key] for key in self.mw.population_parameters})
-        self.p1 = LowpassSmoothedProb(self.mw.prior,kwargs['delta_m'])
-   def pdf(self,m):
-        return self.p1.pdf(m)
-   def log_pdf(self,m):
-        return self.p1.log_pdf(m)
-
+        self.prior = LowpassSmoothedProb(self.mw.prior,kwargs['delta_m'])
+ 
 # A parent class for the standard mass probabilities
 # LVK Reviewed
 class pm1m2_prob(object):
@@ -538,6 +569,23 @@ class m1m2_paired_massratio_dip(pm1m2_prob):
         
         self.prior=paired_2dimpdf(p,pairing_function)
 
+
+class m1m2_paired(pm1m2_prob):
+    def __init__(self,wrapper_m):
+        self.population_parameters = wrapper_m.population_parameters + ['beta']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
+    
+        def pairing_function(m1,m2,beta=kwargs['beta']):
+            xp = get_module_array(m1)
+            q = m2/m1
+            toret = xp.power(q,beta)
+            toret[q>1] = 0.
+            return toret
+        self.prior=paired_2dimpdf(self.wrapper_m.prior,pairing_function)
+
+
 class massprior_BinModel2d(pm1m2_prob):
     def __init__(self, n_bins_1d):
         self.population_parameters=['mmin','mmax']
@@ -554,6 +602,146 @@ class massprior_BinModel2d(pm1m2_prob):
         )
         
         self.prior=pdf_dist
+
+
+
+class spinprior_default_evolving_gaussian(object):
+    def __init__(self):
+        self.population_parameters=['mu_chi','sigma_chi','mu_dot','sigma_dot'
+                                    ,'sigma_t','csi_spin']
+        self.event_parameters=['chi_1','chi_2','cos_t_1','cos_t_2']
+
+    def update(self,**kwargs):
+        self.mu_chi = kwargs['mu_chi']
+        self.sigma_chi = kwargs['sigma_chi']
+        self.mu_dot = kwargs['mu_dot']
+        self.sigma_dot = kwargs['sigma_dot']     
+        self.csi_spin = kwargs['csi_spin']
+        self.aligned_pdf = TruncatedGaussian(1.,kwargs['sigma_t'],-1.,1.)
+
+    def log_pdf(self,chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source):
+
+        xp = get_module_array(chi_1)
+        sx = get_module_array_scipy(chi_1)
+ 
+        mu_chi_1 = self.mu_chi + self.mu_dot*mass_1_source
+        sigma_chi_1 = self.sigma_chi + self.sigma_dot*mass_1_source
+        mu_chi_2 = self.mu_chi + self.mu_dot*mass_2_source
+        sigma_chi_2 = self.sigma_chi + self.sigma_dot*mass_2_source
+
+        a, b = (0. - mu_chi_1) / sigma_chi_1, (1. - mu_chi_1) / sigma_chi_1 
+        g1 = sx.stats.truncnorm.pdf(chi_1,a,b,loc=mu_chi_1,scale=sigma_chi_1)
+
+        a, b = (0. - mu_chi_2) / sigma_chi_2, (1. - mu_chi_2) / sigma_chi_2 
+        g2 = sx.stats.truncnorm.pdf(chi_2,a,b,loc=mu_chi_2,scale=sigma_chi_2)
+
+        log_angular_part = xp.logaddexp(xp.log1p(-self.csi_spin)+xp.log(0.25),
+                                    xp.log(self.csi_spin)+self.aligned_pdf.log_pdf(cos_t_1)+self.aligned_pdf.log_pdf(cos_t_2))
+
+        out = xp.log(g1)+xp.log(g2)+log_angular_part
+        
+        return out
+        
+    def pdf(self,chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source):
+        xp = get_module_array(chi_1)
+        return xp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source))
+
+class spinprior_default_beta_window_gaussian(object):
+    def __init__(self):
+        self.population_parameters= ['mt', 
+                                     'delta_mt','mix_f',
+                                     'alpha_chi','beta_chi',
+                                     'mu_chi','sigma_chi',
+                                     'sigma_t','csi_spin']
+        self.event_parameters=['chi_1','chi_2','cos_t_1','cos_t_2']
+    
+
+    def update(self,**kwargs):
+        
+        self.alpha_chi = kwargs['alpha_chi']
+        self.beta_chi = kwargs['beta_chi']
+        if (self.alpha_chi <= 1) | (self.beta_chi <= 1) :
+            raise ValueError('Alpha and Beta must be > 1') 
+        self.beta_pdf_chi = BetaDistribution(self.alpha_chi,self.beta_chi)
+        
+        self.mu_chi = kwargs['mu_chi']
+        self.sigma_chi = kwargs['sigma_chi']
+        self.csi_spin = kwargs['csi_spin']
+        self.gaussian_pdf_chi = TruncatedGaussian(kwargs['mu_chi'],kwargs['sigma_chi'],0.,1.)
+
+        self.mt, self.delta_mt, self.mix_f = kwargs['mt'], kwargs['delta_mt'], kwargs['mix_f']
+
+        self.aligned_pdf = TruncatedGaussian(1.,kwargs['sigma_t'],-1.,1.)
+
+    def log_pdf(self,chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source):
+        
+        xp = get_module_array(chi_1)
+        wz_1 = _mixed_sigmoid_function(mass_1_source, self.mt, self.delta_mt, self.mix_f)
+        wz_2 = _mixed_sigmoid_function(mass_2_source, self.mt, self.delta_mt, self.mix_f)
+
+        pdf_1 = wz_1*self.beta_pdf_chi.pdf(chi_1)+(1-wz_1)*self.gaussian_pdf_chi.pdf(chi_1)
+        pdf_2 = wz_2*self.beta_pdf_chi.pdf(chi_2)+(1-wz_2)*self.gaussian_pdf_chi.pdf(chi_2)
+
+        log_angular_part = xp.logaddexp(xp.log1p(-self.csi_spin)+xp.log(0.25),
+                                    xp.log(self.csi_spin)+self.aligned_pdf.log_pdf(cos_t_1)+self.aligned_pdf.log_pdf(cos_t_2))
+        
+        out = xp.log(pdf_1)+xp.log(pdf_2)+log_angular_part
+        
+        return out
+        
+    def pdf(self,chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source):
+        xp = get_module_array(chi_1)
+        return xp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source))
+
+
+class spinprior_default_beta_window_beta(object):
+    def __init__(self):
+        self.population_parameters= ['mt', 
+                                     'delta_mt','mix_f',
+                                     'alpha_chi_low','beta_chi_low',
+                                     'alpha_chi_high','beta_chi_high',
+                                     'sigma_t','csi_spin']
+        self.event_parameters=['chi_1','chi_2','cos_t_1','cos_t_2']
+    
+
+    def update(self,**kwargs):
+        
+        self.alpha_chi_low = kwargs['alpha_chi_low']
+        self.beta_chi_low = kwargs['beta_chi_low']
+        self.alpha_chi_high = kwargs['alpha_chi_high']
+        self.beta_chi_high = kwargs['beta_chi_high']
+        self.csi_spin = kwargs['csi_spin']
+        
+        if (self.alpha_chi_low <= 1) | (self.beta_chi_low <= 1) | (self.alpha_chi_high <= 1) | (self.beta_chi_high <= 1):
+            raise ValueError('Alpha and Beta must be > 1') 
+        
+        self.beta_pdf_chi_low = BetaDistribution(self.alpha_chi_low,self.beta_chi_low)
+        self.beta_pdf_chi_high = BetaDistribution(self.alpha_chi_high,self.beta_chi_high)
+
+        self.mt, self.delta_mt, self.mix_f = kwargs['mt'], kwargs['delta_mt'], kwargs['mix_f']
+
+        self.aligned_pdf = TruncatedGaussian(1.,kwargs['sigma_t'],-1.,1.)
+
+    def log_pdf(self,chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source):
+        
+        xp = get_module_array(chi_1)
+        wz_1 = _mixed_sigmoid_function(mass_1_source, self.mt, self.delta_mt, self.mix_f)
+        wz_2 = _mixed_sigmoid_function(mass_2_source, self.mt, self.delta_mt, self.mix_f)
+
+        pdf_1 = wz_1*self.beta_pdf_chi_low.pdf(chi_1)+(1-wz_1)*self.beta_pdf_chi_high.pdf(chi_1)
+        pdf_2 = wz_2*self.beta_pdf_chi_low.pdf(chi_2)+(1-wz_2)*self.beta_pdf_chi_high.pdf(chi_2)
+
+        log_angular_part = xp.logaddexp(xp.log1p(-self.csi_spin)+xp.log(0.25),
+                                    xp.log(self.csi_spin)+self.aligned_pdf.log_pdf(cos_t_1)+self.aligned_pdf.log_pdf(cos_t_2))
+        
+        out = xp.log(pdf_1)+xp.log(pdf_2)+log_angular_part
+        
+        return out
+        
+    def pdf(self,chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source):
+        xp = get_module_array(chi_1)
+        return xp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source))
+
         
 class spinprior_default(object):
     def __init__(self):
@@ -569,9 +757,13 @@ class spinprior_default(object):
         if (self.alpha_chi <= 1) | (self.beta_chi <= 1) :
             raise ValueError('Alpha and Beta must be > 1') 
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
+    
     def log_pdf(self,chi_1,chi_2,cos_t_1,cos_t_2):
         xp = get_module_array(chi_1)
-        return self.beta_pdf.log_pdf(chi_1)+self.beta_pdf.log_pdf(chi_2)+xp.log(self.csi_spin*self.aligned_pdf.pdf(cos_t_1)+(1.-self.csi_spin)*0.5)+xp.log(self.csi_spin*self.aligned_pdf.pdf(cos_t_2)+(1.-self.csi_spin)*0.5)
+        log_angular_part = xp.logaddexp(xp.log1p(-self.csi_spin)+xp.log(0.25),
+                                    xp.log(self.csi_spin)+self.aligned_pdf.log_pdf(cos_t_1)+self.aligned_pdf.log_pdf(cos_t_2))
+        return self.beta_pdf.log_pdf(chi_1)+self.beta_pdf.log_pdf(chi_2)+log_angular_part
+        
     def pdf(self,chi_1,chi_2,cos_t_1,cos_t_2):
         xp = get_module_array(chi_1)
         return xp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2))
@@ -593,16 +785,17 @@ class spinprior_gaussian(object):
         xp = get_module_array(chi_eff)
         return xp.exp(self.log_pdf(chi_eff,chi_p))
       
-class spinprior_ECOs(object):
-    def __init__(self):
+class spinprior_ECOs_totally_reflective(object):
+    def __init__(self,q=1.):
+        # q=1 is the polar case, q = 2 is the axial case, m=2 fixed
+        self.q=q
         self.population_parameters=['alpha_chi','beta_chi','eps', 'f_eco', 'sigma_chi_ECO']
         self.event_parameters=['chi_1','chi_2'] 
         self.name='DEFAULT'
         
     def get_chi_crit(self, eps):
-        xp = get_module_array(eps)
-        q = 1. # Value for polar perturbations, more conservative
-        return xp.pi*(1.+q)/(2*xp.abs(xp.log10(eps)))
+        xp = get_module_array(eps)   
+        return xp.pi*(1.+self.q)/(2*xp.abs(xp.log(eps)))
 
     def update(self,**kwargs):
         self.alpha_chi = kwargs['alpha_chi']
@@ -616,7 +809,7 @@ class spinprior_ECOs(object):
             
         self.beta_pdf = BetaDistribution(self.alpha_chi,self.beta_chi)
         self.truncatedbeta_pdf = TruncatedBetaDistribution(self.alpha_chi,self.beta_chi,self.chi_crit)
-        self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., 1.)
+        self.truncatedgaussian_pdf = TruncatedGaussian(self.chi_crit, self.sigma, 0., self.chi_crit)
         self.lambda_eco = 1-self.beta_pdf.cdf(np.array([self.get_chi_crit(self.eps)]))[0]
         
         
