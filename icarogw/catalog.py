@@ -96,8 +96,6 @@ def create_pixelated_catalog(outfile,nside,groups_dict,batch=100000,nest=False):
         pbar.update(batch)
         cat.attrs['checkpoint']=istart
 
-    del cat.attrs['checkpoint']
-
     cat.close()
     pbar.close()
 
@@ -118,34 +116,34 @@ class large_galaxy_catalog(object):
         
     def initialize_catalog(self,input_catalog,out_catalog,fields_to_take):
 
+        og_catalog = h5py.File(input_catalog,'r')
+        
         if not os.path.isfile(out_catalog):
-            shutil.copyfile(input_catalog,out_catalog)
-            catalog = h5py.File(out_catalog,'r+')
+            catalog = h5py.File(out_catalog,'w-')
             catalog.attrs['checkpoint_clean'] = 0
+            catalog.create_group('catalog')
+            catalog.create_dataset('filled_pixels',data=og_catalog['filled_pixels'][:])
+            for key in og_catalog.attrs.keys():
+                catalog.attrs[key]=og_catalog.attrs[key]
         else:
             catalog = h5py.File(out_catalog,'r+')
-        
+ 
         subcatalog = catalog['catalog']
-        list_of_pixels = list(subcatalog.keys())
+        list_of_pixels = list(og_catalog['catalog'].keys())
         iterator = np.arange(catalog.attrs['checkpoint_clean'],len(list_of_pixels),1).astype(int)
         
         # This for loop removes the galaxies with NaNs or inf as entries
         for ip in tqdm(iterator,desc='Removing galaxies with Nan values in specified fields'):
             pixel = list_of_pixels[ip]
-            for key in list(subcatalog[pixel].keys()):
-                # If the key is not in the field to take then continue
-                if key not in fields_to_take:
-                    del subcatalog[pixel][key]
-                    continue
-                tokeep=np.where(np.isfinite(subcatalog[pixel][key]))[0]
-                for subkey in list(subcatalog[pixel].keys()):
-                    arr = subcatalog[pixel][subkey][tokeep]
-                    del subcatalog[pixel][subkey]
-                    subcatalog[pixel].create_dataset(subkey,data=arr)
-            subcatalog[pixel].attrs['N_galaxies'] = len(subcatalog[pixel][subkey])
+            bigbool = np.isfinite(np.vstack([og_catalog['catalog'][pixel][key][:] for key in fields_to_take]))
+            tokeep = np.all(bigbool,axis=0)
+            subcatalog.create_group(pixel)
+            for subkey in fields_to_take:
+                subcatalog[pixel].create_dataset(subkey,data=og_catalog['catalog'][pixel][subkey][tokeep])
+            subcatalog[pixel].attrs['N_galaxies'] = len(subcatalog[pixel][subkey])            
             catalog.attrs['checkpoint_clean']=ip+1
-            
-            
+
+        og_catalog.close()
         self.hdf5pointer = catalog
         self.clear_empty_pixels()
 

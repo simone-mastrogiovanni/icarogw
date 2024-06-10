@@ -16,5 +16,5 @@ setuptools.setup(
     python_requires='>=3.10',
     packages=['icarogw'],
     install_requires=['attrs==23.1.0','tables==3.9.1','jupyterlab==4.0.8','bilby==2.2.0',
-                      'healpy==1.16.6','mpmath==1.3.0','ligo.skymap==1.1.2','ChainConsumer==1.0.2']
+                      'healpy==1.16.6','mpmath==1.3.0','ligo.skymap==1.1.2','ChainConsumer==1.0.2','mhealpy==0.3.3']
 )
