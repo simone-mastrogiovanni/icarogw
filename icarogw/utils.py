@@ -51,3 +51,36 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw',memory=10000,cpus=1,disk=10000):
             f.write('queue\n')
             f.close()
             _os.system('chmod a+x '+home_folder+'*.sh')
+
+
+def check_posterior_samples_and_prior(posterior_samples, prior):
+    """
+    This function asserts whether all entries of the posterior_samples
+    dictionary have the same length as the prior array. 
+
+    Parameters
+    ----------
+    posterior_samples: dict
+        Dictionary of all parameters
+    prior: array
+        Array of the probability of the prior used for parameter estimation. 
+
+    Returns: 
+    --------
+    
+    None, if the test passes, otherwise, it raises an 
+    error. 
+    
+    """
+
+    # compute the number of prior samples
+    n_prior = len(prior)
+    for param in posterior_samples.keys():
+        n_posterior_samples = len(posterior_samples[param])
+
+        # throw an error if the length do not agree
+        if(n_posterior_samples!=n_prior):
+            print(f'{param} does not contain as many samples as the prior. ')
+            raise ValueError
+        
+    return None
