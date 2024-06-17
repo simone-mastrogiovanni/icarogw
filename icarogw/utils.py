@@ -175,7 +175,7 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw'):
     fp.write('nside_mthr =  {:d} \n'.format(nside_mthr))
     fp.write('mthr_percentile =  {:f} \n'.format(mthr_percentile))
     if isinstance(Nintegration,np.ndarray):
-        fp.write('Nintegration =  np.logspace({:f},{:f},{:d}) \n'.format(np.log10(Nintegration.min()),np.log10(Nintegration.max()),len(Nintegration)))
+        fp.write('Nintegration =  np.logspace(np.log10({:f}),np.log10({:f}),{:d}) \n'.format(Nintegration.min(),Nintegration.max(),len(Nintegration)))
     else:
         fp.write('Nintegration =  {:d} \n'.format(Nintegration))
     fp.write('Numsigma =  {:d} \n'.format(Numsigma))
@@ -392,7 +392,7 @@ def write_all_scripts_catalog(home_folder,outfolder,nside,fields_to_take,groupin
     fp.write('nside_mthr = {:d} \n'.format(nside_mthr))
     fp.write('mthr_percentile = {:f} \n'.format(mthr_percentile))
     if isinstance(Nintegration,np.ndarray):
-        fp.write('Nintegration =  np.logspace({:f},{:f},{:d}) \n'.format(np.log10(Nintegration.min()),np.log10(Nintegration.max()),len(Nintegration)))
+        fp.write('Nintegration =  np.logspace(np.log10({:f}),np.log10({:f}),{:d}) \n'.format(Nintegration.min(),Nintegration.max(),len(Nintegration)))
     else:
         fp.write('Nintegration =  {:d} \n'.format(Nintegration))
     fp.write('Numsigma = {:d} \n'.format(Numsigma))
