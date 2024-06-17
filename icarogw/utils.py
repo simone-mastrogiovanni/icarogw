@@ -1,4 +1,6 @@
 import os as _os
+import os as os
+import numpy as np
 
 def write_condor_files(home_folder,uname='simone.mastrogiovanni',
 agroup='ligo.dev.o4.cbc.hubble.icarogw',memory=10000,cpus=1,disk=10000):
@@ -51,3 +53,275 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw',memory=10000,cpus=1,disk=10000):
             f.write('queue\n')
             f.close()
             _os.system('chmod a+x '+home_folder+'*.sh')
+
+
+def write_condor_files_catalog(home_folder,outfolder,nside,uname='simone.mastrogiovanni',
+agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+
+    os.mkdir('logs')
+    
+    fp = open(os.path.join(home_folder,'make_pixel_files.py'),'w')
+    fp.write('import icarogw \n')
+    fp.write('import h5py \n')
+    fp.write('outfolder = \'{:s}\' \n'.format(outfolder))
+    fp.write('nside = {:d} \n'.format(nside))
+    fp.write('with h5py.File(\'\',\'r\') as cat:\n')
+    fp.write('\ticarogw.catalog.create_pixelated_catalogs(outfolder,nside,{key:cat[key] for key in [\'\']})\n')
+    fp.write('icarogw.catalog.clear_empty_pixelated_files(outfolder,nside) \n')
+    fp.close()
+        
+    f = open(os.path.join(home_folder,'make_pixel_files.sh'),'w')
+    f.write('#!/bin/bash')
+    f.write('\n')
+    f.write('MYJOB_DIR='+home_folder)
+    f.write('\n')
+    f.write('cd ${MYJOB_DIR}')
+    f.write('\n')
+    f.write('python make_pixel_files.py')
+    f.close()
+
+    f = open(os.path.join(home_folder,'make_pixel_files.sub'),'w')
+    f.write('universe = vanilla\n')
+    f.write('getenv = True\n')
+    f.write('executable = make_pixel_files.sh \n')
+    f.write('accounting_group = '+agroup+'\n')
+    f.write('accounting_group_user = '+uname)
+    f.write('\n')
+    f.write('request_memory = 8G \n')
+    f.write('request_cpus = 1 \n')
+    f.write('request_disk = 10G \n')    
+    f.write('output = logs/make_pixel_files.stdout \n')
+    f.write('error = logs/make_pixel_files.stderr \n')
+    f.write('Requirements = TARGET.Dual =!= True \n')
+    f.write('queue\n')
+    f.close()
+
+
+def write_condor_files_nan_removal_mthr_computation(home_folder,outfolder, fields_to_take, grouping,apparent_magnitude_flag,nside_mthr,mthr_percentile,Nintegration,Numsigma,zcut,NumJobs,uname='simone.mastrogiovanni',
+agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+
+    filled_pixels = np.genfromtxt(os.path.join(outfolder,'filled_pixels.txt')).astype(int)
+    NumPix = int(np.ceil(len(filled_pixels)/NumJobs))
+
+    bot = np.arange(0,len(filled_pixels),NumPix)
+    top = np.arange(NumPix,len(filled_pixels)+NumPix,NumPix)
+    np.savetxt(os.path.join(home_folder,'queue_NaN.txt'),np.column_stack([bot,top]),fmt='%d')
+
+    fp = open(os.path.join(home_folder,'clear_NaNs.py'),'w')
+    fp.write('import icarogw \n')
+    fp.write('import numpy as np \n')
+    fp.write('import sys \n')
+    fp.write('from tqdm import tqdm \n')
+    fp.write('outfolder = \'{:s}\' \n'.format(outfolder))
+    fp.write('fields_to_take = [')
+    for i,ff in enumerate(fields_to_take):
+        fp.write('\'{:s}\''.format(ff))
+        if i!=(len(fields_to_take)-1):
+            fp.write(', ')
+    fp.write(']\n')
+    fp.write('grouping = \'{:s}\' \n'.format(grouping))
+    fp.write('bot_pix = int(sys.argv[1])\n')
+    fp.write('top_pix = int(sys.argv[2])\n')
+    fp.write('filled_pixels = np.genfromtxt(\'{:s}\').astype(int) \n'.format(
+        os.path.join(outfolder,'filled_pixels.txt')))
+    fp.write('filled_pixels = filled_pixels[bot_pix:top_pix] \n')
+    fp.write('for pix in tqdm(filled_pixels,desc=\'Cleaning pixel\'):\n')
+    fp.write('\ticarogw.catalog.remove_nans_pixelated_files(outfolder,pix,fields_to_take,grouping)\n')
+    fp.close()
+
+    f = open(os.path.join(home_folder,'clear_NaNs.sh'),'w')
+    f.write('#!/bin/bash')
+    f.write('\n')
+    f.write('MYJOB_DIR='+home_folder)
+    f.write('\n')
+    f.write('cd ${MYJOB_DIR}')
+    f.write('\n')
+    f.write('python clear_NaNs.py $1 $2')
+    f.close()
+
+    f = open(os.path.join(home_folder,'clear_NaNs.sub'),'w')
+    f.write('universe = vanilla\n')
+    f.write('getenv = True\n')
+    f.write('executable = clear_NaNs.sh \n')
+    f.write('accounting_group = '+agroup+'\n')
+    f.write('accounting_group_user = '+uname)
+    f.write('\n')
+    f.write('request_memory = 4G \n')
+    f.write('request_cpus = 1 \n')
+    f.write('request_disk = 10G \n')    
+    f.write('arguments = $(Item) $(Item2) \n')
+
+    f.write('output = logs/clear_nans_$(Item)_$(Item2).stdout \n')
+    f.write('error = logs/clear_nans_$(Item)_$(Item2).stderr \n')
+    f.write('Requirements = TARGET.Dual =!= True \n')
+    f.write('queue Item, Item2 from {:s}\n'.format(os.path.join(home_folder,'queue_NaN.txt')))
+    f.close()
+
+
+    fp = open(os.path.join(home_folder,'calc_mthr_and_grid.py'),'w')
+    fp.write('import icarogw \n')
+    fp.write('import numpy as np \n')
+    fp.write('import sys \n')
+    fp.write('from astropy.cosmology import Planck15 \n')
+    fp.write('from tqdm import tqdm \n')
+    fp.write('cosmo_ref = icarogw.cosmology.astropycosmology(zmax=10.)\n')
+    fp.write('cosmo_ref.build_cosmology(Planck15)\n')
+    fp.write('outfolder = \'{:s}\' \n'.format(outfolder))
+    fp.write('grouping = \'{:s}\' \n'.format(grouping))
+    fp.write('apparent_magnitude_flag = \'{:s}\' \n'.format(apparent_magnitude_flag))
+    fp.write('nside_mthr =  {:d} \n'.format(nside_mthr))
+    fp.write('mthr_percentile =  {:f} \n'.format(mthr_percentile))
+    fp.write('Nintegration =  {:d} \n'.format(Nintegration))
+    fp.write('Numsigma =  {:d} \n'.format(Numsigma))
+    fp.write('zcut =  {:f} \n'.format(zcut))
+    fp.write('bot_pix = int(sys.argv[1])\n')
+    fp.write('top_pix = int(sys.argv[2])\n')
+    fp.write('filled_pixels = np.genfromtxt(\'{:s}\').astype(int) \n'.format(
+        os.path.join(outfolder,'filled_pixels.txt')))
+    fp.write('filled_pixels = filled_pixels[bot_pix:top_pix] \n')
+    fp.write('for pix in tqdm(filled_pixels,desc=\'Calculating apparent magnitude\'):\n')
+    fp.write('\ticarogw.catalog.calculate_mthr_pixelated_files(outfolder,pix,apparent_magnitude_flag,grouping,nside_mthr,mthr_percentile=mthr_percentile)\n')
+    fp.write('for pix in tqdm(filled_pixels,desc=\'Calculating redshift grid\'):\n')
+    fp.write('\ticarogw.catalog.get_redshift_grid_for_files(outfolder,pix,grouping,cosmo_ref,Nintegration=Nintegration,Numsigma=Numsigma,zcut=zcut)\n')
+
+    f = open(os.path.join(home_folder,'calc_mthr_and_grid.sh'),'w')
+    f.write('#!/bin/bash')
+    f.write('\n')
+    f.write('MYJOB_DIR='+home_folder)
+    f.write('\n')
+    f.write('cd ${MYJOB_DIR}')
+    f.write('\n')
+    f.write('python calc_mthr_and_grid.py $1 $2')
+    f.close()
+
+    f = open(os.path.join(home_folder,'calc_mthr_and_grid.sub'),'w')
+    f.write('universe = vanilla\n')
+    f.write('getenv = True\n')
+    f.write('executable = calc_mthr_and_grid.sh \n')
+    f.write('accounting_group = '+agroup+'\n')
+    f.write('accounting_group_user = '+uname)
+    f.write('\n')
+    f.write('request_memory = 4G \n')
+    f.write('request_cpus = 1 \n')
+    f.write('request_disk = 10G \n')    
+    f.write('arguments = $(Item) $(Item2) \n')
+
+    f.write('output = logs/calc_mthr_and_grid_$(Item)_$(Item2).stdout \n')
+    f.write('error = logs/calc_mthr_and_grid_$(Item)_$(Item2).stderr \n')
+    f.write('Requirements = TARGET.Dual =!= True \n')
+    f.write('queue Item, Item2 from {:s}\n'.format(os.path.join(home_folder,'queue_NaN.txt')))
+    f.close()
+    
+    
+    os.system('chmod a+x '+os.path.join(home_folder,'*.sh'))    
+
+
+def write_condor_files_initialize_icarogw_catalog(home_folder,outfolder, outfile,grouping ,uname='simone.mastrogiovanni', agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+    
+    fp = open(os.path.join(home_folder,'initialize_catalog.py'),'w')
+    fp.write('import icarogw \n')
+    fp.write('outfolder = \'{:s}\' \n'.format(outfolder))
+    fp.write('outfile = \'{:s}\' \n'.format(outfile))
+    fp.write('grouping = \'{:s}\' \n'.format(grouping))
+    fp.write('icarogw.catalog.initialize_icarogw_catalog(outfolder,outfile,grouping)\n')
+
+    f = open(os.path.join(home_folder,'initialize_catalog.sh'),'w')
+    f.write('#!/bin/bash')
+    f.write('\n')
+    f.write('MYJOB_DIR='+home_folder)
+    f.write('\n')
+    f.write('cd ${MYJOB_DIR}')
+    f.write('\n')
+    f.write('python initialize_catalog.py')
+    f.close()
+
+    f = open(os.path.join(home_folder,'initialize_catalog.sub'),'w')
+    f.write('universe = vanilla\n')
+    f.write('getenv = True\n')
+    f.write('executable = initialize_catalog.sh \n')
+    f.write('accounting_group = '+agroup+'\n')
+    f.write('accounting_group_user = '+uname)
+    f.write('\n')
+    f.write('request_memory = 4G \n')
+    f.write('request_cpus = 1 \n')
+    f.write('request_disk = 4G \n')    
+    f.write('output = logs/initialize_catalog.stdout \n')
+    f.write('error = logs/initialize_catalog.stderr \n')
+    f.write('Requirements = TARGET.Dual =!= True \n')
+    f.write('queue\n')
+    f.close()
+
+    os.system('chmod a+x '+os.path.join(home_folder,'*.sh'))    
+
+def write_condor_files_calculate_interpolant(home_folder,outfolder,grouping, subgrouping,band,epsilon,NumJobs,ptype='gaussian',uname='simone.mastrogiovanni',
+agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+
+    filled_pixels = np.genfromtxt(os.path.join(outfolder,'filled_pixels.txt')).astype(int)
+    NumPix = int(np.ceil(len(filled_pixels)/NumJobs))
+
+    bot = np.arange(0,len(filled_pixels),NumPix)
+    top = np.arange(NumPix,len(filled_pixels)+NumPix,NumPix)
+    np.savetxt(os.path.join(home_folder,'queue_interpolant.txt'),np.column_stack([bot,top]),fmt='%d')
+
+    fp = open(os.path.join(home_folder,'calc_interpolant.py'),'w')
+    fp.write('import icarogw \n')
+    fp.write('import numpy as np \n')
+    fp.write('from tqdm import tqdm \n')
+    fp.write('import sys \n')
+
+    fp.write('from astropy.cosmology import Planck15 \n')
+    fp.write('cosmo_ref = icarogw.cosmology.astropycosmology(zmax=10.)\n')
+    fp.write('cosmo_ref.build_cosmology(Planck15)\n')
+    
+    fp.write('outfolder = \'{:s}\' \n'.format(outfolder))
+    fp.write('grouping = \'{:s}\' \n'.format(grouping))
+    fp.write('subgrouping = \'{:s}\' \n'.format(subgrouping))
+    fp.write('band = \'{:s}\' \n'.format(band))
+    fp.write('epsilon = {:f} \n'.format(epsilon))
+    fp.write('ptype = \'{:s}\' \n'.format(ptype))
+
+    
+    fp.write('bot_pix = int(sys.argv[1])\n')
+    fp.write('top_pix = int(sys.argv[2])\n')
+    fp.write('filled_pixels = np.genfromtxt(\'{:s}\').astype(int) \n'.format(
+        os.path.join(outfolder,'filled_pixels.txt')))
+    fp.write('z_grid = np.genfromtxt(\'{:s}\') \n'.format(
+        os.path.join(outfolder,'{:s}_common_zgrid.txt'.format(grouping))))
+    fp.write('filled_pixels = filled_pixels[bot_pix:top_pix] \n')
+    fp.write('for pix in tqdm(filled_pixels,desc=\'Cleaning pixel\'):\n')
+    fp.write('\ticarogw.catalog.calculate_interpolant_files(outfolder,z_grid,pix,grouping,subgrouping,band,cosmo_ref,epsilon,ptype=ptype)\n')
+    fp.close()
+
+    f = open(os.path.join(home_folder,'calc_interpolant.sh'),'w')
+    f.write('#!/bin/bash')
+    f.write('\n')
+    f.write('MYJOB_DIR='+home_folder)
+    f.write('\n')
+    f.write('cd ${MYJOB_DIR}')
+    f.write('\n')
+    f.write('python calc_interpolant.py $1 $2')
+    f.close()
+
+    f = open(os.path.join(home_folder,'calc_interpolant.sub'),'w')
+    f.write('universe = vanilla\n')
+    f.write('getenv = True\n')
+    f.write('executable = calc_interpolant.sh \n')
+    f.write('accounting_group = '+agroup+'\n')
+    f.write('accounting_group_user = '+uname)
+    f.write('\n')
+    f.write('request_memory = 4G \n')
+    f.write('request_cpus = 1 \n')
+    f.write('request_disk = 1G \n')    
+    f.write('arguments = $(Item) $(Item2) \n')
+
+    f.write('output = logs/calc_interpolant_$(Item)_$(Item2).stdout \n')
+    f.write('error = logs/calc_interpolant_$(Item)_$(Item2).stderr \n')
+    f.write('Requirements = TARGET.Dual =!= True \n')
+    f.write('queue Item, Item2 from {:s}\n'.format(os.path.join(home_folder,'queue_interpolant.txt')))
+    f.close()
+
+    
+    os.system('chmod a+x '+os.path.join(home_folder,'*.sh'))   
+    
+
+

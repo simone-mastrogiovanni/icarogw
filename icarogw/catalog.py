@@ -6,10 +6,10 @@ import healpy as hp
 import h5py
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import shutil
 import os
 import shutil
 from mhealpy import HealpixBase, HealpixMap
-import zarr
 
 LOWERL=np.nan_to_num(-np.inf)
 
@@ -86,7 +86,7 @@ def clear_empty_pixelated_files(outfolder,nside):
         nside used for the analysis
     '''
     filled_pixels = []
-    for pix in range(hp.nside2npix(nside)):
+    for pix in tqdm(range(hp.nside2npix(nside)),desc='Checking pixel files'):
         if not os.path.isfile(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix))):
             continue
         with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r') as subcat:
@@ -173,17 +173,14 @@ def calculate_mthr_pixelated_files(outfolder,
                 # If it is the same pixel, just continue
                 if pix == pixel:
                     continue
-    
-                not_loaded = True
+                # It removes the file
+                shutil.copyfile(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),
+                               os.path.join(outfolder,'pixel_{:d}_{:d}.hdf5'.format(pix,pixel)))
+                with h5py.File(os.path.join(outfolder,'pixel_{:d}_{:d}.hdf5'.format(pix,pixel)),'r+') as othercat:
+                    m_selected = np.append(
+                        m_selected,othercat['catalog'][apparent_magnitude_flag][othercat[grouping]['not_NaN_indices'][:]])
+                os.remove(os.path.join(outfolder,'pixel_{:d}_{:d}.hdf5'.format(pix,pixel)))
                 
-                while not_loaded:
-                    try:
-                        with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r+') as othercat:
-                            m_selected = np.append(m_selected,othercat['catalog'][apparent_magnitude_flag][othercat[grouping]['not_NaN_indices'][:]])
-                        not_loaded = False
-                    except:
-                        print('Problem in loading, looping')
-    
             # If there is no valid galaxy with which to compute the redshift, skip
             if len(m_selected)!=0:
                 mthr = np.percentile(m_selected,mthr_percentile)
@@ -216,7 +213,7 @@ def get_redshift_grid_for_files(outfolder,pixel,grouping,cosmo_ref,
     cosmo_ref: class
         Cosmology class for the construnction, should be initialized
     Nintegration: int
-        Number of integration points for each likelihood
+        Number of integration points for each likelihood, if array supersede the method
     Numsigma: int
         Number of sigmas for each gaussian likelihood
     zcut: float
@@ -225,75 +222,89 @@ def get_redshift_grid_for_files(outfolder,pixel,grouping,cosmo_ref,
     # If zcut is none, it uses the maximum of the cosmology
     if zcut is None:
         zcut = cosmo_ref.zmax
-        
-    with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
 
-        subcat = cat[grouping]
-        subcat.attrs['Nintegration']=Nintegration
-        subcat.attrs['Numsigma']=Numsigma
-        subcat.attrs['zcut']=zcut
+    if isinstance(Nintegration, np.ndarray):
+        if zcut != np.max(Nintegration):
+            raise ValueError('The maximum of the grid should be equal to the zcut')
+        with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
+            subcat = cat[grouping]
+            subcat.attrs['Nintegration']='fixed-array'
+            subcat.attrs['Numsigma']=Numsigma
+            subcat.attrs['zcut']=zcut
+            if 'z_grid_calculated' not in list(subcat.attrs.keys()):
+                subcat.attrs['z_grid_calculated'] = False
+            if not  subcat.attrs['z_grid_calculated']:
+                zmin = cat['catalog']['z'][:]-Numsigma*cat['catalog']['sigmaz'][:]
+                zmax = cat['catalog']['z'][:]+Numsigma*cat['catalog']['sigmaz'][:]
+                zmin[zmin<np.min(Nintegration)] = np.min(Nintegration)
+                zmax[zmax>zcut] = zcut
+                # Select all the galaxies for which zmax>zmin and zmax< maximum cosmology redshift
+                # zmax<zmin when the galaxy is much beyond zcut.
+                valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:]
+                # We put this here as we might be in a situation where a job crashed
+                if 'valid_galaxies_interpolant' not in list(subcat.keys()):
+                    subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
+                else:
+                    del subcat['valid_galaxies_interpolant']
+                    subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
+                z_grid = Nintegration
+                subcat.create_dataset('z_grid',data=z_grid)
+                subcat.attrs['z_grid_calculated'] = True
+    else:
+        with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
+            subcat = cat[grouping]
+            subcat.attrs['Nintegration']=Nintegration
+            subcat.attrs['Numsigma']=Numsigma
+            subcat.attrs['zcut']=zcut
+            if 'z_grid_calculated' not in list(subcat.attrs.keys()):
+                subcat.attrs['z_grid_calculated'] = False
+            if not  subcat.attrs['z_grid_calculated']:
+                # Initialize an array with grid points equally distribuited. Now we are
+                # going to populate it
+                z_grid=np.linspace(1e-6,zcut,Nintegration)
+                #Array with the resolution required between point i and i+1
+                resolution_grid=np.ones_like(z_grid)*(zcut-1e-6)/Nintegration  
+                zmin = cat['catalog']['z'][:]-Numsigma*cat['catalog']['sigmaz'][:]
+                zmax = cat['catalog']['z'][:]+Numsigma*cat['catalog']['sigmaz'][:]
+                zmin[zmin<1e-6] = 1e-6
+                zmax[zmax>zcut] = zcut
+                resolutions = (zmax-zmin)/Nintegration 
+                # Select all the galaxies for which zmax>zmin and zmax< maximum cosmology redshift
+                # zmax<zmin when the galaxy is much beyond zcut.
+                valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:]
+                # We put this here as we might be in a situation where a job crashed
+                if 'valid_galaxies_interpolant' not in list(subcat.keys()):
+                    subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
+                else:
+                    del subcat['valid_galaxies_interpolant']
+                    subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
+                idx_sorted = np.argsort(resolutions)
+                # This is the index it would sort in decreasing order the resolution needed
+                # they corresponds to galaxies
+                # Note that if there is no valid galxy, the arrays will stay they are initialized
+                idx_sorted = idx_sorted[::-1] 
+                for i in idx_sorted:
+                    # if a galaxy index is not in the valid galaxies index, skip
+                    if not valid_galaxies[i]:
+                        continue
+                    # These are the points from the old grid falling inside the new grid
+                    # These points are not necessary since the new points have a finer resolution
+                    to_eliminate = np.where((z_grid>zmin[i]) & (z_grid<zmax[i]))[0]
+                    z_grid = np.delete(z_grid,to_eliminate)
+                    resolution_grid = np.delete(resolution_grid,to_eliminate)
+                    z_integrator = np.linspace(zmin[i],zmax[i],Nintegration)
+                    z_grid = np.hstack([z_grid,z_integrator])
+                    resolution_grid = np.hstack([resolution_grid,
+                                                 np.ones_like(z_integrator)*resolutions[i]/Nintegration])
+                    sortme = np.argsort(z_grid)
+                    z_grid=z_grid[sortme]
+                    resolution_grid=resolution_grid[sortme]
+                    z_grid,uind = np.unique(z_grid,return_index=True)
+                    resolution_grid = resolution_grid[uind]
+                subcat.create_dataset('resolution_grid',data=resolution_grid)
 
-        if 'z_grid_calculated' not in list(subcat.attrs.keys()):
-            subcat.attrs['z_grid_calculated'] = False
-
-        if not  subcat.attrs['z_grid_calculated']:
-
-            # Initialize an array with grid points equally distribuited. Now we are
-            # going to populate it
-            z_grid=np.linspace(1e-6,zcut,Nintegration)
-            #Array with the resolution required between point i and i+1
-            resolution_grid=np.ones_like(z_grid)*(zcut-1e-6)/Nintegration
-            
-            zmin = cat['catalog']['z'][:]-Numsigma*cat['catalog']['sigmaz'][:]
-            zmax = cat['catalog']['z'][:]+Numsigma*cat['catalog']['sigmaz'][:]
-    
-            zmin[zmin<1e-6] = 1e-6
-            zmax[zmax>zcut] = zcut
-    
-            resolutions = (zmax-zmin)/Nintegration
-            
-            # Select all the galaxies for which zmax>zmin and zmax< maximum cosmology redshift
-            # zmax<zmin when the galaxy is much beyond zcut.
-            valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:]
-
-            # We put this here as we might be in a situation where a job crashed
-            if 'valid_galaxies_interpolant' not in list(subcat.keys()):
-                subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
-            else:
-                del subcat['valid_galaxies_interpolant']
-                subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
-    
-            idx_sorted = np.argsort(resolutions)
-            # This is the index it would sort in decreasing order the resolution needed
-            # they corresponds to galaxies
-            # Note that if there is no valid galxy, the arrays will stay they are initialized
-            idx_sorted = idx_sorted[::-1] 
-            for i in idx_sorted:
-                # if a galaxy index is not in the valid galaxies index, skip
-                if not valid_galaxies[i]:
-                    continue
-    
-                # These are the points from the old grid falling inside the new grid
-                # These points are not necessary since the new points have a finer resolution
-                to_eliminate = np.where((z_grid>zmin[i]) & (z_grid<zmax[i]))[0]
-                z_grid = np.delete(z_grid,to_eliminate)
-                resolution_grid = np.delete(resolution_grid,to_eliminate)
-                
-                z_integrator = np.linspace(zmin[i],zmax[i],Nintegration)
-       
-                z_grid = np.hstack([z_grid,z_integrator])
-                resolution_grid = np.hstack([resolution_grid,
-                                             np.ones_like(z_integrator)*resolutions[i]/Nintegration])
-                sortme = np.argsort(z_grid)
-                z_grid=z_grid[sortme]
-                resolution_grid=resolution_grid[sortme]
-    
-                z_grid,uind = np.unique(z_grid,return_index=True)
-                resolution_grid = resolution_grid[uind]
-    
-            subcat.create_dataset('z_grid',data=z_grid)
-            subcat.create_dataset('resolution_grid',data=resolution_grid)
-            subcat.attrs['z_grid_calculated'] = True
+                subcat.create_dataset('z_grid',data=z_grid)
+                subcat.attrs['z_grid_calculated'] = True
 
 
 def initialize_icarogw_catalog(outfolder,outfile,grouping):
@@ -323,46 +334,57 @@ def initialize_icarogw_catalog(outfolder,outfile,grouping):
             icat.attrs['dOmega_deg2']=tmpcat.attrs['dOmega_deg2']
             icat.require_group(grouping)
 
-    # Initialize an array with grid points equally distribuited. Now we are
-    # going to populate it
-    z_grid=np.linspace(1e-6,zcut,Nintegration)
-    #Array with the resolution required between point i and i+1
-    resolution_grid=np.ones_like(z_grid)*(zcut-1e-6)/Nintegration
-   
+    if Nintegration=='fixed-array':       
+        with h5py.File(outfile,'a') as icat:
+            actual_filled_pixels = []
+            mth_map = []
+            for pix in tqdm(filled_pixels,desc='Finding a common redshift grid among pixels'):
+                with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r') as subcat:
+                    z_grid = subcat[grouping]['z_grid'][:] # In this case, z_grid is all the same
+                    if np.isfinite(subcat[grouping].attrs['mthr']):
+                        actual_filled_pixels.append(pix)
+                        mth_map.append(subcat[grouping].attrs['mthr']) 
+    else:
+        # Initialize an array with grid points equally distribuited. Now we are
+        # going to populate it
+        z_grid=np.linspace(1e-6,zcut,Nintegration)
+        #Array with the resolution required between point i and i+1
+        resolution_grid=np.ones_like(z_grid)*(zcut-1e-6)/Nintegration
+       
+        with h5py.File(outfile,'a') as icat:
+            actual_filled_pixels = []
+            mth_map = []
+            for pix in tqdm(filled_pixels,desc='Finding a common redshift grid among pixels'):
+                
+                with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r') as subcat:
+                    z_grid = np.hstack([z_grid,subcat[grouping]['z_grid'][:]])
+                    resolution_grid = np.hstack([resolution_grid,subcat[grouping]['resolution_grid'][:]])  
+                    if np.isfinite(subcat[grouping].attrs['mthr']):
+                        actual_filled_pixels.append(pix)
+                        mth_map.append(subcat[grouping].attrs['mthr'])
+                
+                sortme = np.argsort(z_grid)
+                z_grid=z_grid[sortme]
+                resolution_grid=resolution_grid[sortme]
+                z_grid,uind = np.unique(z_grid,return_index=True)
+                resolution_grid = resolution_grid[uind]
+    
+                to_eliminate = []
+                for i in np.arange(1,len(z_grid)-1,1).astype(int):
+                    if (resolution_grid[i]>=resolution_grid[i+1]) & (resolution_grid[i]>=resolution_grid[i-1]):
+                        to_eliminate.append(i)
+                
+                z_grid = np.delete(z_grid,to_eliminate)
+                resolution_grid = np.delete(resolution_grid,to_eliminate)
+                print('Z array is long {:d}'.format(len(z_grid)))
+            icat[grouping].create_dataset('resolution_grid',data=resolution_grid)
+        
+    
+    actual_filled_pixels = np.array(actual_filled_pixels)
+    mth_map = np.array(mth_map)
+    
     with h5py.File(outfile,'a') as icat:
-        actual_filled_pixels = []
-        mth_map = []
-        for pix in tqdm(filled_pixels,desc='Finding a common redshift grid among pixels'):
-            
-            with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r') as subcat:
-                z_grid = np.hstack([z_grid,subcat[grouping]['z_grid'][:]])
-                resolution_grid = np.hstack([resolution_grid,subcat[grouping]['resolution_grid'][:]])  
-                if np.isfinite(subcat[grouping].attrs['mthr']):
-                    actual_filled_pixels.append(pix)
-                    mth_map.append(subcat[grouping].attrs['mthr'])
-            
-            sortme = np.argsort(z_grid)
-            z_grid=z_grid[sortme]
-            resolution_grid=resolution_grid[sortme]
-            z_grid,uind = np.unique(z_grid,return_index=True)
-            resolution_grid = resolution_grid[uind]
-
-            to_eliminate = []
-            for i in np.arange(1,len(z_grid)-1,1).astype(int):
-                if (resolution_grid[i]>resolution_grid[i+1]) & (resolution_grid[i]>resolution_grid[i-1]):
-                    to_eliminate.append(i)
-            
-            z_grid = np.delete(z_grid,to_eliminate)
-            resolution_grid = np.delete(resolution_grid,to_eliminate)
-
-            
-        print('Z array is long {:d}'.format(len(z_grid)))
-
-        icat[grouping].create_dataset('z_grid',data=z_grid)
-        icat[grouping].create_dataset('resolution_grid',data=resolution_grid)
-
-        actual_filled_pixels = np.array(actual_filled_pixels)
-        mth_map = np.array(mth_map)
+        icat[grouping].create_dataset('z_grid',data=z_grid)    
         
         moc_mthr_map = HealpixMap.moc_from_pixels(icat.attrs['nside'], actual_filled_pixels, 
                                nest = icat.attrs['nest'],density=False)
@@ -377,19 +399,21 @@ def initialize_icarogw_catalog(outfolder,outfile,grouping):
             pix = moc_mthr_map.ang2pix(theta,phi)
             moc_mthr_map[pix] = mth_map[i]
             mapping_filled_pixels[i]=pix
-
+    
             
         # Saves the actually filled helpy pixels
         icat[grouping].create_dataset('mthr_filled_pixels_healpy',data=actual_filled_pixels)
-
+    
         # Saves an array that indicates the filled healpy pixels to which uniq they correspond
         icat[grouping].create_dataset('mthr_filled_pixels_healpy_to_moc_labels',data=mapping_filled_pixels)
-
+    
         # Saves the mthr map
         icat[grouping].create_dataset('mthr_moc_map',data=moc_mthr_map.data)
-
+    
         # Array with uniq identifier
         icat[grouping].create_dataset('uniq_moc_map',data = moc_mthr_map.uniq)
+
+    np.savetxt(os.path.join(outfolder,'{:s}_common_zgrid.txt'.format(grouping)),z_grid)    
         
 
 def calculate_interpolant_files(outfolder,z_grid,pixel,grouping,subgrouping,
@@ -456,8 +480,6 @@ class  icarogw_catalog(object):
 
     Parameters
     ----------
-    outfolder: str
-        Where are the pixelated files
     outfile: str
         The original icarogw file
     grouping: str
@@ -466,37 +488,78 @@ class  icarogw_catalog(object):
         What case to use for the galaxy weights
     '''
     
-    def __init__(self,outfolder,outfile,grouping,subgrouping):        
+    def __init__(self,outfile,grouping,subgrouping):
+        self.outfile = outfile
+        self.grouping = grouping
+        self.subgrouping = subgrouping
+        
+    def build_from_pixelated_files(self,outfolder):
+        '''
+        Build the catalog file from the pixelated files
 
-        with h5py.File(outfile,'r') as icat:
-            self.moc_mthr_map = HealpixMap(data=icat[grouping]['mthr_moc_map'][:],uniq=icat[grouping]['uniq_moc_map'][:])
-            self.z_grid = icat[grouping]['z_grid'][:]
+        Parameters
+        ----------
+        outfolder: str
+            Path where the pixelated files can be found
+        '''
 
+        with h5py.File(self.outfile,'r') as icat:
+            self.moc_mthr_map = HealpixMap(data=icat[self.grouping]['mthr_moc_map'][:],uniq=icat[self.grouping]['uniq_moc_map'][:])
+            self.z_grid = icat[self.grouping]['z_grid'][:]
             # Saves the actually filled helpy pixels
-            filled_pixels = icat[grouping]['mthr_filled_pixels_healpy'][:]
-
+            filled_pixels = icat[self.grouping]['mthr_filled_pixels_healpy'][:]
             # Saves an array that indicates the filled healpy pixels to which uniq they correspond
-            moc_pixels = icat[grouping]['mthr_filled_pixels_healpy_to_moc_labels'][:]
+            moc_pixels = icat[self.grouping]['mthr_filled_pixels_healpy_to_moc_labels'][:]
 
         # Sorted uniq grid
         self.sky_grid = np.sort(self.moc_mthr_map.uniq)
         dNgal_dzdOm_vals = []
-        
         for pix in tqdm(self.sky_grid,desc='Bulding sky grid'):
             idx = np.where(moc_pixels == pix)[0]
             if len(idx) == 0:
                 dNgal_dzdOm_vals.append(np.zeros_like(self.z_grid))
             else:
                 with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(filled_pixels[idx[0]]))) as pcat:
-                    dNgal_dzdOm_vals.append(pcat[grouping][subgrouping]['vals_interpolant'][:])
-                    band = pcat[grouping][subgrouping].attrs['band']
-                    epsilon = pcat[grouping][subgrouping].attrs['epsilon']
+                    dNgal_dzdOm_vals.append(pcat[self.grouping][self.subgrouping]['vals_interpolant'][:])
+                    band = pcat[self.grouping][self.subgrouping].attrs['band']
+                    epsilon = pcat[self.grouping][self.subgrouping].attrs['epsilon']
         
+        self.band = band
+        self.epsilon = epsilon
         self.calc_kcorr=kcorr(band)
         self.sch_fun=galaxy_MF(band=band)
         self.sch_fun.build_effective_number_density_interpolant(epsilon)
         self.dNgal_dzdOm_vals = np.column_stack(dNgal_dzdOm_vals)
-                    
+
+    def save_to_hdf5_file(self):
+        '''
+        Saves the interpolants and everything neeeded in a single hdf5 file
+        '''
+
+        with h5py.File(self.outfile,'a') as icat:
+            subgroup = icat[self.grouping].require_group(self.subgrouping)
+            subgroup.attrs['epsilon'] = self.epsilon
+            subgroup.attrs['band'] = self.band
+            subgroup.create_dataset('vals_interpolant',data=self.dNgal_dzdOm_vals)
+
+    def load_from_hdf5_file(self):
+        '''
+        Load the catalog and everything needed
+        '''
+        
+        with h5py.File(self.outfile,'r') as icat:
+            self.moc_mthr_map = HealpixMap(data=icat[self.grouping]['mthr_moc_map'][:],uniq=icat[self.grouping]['uniq_moc_map'][:])
+            self.z_grid = icat[self.grouping]['z_grid'][:]
+            self.band = icat[self.grouping][self.subgrouping].attrs['band']
+            self.epsilon = icat[self.grouping][self.subgrouping].attrs['epsilon']
+            self.dNgal_dzdOm_vals = icat[self.grouping][self.subgrouping]['vals_interpolant'][:]
+         
+        self.calc_kcorr=kcorr(self.band)
+        self.sch_fun=galaxy_MF(band=self.band)
+        self.sch_fun.build_effective_number_density_interpolant(self.epsilon)           
+        # Sorted uniq grid
+        self.sky_grid = np.sort(self.moc_mthr_map.uniq)
+        
     def get_NUNIQ_pixel(self,ra,dec):
         '''
         Gets the MOC map pixels from RA and dec

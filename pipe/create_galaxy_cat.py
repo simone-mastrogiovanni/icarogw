@@ -7,6 +7,7 @@ from astropy.cosmology import Planck15
 import matplotlib.pyplot as plt
 from mhealpy import HealpixBase, HealpixMap
 
+from astropy.cosmology import Planck15
 cosmo_ref = icarogw.cosmology.astropycosmology(zmax=10.)
 cosmo_ref.build_cosmology(Planck15)
 
