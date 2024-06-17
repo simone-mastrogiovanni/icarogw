@@ -404,7 +404,7 @@ def write_all_scripts_catalog(home_folder,outfolder,nside,fields_to_take,groupin
     fp.write('NumJobs = {:d} \n'.format(NumJobs))
     fp.write('''
 # Writhe the condor files for NaNs and mthr computation
-write_condor_files_nan_removal_mthr_computation(
+icarogw.utils.write_condor_files_nan_removal_mthr_computation(
 home_folder=home_folder,
 outfolder=outfolder,
 fields_to_take=fields_to_take,
@@ -415,14 +415,14 @@ nside_mthr=nside_mthr,mthr_percentile=mthr_percentile,Nintegration=Nintegration,
 
     fp.write('''
 # Write the files to inizialize the icarogw file
-write_condor_files_initialize_icarogw_catalog(home_folder=home_folder,
+icarogw.utils.write_condor_files_initialize_icarogw_catalog(home_folder=home_folder,
 outfolder=outfolder,outfile=outfile,grouping=grouping)
     ''')
 
     
     fp.write('''
 # Write the files to calculate the interpolant
-write_condor_files_calculate_interpolant(home_folder=home_folder,
+icarogw.utils.write_condor_files_calculate_interpolant(home_folder=home_folder,
 outfolder=outfolder,grouping=grouping,subgrouping=subgrouping,
                                                    band=band,
                                                    epsilon=epsilon,
@@ -432,7 +432,7 @@ outfolder=outfolder,grouping=grouping,subgrouping=subgrouping,
     
     fp.write(
     '''# Write to finish off the catalog
-write_condor_files_finish_catalog(home_folder=home_folder,
+icarogw.utils.write_condor_files_finish_catalog(home_folder=home_folder,
 outfolder=outfolder,outfile=outfile, grouping=grouping,subgrouping=subgrouping)
 '''
     )
