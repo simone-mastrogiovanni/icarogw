@@ -378,11 +378,11 @@ class galaxy_MF(object):
         if band is None:
             self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=Mmin,Mmax,Mstar,alpha,phistar
         else:
-            if band=='W1':
+            if (band=='W1-glade+') | (band=='W1-upglade'):
                 self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-28, -16.6, -24.09, -1.12, 1.45e-2*1e9
-            elif band=='bJ':
+            elif band=='bJ-glade+':
                 self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-22.00, -16.5, -19.66, -1.21, 1.61e-2*1e9
-            elif band=='K':
+            elif band=='K-glade+':
                 self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-27.0, -19.0, -23.39, -1.09, 1.16e-2*1e9
             else:
                 raise ValueError('Band not known')

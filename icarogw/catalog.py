@@ -723,8 +723,9 @@ class kcorr(object):
             W1, K or bJ band. Others are not implemented
         '''
         self.band=band
-        if self.band not in ['W1','K','bJ']:
-            raise ValueError('Band not known, please use W1 or K or bJ')
+        if self.band not in ['W1-glade+','K-glade+','bJ-glade+','W1-upglade']:
+            raise ValueError('Band not known please use either {:s}'.format(' '.join(['W1-glade+','K-glade+','bJ-glade+',
+                                                                                     'W1-upglade'])))
     def __call__(self,z):
         '''
         Evaluates the K-corrections at a given redshift, See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
@@ -739,17 +740,20 @@ class kcorr(object):
         k_corrections: xp.array
         '''
         xp = get_module_array(z)
-        if self.band == 'W1':
+        if self.band == 'W1-glade+':
             k_corr = -1*(4.44e-2+2.67*z+1.33*(z**2.)-1.59*(z**3.)) #From Maciej email
-        elif self.band == 'K':
+        elif self.band == 'K-glade+':
             # https://iopscience.iop.org/article/10.1086/322488/pdf 4th page lhs
             to_ret=-6.0*xp.log10(1+z)
             to_ret[z>0.3]=-6.0*xp.log10(1+0.3)
             k_corr=-6.0*xp.log10(1+z)
-        elif self.band == 'bJ':
+        elif self.band == 'bJ-glade+':
             # Fig 5 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
             # Note that these corrections also includes evolution corrections
             k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
+        elif self.band == 'W1-upglade':
+            # In upglade k-corrections are already applied
+            k_corr = xp.zeros_like(z) 
         return k_corr
 
 # LVK Reviewed

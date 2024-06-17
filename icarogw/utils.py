@@ -378,6 +378,7 @@ def write_all_scripts_catalog(home_folder,outfolder,nside,fields_to_take,groupin
 
     fp = open(os.path.join(home_folder,'get_scripts.py'),'w')
     fp.write('import icarogw \n')
+    fp.write('import numpy as np \n')
     fp.write('home_folder = \'{:s}\' \n'.format(home_folder))
     fp.write('outfolder = \'{:s}\' \n'.format(outfolder))
     fp.write('fields_to_take = [')
@@ -396,6 +397,10 @@ def write_all_scripts_catalog(home_folder,outfolder,nside,fields_to_take,groupin
         fp.write('Nintegration =  {:d} \n'.format(Nintegration))
     fp.write('Numsigma = {:d} \n'.format(Numsigma))
     fp.write('zcut = {:f} \n'.format(zcut))
+    fp.write('outfile = \'{:s}\' \n'.format(outfile))
+    fp.write('subgrouping = \'{:s}\' \n'.format(subgrouping))
+    fp.write('band = \'{:s}\' \n'.format(band))
+    fp.write('epsilon = {:f} \n'.format(epsilon))
     fp.write('NumJobs = {:d} \n'.format(NumJobs))
     fp.write('''
 # Writhe the condor files for NaNs and mthr computation
