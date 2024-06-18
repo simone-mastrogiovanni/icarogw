@@ -77,6 +77,26 @@ class injections(object):
         
         if isinstance(self.prior,np.ndarray):
             self.numpyfy()
+
+    def pixelize_with_catalog(self,catalog):
+        '''
+        This method pixelize the injections using the UNIQ scheme by a MOC 
+        map of the galaxy catalog
+
+        Parameters
+        ----------
+        catalog: class
+            icarogw catalog class
+        '''
+        self.injections_data_original['sky_indices'] = catalog.get_NUNIQ_pixel(
+            cp2np(self.injections_data_original['right_ascension']),
+            cp2np(self.injections_data_original['declination']))
+        self.injections_data['sky_indices'] = catalog.get_NUNIQ_pixel(
+            cp2np(self.injections_data['right_ascension']),
+            cp2np(self.injections_data['declination']))
+        
+        if isinstance(self.prior,np.ndarray):
+            self.numpyfy()
             
     def update_weights(self,rate_wrapper):
         '''
