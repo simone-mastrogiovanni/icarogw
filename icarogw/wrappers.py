@@ -5,7 +5,7 @@ from .priors import LowpassSmoothedProb, LowpassSmoothedProbEvolving, PowerLaw, 
 from .priors import  EvolvingPowerLawPeak, PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, conditional_2dimz_pdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
 from .priors import _lowpass_filter, _mixed_sigmoid_function, _mixed_double_sigmoid_function, _mixed_linear_function, _mixed_linear_sinusoid_function
 import copy
-from astropy.cosmology import FlatLambdaCDM, FlatwCDM
+from astropy.cosmology import FlatLambdaCDM, FlatwCDM, Flatw0waCDM
 
 
 class mixed_mass_redshift_evolving(object):
@@ -391,6 +391,15 @@ class FlatwCDM_wrap(object):
         self.population_parameters=['H0','Om0','w0']
         self.cosmology=astropycosmology(zmax)
         self.astropycosmo=FlatwCDM
+    def update(self,**kwargs):
+        self.cosmology.build_cosmology(self.astropycosmo(**kwargs))
+
+
+class Flatw0waCDM_wrap(object):
+    def __init__(self,zmax):
+        self.population_parameters=['H0','Om0','w0','wa']
+        self.cosmology=astropycosmology(zmax)
+        self.astropycosmo=Flatw0waCDM
     def update(self,**kwargs):
         self.cosmology.build_cosmology(self.astropycosmo(**kwargs))
 
