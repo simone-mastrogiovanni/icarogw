@@ -67,14 +67,65 @@ def _lowpass_filter(mass, mmax, delta_max):
     return to_ret
 
 def _mixed_sigmoid_function(x, xt, delta_xt, mix_x0):
+    '''
+    A Window function that starts from a float and goes to 0
+
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    xt: float/np.array
+        Transition point for the window
+    delta_xt: float/np.array
+        Width of the transition
+    mix_x0: float/np.array
+        Initial value of the window, then it goes to 0.
+
+    Returns
+    -------
+    Values of the window
+    '''
     sigma = mix_x0 / (1 + np.exp((x-xt)/delta_xt))
     return sigma
 
 def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
-    sigma = sigma =  mix_x1 + (mix_x0 - mix_x1) / (1 + np.exp((x-xt) * delta_xt))
+    '''
+    A Window function that starts from a float and goes to 0
+
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    xt: float/np.array
+        Transition point for the window
+    delta_xt: float/np.array
+        Width of the transition
+    mix_x0: float/np.array
+        Initial value of the window, then it goes to 0.
+
+    Returns
+    -------
+    Values of the window
+    '''
+    sigma = sigma =  mix_x1 + (mix_x0 - mix_x1) / (1 + np.exp((x-xt) / delta_xt))
     return sigma
 
 def _mixed_linear_function(x, mix_x0, mix_x1):
+    '''
+    A Window function that starts from mix_0 and linearly evolves (x=1 f=miz_x1)
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    mix_x0: float/np.array
+        Initial value of the window at x=0.
+    mix_x0: float/np.array
+        Initial value of the window at x=1.
+
+    Returns
+    -------
+    Values of the window
+    '''
     func = (mix_x1 - mix_x0) * x + mix_x0
     return func
 

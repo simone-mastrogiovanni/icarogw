@@ -105,6 +105,15 @@ class posterior_samples_catalog(object):
             self.posterior_samples_dict[event].pixelize(nside)
 
     def pixelize_with_catalog(self,catalog):
+        '''
+        This method pixelize the posterior samples using the UNIQ scheme by a MOC 
+        map of the galaxy catalog
+
+        Parameters
+        ----------
+        catalog: class
+            icarogw catalog class
+        '''
         for i,event in enumerate(list(self.posterior_samples_dict.keys())):
             self.posterior_samples_dict[event].pixelize_with_catalog(catalog)
             

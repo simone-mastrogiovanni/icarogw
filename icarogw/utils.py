@@ -57,6 +57,23 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw',memory=10000,cpus=1,disk=10000):
 
 def write_condor_files_catalog(home_folder,outfolder,nside,uname='simone.mastrogiovanni',
 agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+    '''
+    Writes the python scripts and condor files to pixelize a galaxy catalog.
+
+    Parameters
+    ----------
+    home_folder: str
+        Where to place the running scripts
+    outfolder: str
+        Where to place the pixelated catalog
+    nside: int
+        Nside of the healpy pixelization
+    uname: str
+        Username for condor
+    agroup: str
+        Accounting group for condor
+    '''
+    
     try:
         os.mkdir('logs')
     except:
@@ -102,6 +119,39 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw'):
 
 def write_condor_files_nan_removal_mthr_computation(home_folder,outfolder, fields_to_take, grouping,apparent_magnitude_flag,nside_mthr,mthr_percentile,Nintegration,Numsigma,zcut,NumJobs,uname='simone.mastrogiovanni',
 agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+
+    '''
+    Writes the python scripts and condor files to removes NaNs and calculate apparent magnitude threshold cut for galaxy catalog
+
+    Parameters
+    ----------
+    home_folder: str
+        Where to place the running scripts
+    outfolder: str
+        Where to place the pixelated catalog
+    fields_to_take: list
+        list of strings containing the groups to take from the pixelated files
+    grouping: str
+        Name of the new group to create in the pixelated files to save the apparent mthr cut
+    apparent_magnitude_flag: str
+        String that indetifies the group of m to use for the mthr calculation
+    nside_mthr: int
+        Nside to use for calculating the apparent magnitude thr cut
+    mthr_percentile: float
+        Percentile of galaxies to use to define mthr, between 0-100
+    Nintegration: int or np.array
+        If int, it is the number of points taken to integrate the galaxy redshift uncertainties. If np.array, it is the redshift grid resolution
+    Numsigma: int
+        Number of sigmas to consider for the EM likelihood of galaxies
+    zcut: float
+        Redshift at which to cut the galaxy catalog
+    NumJobs: int
+        Number of jubs to run on condor
+    uname: str
+        Username for condor
+    agroup: str
+        Accounting group for condor
+    '''
 
     filled_pixels = np.genfromtxt(os.path.join(outfolder,'filled_pixels.txt')).astype(int)
     NumPix = int(np.ceil(len(filled_pixels)/NumJobs))
@@ -223,6 +273,24 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw'):
 
 
 def write_condor_files_initialize_icarogw_catalog(home_folder,outfolder, outfile,grouping ,uname='simone.mastrogiovanni', agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+    '''
+    Writes the python scripts and condor files to create the icarogw file
+
+    Parameters
+    ----------
+    home_folder: str
+        Where to place the running scripts
+    outfolder: str
+        Where to place the pixelated catalog
+    outfile: str
+        Name to give to the icarogw file
+    grouping: str
+        Name of the new group to create in the pixelated files to save the apparent mthr cut
+    uname: str
+        Username for condor
+    agroup: str
+        Accounting group for condor
+    '''
     
     fp = open(os.path.join(home_folder,'initialize_catalog.py'),'w')
     fp.write('import icarogw \n')
@@ -261,6 +329,32 @@ def write_condor_files_initialize_icarogw_catalog(home_folder,outfolder, outfile
 
 def write_condor_files_calculate_interpolant(home_folder,outfolder,grouping, subgrouping,band,epsilon,NumJobs,ptype='gaussian',uname='simone.mastrogiovanni',
 agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+    '''
+    Writes the python scripts and condor files to removes NaNs and calculate apparent magnitude threshold cut for galaxy catalog
+
+    Parameters
+    ----------
+    home_folder: str
+        Where to place the running scripts
+    outfolder: str
+        Where to place the pixelated catalog
+    grouping: str
+        Name of the new group to create in the pixelated files to save the apparent mthr cut
+    subgrouping: str
+        Name of the new subgroup for the galaxy catalog interpolant
+    band: str
+        icarogw EM band for the Schecter function
+    epsilon: float
+        Exponent of the luminosity weight, e.g. epsilon=1 is p(L) propto L
+    NumJobs: int
+        Number of jubs to run on condor
+    ptype: str
+        Type of EM likelihood, default is gaussian.
+    uname: str
+        Username for condor
+    agroup: str
+        Accounting group for condor
+    '''
 
     filled_pixels = np.genfromtxt(os.path.join(outfolder,'filled_pixels.txt')).astype(int)
     NumPix = int(np.ceil(len(filled_pixels)/NumJobs))
@@ -330,6 +424,26 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw'):
     os.system('chmod a+x '+os.path.join(home_folder,'*.sh'))   
 
 def write_condor_files_finish_catalog(home_folder,outfolder, outfile,grouping, subgrouping, uname='simone.mastrogiovanni', agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+    '''
+    Writes the python scripts to finish the icarogw catalog given the files with interpolants
+    
+    Parameters
+    ----------
+    home_folder: str
+        Where to place the running scripts
+    outfolder: str
+        Where to place the pixelated catalog
+    outfile: str
+        Name to give to the icarogw file
+    grouping: str
+        Name of the new group to create in the pixelated files to save the apparent mthr cut
+    subgrouping: str
+        Name of the new subgroup for the galaxy catalog interpolant
+    uname: str
+        Username for condor
+    agroup: str
+        Accounting group for condor
+    '''
     
     fp = open(os.path.join(home_folder,'finish_catalog.py'),'w')
     fp.write('import icarogw \n')
@@ -372,6 +486,48 @@ def write_condor_files_finish_catalog(home_folder,outfolder, outfile,grouping, s
 def write_all_scripts_catalog(home_folder,outfolder,nside,fields_to_take,grouping,apparent_magnitude_flag,
                             nside_mthr,mthr_percentile,Nintegration,Numsigma,zcut,outfile,subgrouping,
                             band, epsilon, NumJobs,uname='simone.mastrogiovanni', agroup='ligo.dev.o4.cbc.hubble.icarogw'):
+    '''
+    A Driver to write all the python scripts required to build the galaxy catalog. It also creates a dag file to produce the catalog on condor
+
+    Parameters
+    ----------
+    home_folder: str
+        Where to place the running scripts
+    outfolder: str
+        Where to place the pixelated catalog
+    nside: int
+        Nside to use for pixelization of the catalog
+    fields_to_take: list
+        list of strings containing the groups to take from the pixelated files
+    grouping: str
+        Name of the new group to create in the pixelated files to save the apparent mthr cut
+    apparent_magnitude_flag: str
+        String that indetifies the group of m to use for the mthr calculation
+    nside_mthr: int
+        Nside to use for calculating the apparent magnitude thr cut
+    mthr_percentile: float
+        Percentile of galaxies to use to define mthr, between 0-100
+    Nintegration: int or np.array
+        If int, it is the number of points taken to integrate the galaxy redshift uncertainties. If np.array, it is the redshift grid resolution
+    Numsigma: int
+        Number of sigmas to consider for the EM likelihood of galaxies
+    zcut: float
+        Redshift at which to cut the galaxy catalog
+    outfile: str
+        Name of the icarogw file
+    subgrouping: str
+        Name of the new subgroup for the galaxy catalog interpolant
+    band: str
+        icarogw EM band for the Schecter function
+    epsilon: float
+        Exponent of the luminosity weight, e.g. epsilon=1 is p(L) propto L
+    NumJobs: int
+        Number of jubs to run on condor
+    uname: str
+        Username for condor
+    agroup: str
+        Accounting group for condor
+    '''
 
     # Write the condor files for the the pixelated catalog files
     write_condor_files_catalog(home_folder=home_folder,outfolder=outfolder,nside=nside)
