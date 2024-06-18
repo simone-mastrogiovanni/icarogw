@@ -1,5 +1,6 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .conversions import radec2indeces
+from .utils import check_posterior_samples_and_prior
 
 # LVK Reviewed
 class posterior_samples_catalog(object):
@@ -150,6 +151,8 @@ class posterior_samples(object):
         prior: np.array
             Prior to use in order to reweight posterior samples written in the same variables that you provide, e.g. if you provide d_l and m1d, then p(d_l,m1d)
         '''
+        check_posterior_samples_and_prior(posterior_dict, prior)
+
         self.posterior_data={key: posterior_dict[key] for key in posterior_dict.keys()}
         self.posterior_data['prior']=prior
         self.nsamples=len(prior)
