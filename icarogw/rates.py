@@ -210,7 +210,7 @@ class CBC_catalog_vanilla_rate_skymap(object):
         z = self.cw.cosmology.dl2z(kwargs['luminosity_distance'])
         
         # We assume the galaxy catalog empty to apply completeness correction
-        dNgaleff=self.catalog.sch_fun.background_effective_galaxy_density(np.array([-xp.inf]))*self.cw.cosmology.dVc_by_dzdOmega_at_z(z)
+        dNgaleff=self.catalog.sch_fun.background_effective_galaxy_density(-xp.inf*xp.ones_like(z),z)*self.cw.cosmology.dVc_by_dzdOmega_at_z(z)
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
         log_weights=self.rw.rate.log_evaluate(z)+xp.log(dNgaleff) \
@@ -1284,7 +1284,7 @@ class CBC_catalog_vanilla_rate(object):
         
 
         # We assume the galaxy catalog empty to apply completeness correction
-        dNgaleff=self.catalog.sch_fun.background_effective_galaxy_density(np.array([-xp.inf]))*self.cw.cosmology.dVc_by_dzdOmega_at_z(z)
+        dNgaleff=self.catalog.sch_fun.background_effective_galaxy_density(-xp.inf*xp.ones_like(z),z)*self.cw.cosmology.dVc_by_dzdOmega_at_z(z)
         
         # Sum over posterior samples in Eq. 1.1 on the icarogw2.0 document
         log_weights=self.mw.log_pdf(ms1,ms2)+self.rw.rate.log_evaluate(z)+xp.log(dNgaleff) \

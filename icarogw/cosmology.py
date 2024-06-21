@@ -360,10 +360,10 @@ class alphalog_astropycosmology(astropycosmology):
         if is_there_cupy():
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
+    
 
-# LVK Reviewed    
 class galaxy_MF(object):
-    def __init__(self,band=None,Mmin=None,Mmax=None,Mstar=None,alpha=None,phistar=None):
+    def __init__(self,band=None,Mmin=None,Mmax=None,Mstar=None,alpha=None,phistar=None,Q = None, P = None, z0 = None):
         '''
         A class to handle the Schechter function in absolute magnitude
         
@@ -376,16 +376,17 @@ class galaxy_MF(object):
         '''
         # Note, we convert phistar to Gpc-3
         if band is None:
-            self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=Mmin,Mmax,Mstar,alpha,phistar
+            self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar, self.Q, self.P, self.z0 = Mmin,Mmax,Mstar,alpha,phistar, Q, P, z0
         else:
             if (band=='W1-glade+') | (band=='W1-upglade'):
-                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-28, -16.6, -24.09, -1.12, 1.45e-2*1e9
+                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar, self.Q, self.P, self.z0 = -28, -16.6, -24.09, -1.12, 1.45e-2*1e9, 0. , 0., 0.1
             elif band=='bJ-glade+':
-                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-22.00, -16.5, -19.66, -1.21, 1.61e-2*1e9
+                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar, self.Q, self.P, self.z0 = -22.00, -16.5, -19.66, -1.21, 1.61e-2*1e9, 0., 0., 0.1
             elif band=='K-glade+':
-                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-27.0, -19.0, -23.39, -1.09, 1.16e-2*1e9
+                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar, self.Q, self.P, self.z0 = -27.0, -19.0, -23.39, -1.09, 1.16e-2*1e9, 0., 0., 0.1
             else:
                 raise ValueError('Band not known')
+                
     def build_MF(self,cosmology):
         '''
         Build the Magnitude function
@@ -396,17 +397,42 @@ class galaxy_MF(object):
             cosmology class from the cosmology module
         '''
         self.cosmology=cosmology
-        self.Mstarobs=self.Mstar+5*np.log10(cosmology.little_h)
+        self.Mstarobs=self.Mstar+5*np.log10(cosmology.little_h) # At redshift z0
         self.Mminobs=self.Mmin+5*np.log10(cosmology.little_h)
-        self.Mmaxobs=self.Mmax+5*np.log10(cosmology.little_h)
+        self.Mmaxobs=self.Mmax+5*np.log10(cosmology.little_h)        
+        self.phistarobs=self.phistar*np.power(cosmology.little_h,3.) # At redshift 0
         
-        self.phistarobs=self.phistar*np.power(cosmology.little_h,3.)
-        xmax=np.power(10.,0.4*(self.Mstarobs-self.Mminobs))
-        xmin=np.power(10.,0.4*(self.Mstarobs-self.Mmaxobs))
+    def get_norm(self,z):
+        '''
+        Returns the normalization of the Schecter function
+        
+        Parameters
+        ----------
+        z: xp.array
+            redshift
+        '''
+        sx = get_module_array_scipy(z)
+        phistarobs, Mstarobs = self.get_evol_phi_Mstar(z)
+        xmax=np.power(10.,0.4*(Mstarobs-self.Mminobs))
+        xmin=np.power(10.,0.4*(Mstarobs-self.Mmaxobs))
         # Check if you need to replace this with a numerical integral.
-        self.norm=self.phistarobs*float(mpmath.gammainc(self.alpha+1,a=xmin,b=xmax))
+        return phistarobs*sx.special.gamma(self.alpha+1)*(sx.special.gammainc(self.alpha+1,xmax)-sx.special.gammainc(self.alpha+1,xmin))
 
-    def log_evaluate(self,M):
+    def get_evol_phi_Mstar(self,z):
+        '''
+        Returns the Schecter function phistar and Mstar parameters evolved in redshift.
+        The parametrization of evolution is Eq. 5 https://arxiv.org/pdf/1111.0166
+
+        Parameters
+        ----------
+        z: xp.array
+            redshift
+        '''
+        # To do, should we add a check Mmin<Mstar<Mmax?
+        xp = get_module_array(z)
+        return self.phistarobs*xp.power(10.,0.4*self.P*z), self.Mstarobs-self.Q*(z-self.z0)
+
+    def log_evaluate(self,M,z):
         '''
         Evluates the log of the Sch function
         
@@ -414,18 +440,22 @@ class galaxy_MF(object):
         ----------
         M: xp.array
             Absolute magnitude
+        z: xp.array
+            Redshift
             
         Returns
         -------
         log of the Sch function
         '''
         xp = get_module_array(M)
-        toret=xp.log(0.4*xp.log(10)*self.phistarobs)+ \
-        ((self.alpha+1)*0.4*(self.Mstarobs-M))*xp.log(10.)-xp.power(10.,0.4*(self.Mstarobs-M))
+        phistarobs, Mstarobs = self.get_evol_phi_Mstar(z)
+        
+        toret=xp.log(0.4*xp.log(10)*phistarobs)+ \
+        ((self.alpha+1)*0.4*(Mstarobs-M))*xp.log(10.)-xp.power(10.,0.4*(Mstarobs-M))
         toret[(M<self.Mminobs) | (M>self.Mmaxobs)]=-xp.inf
         return toret
 
-    def log_pdf(self,M):
+    def log_pdf(self,M,z):
         '''
         Evluates the log of the Sch function as pdf
         
@@ -433,15 +463,16 @@ class galaxy_MF(object):
         ----------
         M: xp.array
             Absolute magnitude
-            
+        z: xp.array
+            Redshift
         Returns
         -------
         log of the Sch function as pdf
         '''
         xp = get_module_array(M)
-        return self.log_evaluate(M)-xp.log(self.norm)
+        return self.log_evaluate(M,z)-xp.log(self.get_norm(z))
 
-    def pdf(self,M):
+    def pdf(self,M,z):
         '''
         Evluates the Sch as pdf
         
@@ -449,15 +480,17 @@ class galaxy_MF(object):
         ----------
         M: xp.array
             Absolute magnitude
+        z: xp.array
+            Redshift
             
         Returns
         -------
         log of the Sch as pdf
         '''
         xp = get_module_array(M)
-        return xp.exp(self.log_pdf(M))
+        return xp.exp(self.log_pdf(M,z))
 
-    def evaluate(self,M):
+    def evaluate(self,M,z):
         '''
         Evluates the Sch as pdf
         
@@ -465,15 +498,17 @@ class galaxy_MF(object):
         ----------
         M: xp.array
             Absolute magnitude
+        z: xp.array
+            Redshift
             
         Returns
         -------
         Sch function in Gpc-3
         '''
         xp = get_module_array(M)
-        return xp.exp(self.log_evaluate(M))
+        return xp.exp(self.log_evaluate(M,z))
 
-    def sample(self,N):
+    def sample(self,N,z):
         '''
         Samples from the pdf
         
@@ -481,13 +516,15 @@ class galaxy_MF(object):
         ----------
         N: int
             Number of samples to generate
-        
+        z: float
+            Redshift
+            
         Returns
         -------
         Samples: xp.array
         '''
         sarray=np.linspace(self.Mminobs,self.Mmaxobs,10000)
-        cdfeval=np.cumsum(self.pdf(sarray))/self.pdf(sarray).sum()
+        cdfeval=np.cumsum(self.pdf(sarray,z))/self.pdf(sarray,z).sum()
         cdfeval[0]=0.
         randomcdf=np.random.rand(N)
         return np.interp(randomcdf,cdfeval,sarray,left=self.Mminobs,right=self.Mmaxobs)
@@ -519,7 +556,7 @@ class galaxy_MF(object):
             self.effective_density_interpolant_gpu=np2cp(self.effective_density_interpolant[::-1])
             self.xvector_interpolant_gpu=np2cp(self.Mstar-Mvector_interpolant[::-1])
         
-    def background_effective_galaxy_density(self,Mthr):
+    def background_effective_galaxy_density(self,Mthr,z):
         '''Returns the effective galaxy density, i.e. dN_{gal,eff}/dVc, the effective number is given by the luminosity weights.
         This is Eq. 2.37 on the Overleaf documentation
         
@@ -531,7 +568,8 @@ class galaxy_MF(object):
         
         origin=Mthr.shape
         xp = get_module_array(Mthr)
-        ravelled=xp.ravel(self.Mstarobs-Mthr)
+        _, Mstarobs = self.get_evol_phi_Mstar(z)
+        ravelled = xp.ravel(Mstarobs-Mthr)
         # Schecter function is 0 outside intervals that's why we set limit on boundaries
         
         if iscupy(Mthr):
@@ -544,6 +582,7 @@ class galaxy_MF(object):
         outp=self.phistarobs*xp.interp(ravelled,xvector_interpolant,effective_density_interpolant
                            ,left=effective_density_interpolant[0],right=effective_density_interpolant[-1])
         return xp.reshape(outp,origin)
+
 
 
 

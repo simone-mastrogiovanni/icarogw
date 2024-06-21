@@ -645,7 +645,7 @@ class  icarogw_catalog(object):
         gcpart=sx.interpolate.interpn((z_grid,pixel_grid),dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
                             fill_value=0.,method='linear') # If a posterior samples fall outside, then you return 0
         
-        bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array)*cosmology.dVc_by_dzdOmega_at_z(z)
+        bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array,z)*cosmology.dVc_by_dzdOmega_at_z(z)
         
         return gcpart.reshape(originshape),bgpart.reshape(originshape)
         
@@ -682,11 +682,11 @@ class  icarogw_catalog(object):
             gcp[:,i],bgp[:,i]=self.effective_galaxy_number_interpolant(z,skypos*np.ones_like(z).astype(int),cosmology)
             Mthr_array=self.calc_Mthr(z,np.ones_like(z,dtype=int)*skypos,cosmology)
             Mthr_array[z>self.z_grid[-1]]=-np.inf
-            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array)/self.sch_fun.background_effective_galaxy_density(-np.ones_like(Mthr_array)*np.inf)
+            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array,z)/self.sch_fun.background_effective_galaxy_density(-np.ones_like(Mthr_array)*np.inf,z)
             
         fig,ax=plt.subplots(2,1,sharex=True)
         
-        theo=self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(z))*cosmology.dVc_by_dzdOmega_at_z(z)
+        theo=self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(z),z)*cosmology.dVc_by_dzdOmega_at_z(z)
                 
         ax[0].fill_between(z,np.percentile(gcp,5,axis=1),np.percentile(gcp,95,axis=1),color='limegreen',alpha=0.2)
         ax[0].plot(z,np.median(gcp,axis=1),label='Catalog part',color='limegreen',lw=2)
