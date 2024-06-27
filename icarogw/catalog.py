@@ -607,6 +607,7 @@ class  icarogw_catalog(object):
     def effective_galaxy_number_interpolant(self,z,skypos,cosmology,dl=None):
         '''
         Returns an evaluation of dNgal/dzdOmega, it requires `calc_dN_by_dzdOmega_interpolant` to be called first.
+        It needs the schecter function to be updated
         
         Parameters
         ----------
@@ -615,7 +616,7 @@ class  icarogw_catalog(object):
         skypos: xp.array
             Array containing the healpix indeces where to evaluate the interpolant
         cosmology: class
-            cosmology class to use for the computation
+            cosmology class to use for the computations
         dl: xp.array
             Luminosity distance in Mpc
         average: bool
@@ -627,7 +628,6 @@ class  icarogw_catalog(object):
        
         originshape=z.shape
         z=z.flatten()
-        self.sch_fun.build_MF(cosmology)
         skypos=skypos.flatten()
         
         if dl is None:

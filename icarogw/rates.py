@@ -156,6 +156,7 @@ class CBC_catalog_vanilla_rate_skymap(object):
         '''
         self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
         self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
+        self.catalog.sch_fun.build_MF(self.cw.cosmology)
             
         if not self.scale_free:
             self.Rgal = kwargs['Rgal']
@@ -1226,6 +1227,9 @@ class CBC_catalog_vanilla_rate(object):
         self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
         self.mw.update(**{key: kwargs[key] for key in self.mw.population_parameters})
         self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
+        self.catalog.sch_fun.build_MF(self.cw.cosmology)
+
+        
         if self.sw is not None:
             self.sw.update(**{key: kwargs[key] for key in self.sw.population_parameters})
             

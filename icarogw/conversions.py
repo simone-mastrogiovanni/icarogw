@@ -6,6 +6,9 @@ from ligo.skymap.io.fits import read_sky_map
 import astropy_healpix as ah
 from astropy import units as u
 
+COST_C= 299792.458 # Speed of light in km/s
+
+
 def cred_interval(sigma):
     '''
     Convert sigma error of a gaussian into a credible interval percentage
