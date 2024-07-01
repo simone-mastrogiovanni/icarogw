@@ -2,7 +2,6 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .conversions import detector2source_jacobian, detector2source, detector2source_jacobian_q
 from scipy.stats import gaussian_kde
 
-
 class CBC_mixte_pop_rate(object):
     '''
     A rate class for mixture population models. The overall population is constructed as 
@@ -1159,9 +1158,6 @@ class CBC_vanilla_rate_spins(CBC_vanilla_rate):
         return self.log_rate_PE(prior,**kwargs)
 
 
-
-
-
 # LVK Reviewed
 class CBC_catalog_vanilla_rate(object):
     '''
@@ -1262,7 +1258,7 @@ class CBC_catalog_vanilla_rate(object):
         -xp.log1p(z)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log(prior)
         
         if self.sw is not None:
-            log_weights+=self.spin_wrap.log_pdf(**{key:self.posterior_parallel[key] for key in self.sw.event_parameters})
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.Rgal)
@@ -1295,7 +1291,7 @@ class CBC_catalog_vanilla_rate(object):
         -xp.log1p(z)-xp.log(detector2source_jacobian(z,self.cw.cosmology))-xp.log(prior)
         
         if self.sw is not None:
-            log_weights+=self.spin_wrap.log_pdf(**{key:self.posterior_parallel[key] for key in self.sw.event_parameters})
+            log_weights+=self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
             
         if not self.scale_free:
             log_out = log_weights + xp.log(self.Rgal)
