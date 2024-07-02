@@ -607,6 +607,7 @@ class  icarogw_catalog(object):
     def effective_galaxy_number_interpolant(self,z,skypos,cosmology,dl=None):
         '''
         Returns an evaluation of dNgal/dzdOmega, it requires `calc_dN_by_dzdOmega_interpolant` to be called first.
+        It needs the schecter function to be updated
         
         Parameters
         ----------
@@ -615,7 +616,7 @@ class  icarogw_catalog(object):
         skypos: xp.array
             Array containing the healpix indeces where to evaluate the interpolant
         cosmology: class
-            cosmology class to use for the computation
+            cosmology class to use for the computations
         dl: xp.array
             Luminosity distance in Mpc
         average: bool
@@ -627,7 +628,6 @@ class  icarogw_catalog(object):
        
         originshape=z.shape
         z=z.flatten()
-        self.sch_fun.build_MF(cosmology)
         skypos=skypos.flatten()
         
         if dl is None:
@@ -645,7 +645,7 @@ class  icarogw_catalog(object):
         gcpart=sx.interpolate.interpn((z_grid,pixel_grid),dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
                             fill_value=0.,method='linear') # If a posterior samples fall outside, then you return 0
         
-        bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array)*cosmology.dVc_by_dzdOmega_at_z(z)
+        bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array,z)*cosmology.dVc_by_dzdOmega_at_z(z)
         
         return gcpart.reshape(originshape),bgpart.reshape(originshape)
         
@@ -682,11 +682,11 @@ class  icarogw_catalog(object):
             gcp[:,i],bgp[:,i]=self.effective_galaxy_number_interpolant(z,skypos*np.ones_like(z).astype(int),cosmology)
             Mthr_array=self.calc_Mthr(z,np.ones_like(z,dtype=int)*skypos,cosmology)
             Mthr_array[z>self.z_grid[-1]]=-np.inf
-            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array)/self.sch_fun.background_effective_galaxy_density(-np.ones_like(Mthr_array)*np.inf)
+            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array,z)/self.sch_fun.background_effective_galaxy_density(-np.ones_like(Mthr_array)*np.inf,z)
             
         fig,ax=plt.subplots(2,1,sharex=True)
         
-        theo=self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(z))*cosmology.dVc_by_dzdOmega_at_z(z)
+        theo=self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(z),z)*cosmology.dVc_by_dzdOmega_at_z(z)
                 
         ax[0].fill_between(z,np.percentile(gcp,5,axis=1),np.percentile(gcp,95,axis=1),color='limegreen',alpha=0.2)
         ax[0].plot(z,np.median(gcp,axis=1),label='Catalog part',color='limegreen',lw=2)
@@ -723,9 +723,9 @@ class kcorr(object):
             W1, K or bJ band. Others are not implemented
         '''
         self.band=band
-        if self.band not in ['W1-glade+','K-glade+','bJ-glade+','W1-upglade']:
+        if self.band not in ['W1-glade+','K-glade+','bJ-glade+','W1-upglade','g-upglade']:
             raise ValueError('Band not known please use either {:s}'.format(' '.join(['W1-glade+','K-glade+','bJ-glade+',
-                                                                                     'W1-upglade'])))
+                                                                                     'W1-upglade','g-upglade'])))
     def __call__(self,z):
         '''
         Evaluates the K-corrections at a given redshift, See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
@@ -751,7 +751,7 @@ class kcorr(object):
             # Fig 5 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
             # Note that these corrections also includes evolution corrections
             k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
-        elif self.band == 'W1-upglade':
+        elif (self.band == 'W1-upglade') | (self.band == 'g-upglade'):
             # In upglade k-corrections are already applied
             k_corr = xp.zeros_like(z) 
         return k_corr
