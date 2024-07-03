@@ -571,7 +571,7 @@ class galaxy_MF(object):
         
         origin=Mthr.shape
         xp = get_module_array(Mthr)
-        _, Mstarobs = self.get_evol_phi_Mstar(z)
+        phis, Mstarobs = self.get_evol_phi_Mstar(z)
         ravelled = xp.ravel(Mstarobs-Mthr)
         # Schecter function is 0 outside intervals that's why we set limit on boundaries
         
@@ -582,7 +582,7 @@ class galaxy_MF(object):
             xvector_interpolant=self.xvector_interpolant_cpu
             effective_density_interpolant=self.effective_density_interpolant_cpu
             
-        outp=self.phistarobs*xp.interp(ravelled,xvector_interpolant,effective_density_interpolant
+        outp=phis*xp.interp(ravelled,xvector_interpolant,effective_density_interpolant
                            ,left=effective_density_interpolant[0],right=effective_density_interpolant[-1])
         return xp.reshape(outp,origin)
 
