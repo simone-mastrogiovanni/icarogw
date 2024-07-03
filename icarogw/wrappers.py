@@ -388,7 +388,7 @@ class FlatLambdaCDM_wrap(object):
 # LVK Reviewed
 class FlatwCDM_wrap(object):
     def __init__(self,zmax):
-        self.population_parameters=['H0','Om0','w']
+        self.population_parameters=['H0','Om0','w0']
         self.cosmology=astropycosmology(zmax)
         self.astropycosmo=FlatwCDM
     def update(self,**kwargs):
