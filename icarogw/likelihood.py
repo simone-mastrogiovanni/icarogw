@@ -38,7 +38,7 @@ class hierarchical_likelihood(bilby.Likelihood):
             self.neffINJ=4*self.posterior_samples_dict.n_ev
         else:
             self.neffINJ=neffINJ
-            
+        
         super().__init__(parameters={ll: None for ll in self.rate_model.population_parameters})
                 
     def log_likelihood(self):

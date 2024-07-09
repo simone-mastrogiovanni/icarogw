@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name='icarogw',
-    version='2.0.2',
+    version='2.0.3',
     author='Simone Mastrogiovanni',
     author_email='simone.mastrogiovanni@ligo.org',
     description='A python package for inference of population properties of noisy, heterogeneous and incomplete observations',
@@ -15,6 +15,6 @@ setuptools.setup(
     license='EUPL-1.2',
     python_requires='>=3.10',
     packages=['icarogw'],
-    install_requires=['attrs==23.1.0','tables==3.9.1','jupyterlab==4.0.8','bilby==2.2.0',
-                      'healpy==1.16.6','mpmath==1.3.0','ligo.skymap==1.1.2','ChainConsumer==1.0.2','mhealpy==0.3.3']
+    install_requires=['bilby==2.3.0','ChainConsumer==1.1.1','mhealpy==0.3.3',
+                     'ligo.skymap==2.0.1','mpmath==1.3.0']
 )

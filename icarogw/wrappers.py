@@ -558,6 +558,7 @@ class m1m2_conditioned_lowpass(pm1m2_prob):
         p2 = LowpassSmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
         self.prior=conditional_2dimpdf(p1,p2)
 
+
 class m1m2_paired_massratio_dip(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters + ['beta','bottomsmooth', 'topsmooth', 
@@ -578,6 +579,63 @@ class m1m2_paired_massratio_dip(pm1m2_prob):
         
         self.prior=paired_2dimpdf(p,pairing_function)
 
+
+class m1m2_paired_massratio_dip_general(pm1m2_prob):
+    def __init__(self,wrapper_m):
+        self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
+        p = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
+        
+        def pairing_function(m1,m2,beta_bottom=kwargs['beta_bottom'],beta_top=kwargs['beta_top'],
+                            rightdip=kwargs['rightdip']):
+            
+            xp = get_module_array(m1)
+            q = m2/m1
+            toret = xp.ones_like(q)
+            idx = m2<=rightdip
+            toret[idx] = xp.power(q[idx],beta_bottom)
+            idx = m2>rightdip
+            toret[idx] = xp.power(q[idx],beta_top)
+            toret[q>1] = 0.
+            return toret
+        
+        self.prior=paired_2dimpdf(p,pairing_function)
+
+
+class m1m2_paired_massratio_bpl_dip_farah_2022(pm1m2_prob):
+    def __init__(self):
+        wrapper_m = massprior_BrokenPowerLaw()
+        wrapper_m.population_parameters.remove('b')
+        self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        kwargs['b'] = (kwargs['leftdip']-kwargs['mmin'])/(kwargs['mmax']-kwargs['mmin'])
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters+['b']})
+        p = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
+        
+        def pairing_function(m1,m2,beta_bottom=kwargs['beta_bottom'],beta_top=kwargs['beta_top']):
+            
+            xp = get_module_array(m1)
+            q = m2/m1
+            toret = xp.ones_like(q)
+            idx = m2<=5.
+            toret[idx] = xp.power(q[idx],beta_bottom)
+            idx = m2>5.
+            toret[idx] = xp.power(q[idx],beta_top)
+            toret[q>1] = 0.
+            return toret
+        
+        self.prior=paired_2dimpdf(p,pairing_function)
 
 class m1m2_paired(pm1m2_prob):
     def __init__(self,wrapper_m):

@@ -1,6 +1,6 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, is_there_cupy
 from icarogw import cupy_pal
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 import mpmath
 import scipy.stats, scipy.misc
 
@@ -295,7 +295,7 @@ class cM_astropycosmology(astropycosmology):
         Zhalfbin=(ZforI[:-1:]+ZforI[1::])*0.5
         Integrandhalfin=1./((1+Zhalfbin)*np.power(astropy_cosmo.efunc(Zhalfbin),2.))
         Integrand=1./((1+self.z_cpu)*np.power(astropy_cosmo.efunc(self.z_cpu),2.))
-        Integral=cumtrapz(Integrandhalfin,Zhalfbin)
+        Integral=cumulative_trapezoid(Integrandhalfin,Zhalfbin)
         self.log10_dl_at_z_cpu=np.log10(dlem*np.exp((0.5*cM)*Integral))
         exp_factor = np.exp(0.5*cM*Integral)
         # We put the absolute value for the Jacobian (because this is needed for probabilities)
@@ -365,7 +365,8 @@ class alphalog_astropycosmology(astropycosmology):
 class galaxy_MF(object):
     def __init__(self,band=None,Mmin=None,Mmax=None,Mstar=None,alpha=None,phistar=None,Q = None, P = None, z0 = None):
         '''
-        A class to handle the Schechter function in absolute magnitude
+        A class to handle the Schechter function in absolute magnitude. The parametrization for the Schecter function evolution is taken from
+        1111.0166
         
         Parameters
         ----------
