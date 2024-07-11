@@ -658,7 +658,7 @@ class m1m2_paired_massratio_bplmulti_dip(pm1m2_prob):
         self.wrapper_m = wrapper_m
     def update(self,**kwargs):
         mbreak_NS = kwargs['leftdip'] + kwargs['leftdipsmooth']
-        mbreak_BH = kwargs['rightdip'] + kwargs['rightdipsmooth']
+        mbreak_BH = kwargs['rightdip'] - kwargs['rightdipsmooth']
         mbreak = 0.5*(mbreak_NS+mbreak_BH)
         kwargs['b'] = (mbreak-kwargs['mmin'])/(kwargs['mmax']-kwargs['mmin'])
         self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters+['b']})
