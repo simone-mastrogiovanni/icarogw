@@ -680,7 +680,32 @@ class m1m2_paired_massratio_bplmulti_dip(pm1m2_prob):
             return toret
         
         self.prior=paired_2dimpdf(p,pairing_function)
+
+
+
+class m1m2_paired_massratio_bplmulti_dip_conditioned(pm1m2_prob):
+    def __init__(self):
+        wrapper_m = massprior_BrokenPowerLawMultiPeak()
+        wrapper_m.population_parameters.remove('b')
+        self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        mbreak_NS = kwargs['leftdip'] + kwargs['leftdipsmooth']
+        mbreak_BH = kwargs['rightdip'] - kwargs['rightdipsmooth']
+        mbreak = 0.5*(mbreak_NS+mbreak_BH)
+        kwargs['b'] = (mbreak-kwargs['mmin'])/(kwargs['mmax']-kwargs['mmin'])
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters+['b']})
+        p1 = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
         
+        # Equivalent to a broken power law distribution in q = m2/m1
+        bpl = BrokenPowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta_bottom'],kwargs['beta_top'],kwargs['b'])
+        p2 = LowpassSmoothedProb(bpl,kwargs['bottomsmooth'])
+        
+        self.prior=conditional_2dimpdf(p1,p2)
 
 class m1m2_paired(pm1m2_prob):
     def __init__(self,wrapper_m):
