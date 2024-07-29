@@ -531,6 +531,10 @@ class  icarogw_catalog(object):
         self.sch_fun.build_effective_number_density_interpolant(epsilon)
         self.dNgal_dzdOm_vals = np.column_stack(dNgal_dzdOm_vals)
 
+    def make_me_empty(self):
+        self.moc_mthr_map._data = -np.inf*np.ones_like(self.moc_mthr_map._data)
+        self.dNgal_dzdOm_vals = np.zeros_like(self.dNgal_dzdOm_vals)
+
     def save_to_hdf5_file(self):
         '''
         Saves the interpolants and everything neeeded in a single hdf5 file
