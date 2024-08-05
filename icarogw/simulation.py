@@ -1,6 +1,6 @@
 from .cupy_pal import *
 from .cosmology import astropycosmology
-from .wrappers import massprior_PowerLawPeak, m1m2_conditioned, m1m2_conditioned_lowpass
+from .wrappers import massprior_PowerLawPeak, m1m2_conditioned
 from .wrappers import *
 from scipy import stats
 from scipy import interpolate
