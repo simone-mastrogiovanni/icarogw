@@ -806,6 +806,20 @@ def PL_normfact(minpl,maxpl,alpha):
         norm_fact=(np.power(maxpl,alpha+1.)-np.power(minpl,alpha+1))/(alpha+1)
     return norm_fact
 
+def PL_normfact_z(minpl,maxpl,alpha):
+    '''
+    Returns the Powerlaw normalization factor
+    
+    Parameters
+    ----------
+    minpl, maxpl, alpha: Minimum, maximum and power law exponent of the distribution
+    '''
+    if alpha.any() == -1:
+        norm_fact=np.log(maxpl/minpl)
+    else:
+        norm_fact=(np.power(maxpl,alpha+1.)-np.power(minpl,alpha+1))/(alpha+1)
+    return norm_fact
+
 class EvolvingPowerLawPeak(object):
 
     def __init__(self,mass_wrapper,zt,delta_zt,mu_z0,mu_z1,sigma_z0,sigma_z1):

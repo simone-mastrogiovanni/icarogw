@@ -8,6 +8,44 @@ import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM
 
 
+class GaussianEvolving():
+
+    def __init__(self, order = 1):
+
+        self.order = order
+        mu_list    = ['mu_z{}'.format(i)    for i in range(order + 1)]
+        sigma_list = ['sigma_z{}'.format(i) for i in range(order + 1)]
+        self.population_parameters = mu_list + sigma_list
+
+    def update(self, **kwargs):
+
+        for par in kwargs.keys():
+            globals()['self.%s' % par] = kwargs[par]
+
+    def polynomial(self, expansion_order, x, variable):
+        
+        pol = 0
+        for i in range(expansion_order + 1):
+            par = '{}_z{}'.format(variable, i)
+            pol += globals()['self.%s' % par] * x ** i
+        return pol
+
+    def log_pdf(self, m, z):
+
+        xp = get_module_array(m)
+        self.muz    = self.polynomial(self.order, z, 'mu')
+        self.sigmaz = self.polynomial(self.order, z, 'sigma')
+        gaussian = xp.log(xp.power(2 * xp.pi, -0.5) / self.sigmaz) + -.5 * xp.power((m - self.muz) / self.sigmaz, 2.)
+        return gaussian
+
+    def pdf(self, m, z):
+        xp = get_module_array(m)
+        return xp.exp(self.log_pdf(m, z))
+    
+    def return_mu_sigma(self):
+        return self.muz, self.sigmaz
+
+
 class mixed_mass_redshift_evolving(object):
 
     def __init__(self,mw):
@@ -138,6 +176,38 @@ class double_mixed_mass_redshift_evolving_linear(object):
             return xp.nan
         else:
             return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
+    
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+    
+
+class double_mixed_mass_redshift_evolving_linear_prior(object):
+
+    def __init__(self,mw):
+        
+        self.population_parameters = mw.population_parameters + ['mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1', 'mix_z0', 'mix_z1']
+        self.mw_red_ind = mw
+
+    def update(self,**kwargs):
+
+        self.mw_red_ind.update(**{key:kwargs[key] for key in self.mw_red_ind.population_parameters})
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+        self.mix_z0 = kwargs['mix_z0']
+        self.mix_z1 = kwargs['mix_z1']
+
+    def pdf(self,m,z):
+
+        xp = get_module_array(m)
+        wz = _mixed_linear_function(z, self.mix_z0, self.mix_z1)
+        muz = self.mu_z0 + self.mu_z1*z
+        sigmaz = self.sigma_z0 + self.sigma_z1*z
+        gaussian_part = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((m-muz)/sigmaz,2.))
+
+        return wz*self.mw_red_ind.pdf(m) + (1-wz)*gaussian_part
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)
@@ -291,7 +361,7 @@ class PowerLawLinear_GaussianLinear_TransitionLinear():
         powerlaw_class = PowerLawLinear_GaussianLinear_TransitionLinear.PowerLawLinear(z, self.alpha_z0, self.alpha_z1, self.mmin_z0, self.mmin_z1, self.mmax_z0, self.mmax_z1)
         powerlaw_class = LowpassSmoothedProbEvolving(powerlaw_class, self.delta_m)
         gaussian_class = PowerLawLinear_GaussianLinear_TransitionLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
-        powerlaw_part  = powerlaw_class._pdf(m)
+        powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
         muz, sigmaz = gaussian_class.return_mu_sigma()
