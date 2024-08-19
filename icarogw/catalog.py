@@ -404,7 +404,7 @@ def initialize_icarogw_catalog(outfolder,outfile,grouping):
         # Saves the actually filled helpy pixels
         icat[grouping].create_dataset('mthr_filled_pixels_healpy',data=actual_filled_pixels)
     
-        # Saves an array that indicates the filled healpy pixels to which uniq they correspond
+        # Saves an array that indicates the filled healpy pixels to which pixel label they correspond on the non uniform map
         icat[grouping].create_dataset('mthr_filled_pixels_healpy_to_moc_labels',data=mapping_filled_pixels)
     
         # Saves the mthr map
@@ -508,11 +508,11 @@ class  icarogw_catalog(object):
             self.z_grid = icat[self.grouping]['z_grid'][:]
             # Saves the actually filled helpy pixels
             filled_pixels = icat[self.grouping]['mthr_filled_pixels_healpy'][:]
-            # Saves an array that indicates the filled healpy pixels to which uniq they correspond
+            # Saves an array that indicates the filled healpy pixels to which pixel label they correspond
             moc_pixels = icat[self.grouping]['mthr_filled_pixels_healpy_to_moc_labels'][:]
 
-        # Sorted uniq grid
-        self.sky_grid = np.sort(self.moc_mthr_map.uniq)
+        # That indentifies the index of the pixels on the mthr map in sorted order
+        self.sky_grid = np.arange(0,len(self.moc_mthr_map.data),1).astype(int)
         dNgal_dzdOm_vals = []
         for pix in tqdm(self.sky_grid,desc='Bulding sky grid'):
             idx = np.where(moc_pixels == pix)[0]
@@ -562,7 +562,7 @@ class  icarogw_catalog(object):
         self.sch_fun=galaxy_MF(band=self.band)
         self.sch_fun.build_effective_number_density_interpolant(self.epsilon)           
         # Sorted uniq grid
-        self.sky_grid = np.sort(self.moc_mthr_map.uniq)
+        self.sky_grid = np.arange(0,len(self.moc_mthr_map.data),1).astype(int)
         
     def get_NUNIQ_pixel(self,ra,dec):
         '''
