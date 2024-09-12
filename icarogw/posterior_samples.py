@@ -18,7 +18,7 @@ class posterior_samples_catalog(object):
         self.posterior_samples_dict = posterior_samples_dict
         self.n_ev = len(posterior_samples_dict)
     
-    def build_parallel_posterior(self,nparallel=None):
+    def build_parallel_posterior(self,nparallel):
         '''
         Build a matrix of GW parameters by selecting random samples from each posterior
         
@@ -30,12 +30,7 @@ class posterior_samples_catalog(object):
         
         
         # Saves the minimum number of samples to use per event
-        nsamps=np.array([self.posterior_samples_dict[key].nsamples for key in self.posterior_samples_dict.keys()])
-        if nparallel is None:
-            nparallel=np.min(nsamps)
-        else:
-            nparallel=np.min(np.hstack([nsamps,nparallel]))
-        
+        nsamps=np.array([self.posterior_samples_dict[key].nsamples for key in self.posterior_samples_dict.keys()])        
         self.nparallel=nparallel
         llev=list(self.posterior_samples_dict.keys()) # Name of events
         print('Using {:d} samples from each {:d} posteriors'.format(self.nparallel,self.n_ev))
@@ -46,12 +41,24 @@ class posterior_samples_catalog(object):
         self.posterior_parallel={key:xp.empty([self.n_ev,self.nparallel],
                                               dtype=self.posterior_samples_dict[llev[0]].posterior_data[key].dtype) for key in self.posterior_samples_dict[llev[0]].posterior_data.keys()}
 
+        self.posterior_parallel_logmask=xp.ones([self.n_ev,self.nparallel],
+                                              dtype=self.posterior_samples_dict[llev[0]].posterior_data[key].dtype)
+
+        self.Ns_array = xp.ones(self.n_ev)
         # Saves the posterior samples in a dictionary containing events on rows and posterior samples on columns
         for i,event in enumerate(list(self.posterior_samples_dict.keys())):
             len_single = self.posterior_samples_dict[event].nsamples
-            rand_perm = xp.random.permutation(len_single)
+            Ntake = xp.minimum(len_single,self.nparallel)
+            self.Ns_array[i] = xp.minimum(len_single,self.nparallel)
+            print('Taking {:d} posterior samples from {:s} that has {:d} samples'.format(Ntake,event,len_single))
+            # Permute the posterior samples below and then take the first Ntake
+            rand_perm = xp.random.permutation(len_single)[:Ntake]
             for key in self.posterior_parallel.keys():
-                self.posterior_parallel[key][i,:]=self.posterior_samples_dict[event].posterior_data[key][rand_perm[:self.nparallel]]
+                self.posterior_parallel[key][i,:len(rand_perm)]=self.posterior_samples_dict[event].posterior_data[key][rand_perm]
+                self.posterior_parallel[key][i,len(rand_perm):]=self.posterior_samples_dict[event].posterior_data[key][rand_perm[-1]] # Fill the matrix with last sample
+
+            self.posterior_parallel_logmask[i,len(rand_perm):]=-xp.inf # Set the mask of the filled samples to -inf
+            
             self.posterior_samples_dict[event].numpyfy() # Big data is forced to be on CPU
             
     def cupyfy(self):
@@ -76,11 +83,13 @@ class posterior_samples_catalog(object):
 
         self.log_weights = rate_wrapper.log_rate_PE(self.posterior_parallel['prior'],
                                                     **{key:self.posterior_parallel[key] for key in rate_wrapper.PEs_parameters})
+
+        self.log_weights*=self.posterior_parallel_logmask # Masks the samples that are replicated
         xp = get_module_array(self.log_weights)
         sx = get_module_array_scipy(self.log_weights)
         kk = list(self.posterior_parallel.keys())[0]
-        self.sum_weights=xp.exp(sx.special.logsumexp(self.log_weights,axis=1))/self.nparallel
-        self.sum_weights_squared= xp.exp(sx.special.logsumexp(2*self.log_weights,axis=1))/xp.power(self.nparallel,2.)
+        self.sum_weights=xp.exp(sx.special.logsumexp(self.log_weights,axis=1))/self.Ns_array
+        self.sum_weights_squared= xp.exp(sx.special.logsumexp(2*self.log_weights,axis=1))/xp.power(self.Ns_array,2.)
         
     def get_effective_number_of_PE(self):
         '''
