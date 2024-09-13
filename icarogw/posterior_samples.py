@@ -60,7 +60,10 @@ class posterior_samples_catalog(object):
             self.posterior_parallel_logmask[i,len(rand_perm):]=-xp.inf # Set the mask of the filled samples to -inf
             
             self.posterior_samples_dict[event].numpyfy() # Big data is forced to be on CPU
-            
+
+        self.weights_mask = xp.logical_not(xp.isfinite(self.posterior_parallel_logmask))
+        del self.posterior_parallel_logmask
+        
     def cupyfy(self):
         ''' Converts all the posterior samples to cupy'''
         self.posterior_parallel={key:np2cp(self.posterior_parallel[key]) for key in self.posterior_parallel}
@@ -83,10 +86,9 @@ class posterior_samples_catalog(object):
 
         self.log_weights = rate_wrapper.log_rate_PE(self.posterior_parallel['prior'],
                                                     **{key:self.posterior_parallel[key] for key in rate_wrapper.PEs_parameters})
-
-        self.log_weights*=self.posterior_parallel_logmask # Masks the samples that are replicated
         xp = get_module_array(self.log_weights)
         sx = get_module_array_scipy(self.log_weights)
+        self.log_weights[self.weights_mask] = -xp.inf # Mask the fake samples and replace 0 weight
         kk = list(self.posterior_parallel.keys())[0]
         self.sum_weights=xp.exp(sx.special.logsumexp(self.log_weights,axis=1))/self.Ns_array
         self.sum_weights_squared= xp.exp(sx.special.logsumexp(2*self.log_weights,axis=1))/xp.power(self.Ns_array,2.)
