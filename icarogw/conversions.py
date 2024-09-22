@@ -910,11 +910,11 @@ def detector2source_jacobian(z, cosmology):
     xp = get_module_array(z)
     return xp.abs( xp.power(1+z, 2.) * cosmology.ddl_by_dz_at_z(z) )
 
-def detector2source_jacobian_q(z, m1s, cosmology):
+def detector2source_jacobian_q(z, cosmology):
     '''
     Calculates the detector frame to source frame Jacobian d_det/d_sour.
 
-    |J_d->s| = |J_(m1d, m2d, dL)->(m1s, m2s, z)| x |J_(m1s, m2s, z)->(m1s, q, z)| = (1+z)^2 ddL/dz x m1s
+    |J_d->s| = |J_(m1d, q, dL)->(m1s, q, z)| = (1+z) ddL/dz
 
     Parameters
     ----------
@@ -926,7 +926,7 @@ def detector2source_jacobian_q(z, m1s, cosmology):
             Cosmology class from the cosmology module
     '''
     xp = get_module_array(z)
-    return xp.abs( xp.power(1+z, 2.) * cosmology.ddl_by_dz_at_z(z) * m1s )
+    return xp.abs( (1+z) * cosmology.ddl_by_dz_at_z(z) )
 
 def detector2source_jacobian_single_mass(z, cosmology):
     '''

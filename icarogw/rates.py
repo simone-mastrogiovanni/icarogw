@@ -505,7 +505,7 @@ class CBC_rate_m1_given_redshift_q(object):
         # w = 1/prior_d dN/(dm1d dq ddL dtd) = 1/prior_d dN/(dm1s dq dVc dts) 1/|J_d->s| 1/1+z dVc/dz
         # dN/(dm1s dq dVc dts) = R(z) p_pop(m1s|z) p_pop(q|m1s,z)
         log_weights = self.m1zw.log_pdf(ms1, z) + self.qw.log_pdf(kwargs['mass_ratio']) + self.rw.rate.log_evaluate(z) + log_dVc_dz \
-        - xp.log(prior) - xp.log(detector2source_jacobian_q(z, ms1, self.cw.cosmology)) - xp.log1p(z)
+        - xp.log(prior) - xp.log(detector2source_jacobian_q(z, self.cw.cosmology)) - xp.log1p(z)
         
         if self.sw is not None:
             log_weights += self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
@@ -539,7 +539,7 @@ class CBC_rate_m1_given_redshift_q(object):
         # w = 1/prior_d dN/(dm1d dq ddL dtd) = 1/prior_d dN/(dm1s dq dVc dts) 1/|J_d->s| 1/1+z dVc/dz
         # dN/(dm1s dq dVc dts) = R(z) p_pop(m1s|z) p_pop(q|m1s,z)
         log_weights = self.m1zw.log_pdf(ms1, z) + self.qw.log_pdf(kwargs['mass_ratio']) + self.rw.rate.log_evaluate(z) + log_dVc_dz \
-        - xp.log(prior) - xp.log(detector2source_jacobian_q(z, ms1, self.cw.cosmology)) - xp.log1p(z)
+        - xp.log(prior) - xp.log(detector2source_jacobian_q(z, self.cw.cosmology)) - xp.log1p(z)
         
         if self.sw is not None:
             log_weights += self.sw.log_pdf(**{key:kwargs[key] for key in self.sw.event_parameters})
