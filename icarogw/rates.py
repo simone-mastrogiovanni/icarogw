@@ -866,7 +866,11 @@ class CBC_rate_m1_q(object):
             
         return log_out
     
+
 class CBC_rate_m1_given_redshift_m2(object):
+
+    # FIXME: This rate is not curently working.
+
     def __init__(self,cosmology_wrapper,mass_redshift_wrapper,
                  mass2_wrapper,rate_wrapper,spin_wrapper=None,scale_free=False):
         
