@@ -765,10 +765,11 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         The module is stand alone and not compatible with other wrappers.
     '''
 
-    def __init__(self, redshift_transition = 'linear'):
+    def __init__(self, redshift_transition = 'linear', flag_gaussians_overlap = 0):
         
-        self.population_parameters = ['mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mix_z0', 'mix_z1']
-        self.redshift_transition   = redshift_transition
+        self.population_parameters  = ['mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mix_z0', 'mix_z1']
+        self.redshift_transition    = redshift_transition
+        self.flag_gaussians_overlap = flag_gaussians_overlap
         
         if   self.redshift_transition == 'sigmoid':  self.population_parameters += ['zt', 'delta_zt']
         elif self.redshift_transition == 'sinusoid': self.population_parameters += ['amp', 'freq']
@@ -829,6 +830,12 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
 
+        if self.flag_gaussians_overlap:
+            muz_a, _ = gaussian_a_class.return_mu_sigma()
+            muz_b, _ = gaussian_b_class.return_mu_sigma()
+            # Impose the mean of the b-haussian to be larger than that of the a-gaussian.
+            if xp.any((muz_b - muz_a) < 0):
+                return xp.nan
         # Impose the rate to be between [0,1].
         if (xp.any(wz > 1)) or (xp.any(wz < 0)):
             return xp.nan
