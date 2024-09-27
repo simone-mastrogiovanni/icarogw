@@ -606,16 +606,22 @@ class PowerLaw_GaussianRedshiftLinear():
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
-        if self.flag_positive_gaussian:
+        if not self.flag_positive_gaussian:
+            # Impose the rate to be between [0,1].
+            if (xp.any(wz > 1)) or (xp.any(wz < 0)):
+                return xp.nan
+            else:
+                return wz * powerlaw_part + (1-wz) * gaussian_part
+        else:
             muz, sigmaz = gaussian_class.return_mu_sigma()
             # Impose the gaussian peak to exclude negative mass values at 3 sigma.
             if xp.any((muz - 3*sigmaz) < 0):
                 return xp.nan
-        # Impose the rate to be between [0,1].
-        elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
-            return xp.nan
-        else:
-            return wz * powerlaw_part + (1-wz) * gaussian_part
+            # Impose the rate to be between [0,1].
+            elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
+                return xp.nan
+            else:
+                return wz * powerlaw_part + (1-wz) * gaussian_part
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)
@@ -737,16 +743,22 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
-        if self.flag_positive_gaussian:
+        if not self.flag_positive_gaussian:
+            # Impose the rate to be between [0,1].
+            if (xp.any(wz > 1)) or (xp.any(wz < 0)):
+                return xp.nan
+            else:
+                return wz * powerlaw_part + (1-wz) * gaussian_part
+        else:
             muz, sigmaz = gaussian_class.return_mu_sigma()
             # Impose the gaussian peak to exclude negative mass values at 3 sigma.
             if xp.any((muz - 3*sigmaz) < 0):
                 return xp.nan
-        # Impose the rate to be between [0,1].
-        elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
-            return xp.nan
-        else:
-            return wz * powerlaw_part + (1-wz) * gaussian_part
+            # Impose the rate to be between [0,1].
+            elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
+                return xp.nan
+            else:
+                return wz * powerlaw_part + (1-wz) * gaussian_part
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)
@@ -830,17 +842,23 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
 
-        if self.flag_gaussians_overlap:
+        if not self.flag_gaussians_overlap:
+            # Impose the rate to be between [0,1].
+            if (xp.any(wz > 1)) or (xp.any(wz < 0)):
+                return xp.nan
+            else:
+                return wz * gaussian_a_part + (1-wz) * gaussian_b_part
+        else:
             muz_a, _ = gaussian_a_class.return_mu_sigma()
             muz_b, _ = gaussian_b_class.return_mu_sigma()
             # Impose the mean of the b-haussian to be larger than that of the a-gaussian.
             if xp.any((muz_b - muz_a) < 0):
                 return xp.nan
-        # Impose the rate to be between [0,1].
-        if (xp.any(wz > 1)) or (xp.any(wz < 0)):
-            return xp.nan
-        else:
-            return wz * gaussian_a_part + (1-wz) * gaussian_b_part
+            # Impose the rate to be between [0,1].
+            elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
+                return xp.nan
+            else:
+                return wz * gaussian_a_part + (1-wz) * gaussian_b_part
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)
