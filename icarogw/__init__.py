@@ -1,4 +1,5 @@
 from . import catalog
+from . import HI
 from . import conversions
 from . import cosmology
 from . import cupy_pal
