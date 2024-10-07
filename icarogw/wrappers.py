@@ -512,20 +512,23 @@ class PowerLaw_GaussianRedshiftLinear():
         Some options are available:
             - redshift_transition sets the function for the redshift transition
             between the PowerLaw and the Gaussian.
-            - flag_positive_gaussian forces the Gaussian to have positive values
-            to 3-sigmas for all redshifts.
             - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            - flag_positive_gaussian_z0 forces the Gaussian to have positive
+            values to 3-sigmas only at redshift zero.
+            - flag_positive_gaussian_z forces the Gaussian to have positive
+            values to 3-sigmas for all redshifts.
 
         The module is stand alone and not compatible with other wrappers.
     '''
 
-    def __init__(self, redshift_transition = 'linear', flag_positive_gaussian = 0, flag_powerlaw_smoothing = 1):
+    def __init__(self, redshift_transition = 'linear', flag_powerlaw_smoothing = 1, flag_positive_gaussian_z0 = 0, flag_positive_gaussian_z = 0):
         
-        self.population_parameters   = ['alpha', 'mmin', 'mmax', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1', 'mix_z0', 'mix_z1']
-        self.flag_positive_gaussian  = flag_positive_gaussian
-        self.flag_powerlaw_smoothing = flag_powerlaw_smoothing
-        self.redshift_transition     = redshift_transition
-
+        self.population_parameters     = ['alpha', 'mmin', 'mmax', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1', 'mix_z0', 'mix_z1']
+        self.redshift_transition       = redshift_transition
+        self.flag_powerlaw_smoothing   = flag_powerlaw_smoothing
+        self.flag_positive_gaussian_z0 = flag_positive_gaussian_z0
+        self.flag_positive_gaussian_z  = flag_positive_gaussian_z
+        
         if   self.redshift_transition == 'sigmoid':  self.population_parameters += ['zt', 'delta_zt']
         elif self.redshift_transition == 'sinusoid': self.population_parameters += ['amp', 'freq']
         if self.flag_powerlaw_smoothing: self.population_parameters += ['delta_m']
@@ -583,8 +586,11 @@ class PowerLaw_GaussianRedshiftLinear():
         def pdf(self,m):
             xp = get_module_array(m)
             return xp.exp(self.log_pdf(m))
+
+        def return_mu_sigma_z0(self):
+            return self.mu_z0, self.sigma_z0
         
-        def return_mu_sigma(self):
+        def return_mu_sigma_z( self):
             return self.muz, self.sigmaz
 
     def pdf(self,m,z):
@@ -606,16 +612,19 @@ class PowerLaw_GaussianRedshiftLinear():
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
-        if not self.flag_positive_gaussian:
+        if not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z):
             # Impose the rate to be between [0,1].
             if (xp.any(wz > 1)) or (xp.any(wz < 0)):
                 return xp.nan
             else:
                 return wz * powerlaw_part + (1-wz) * gaussian_part
         else:
-            muz, sigmaz = gaussian_class.return_mu_sigma()
+            if   self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z:
+                raise ValueError('Cannot impose peak positivity at z0 and all z simultaneously, please select only one. Exiting.')
+            elif self.flag_positive_gaussian_z0: mu, sigma = gaussian_class.return_mu_sigma_z0()
+            elif self.flag_positive_gaussian_z : mu, sigma = gaussian_class.return_mu_sigma_z()
             # Impose the gaussian peak to exclude negative mass values at 3 sigma.
-            if xp.any((muz - 3*sigmaz) < 0):
+            if xp.any((mu - 3*sigma) < 0):
                 return xp.nan
             # Impose the rate to be between [0,1].
             elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
@@ -636,20 +645,23 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
         Some options are available:
             - redshift_transition sets the function for the redshift transition
             between the PowerLaw and the Gaussian.
-            - flag_positive_gaussian forces the Gaussian to have positive values
-            to 3-sigmas for all redshifts.
             - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
             The smoothing slows heavily down the model evaluation.
+            - flag_positive_gaussian_z0 forces the Gaussian to have positive
+            values to 3-sigmas only at redshift zero.
+            - flag_positive_gaussian_z forces the Gaussian to have positive
+            values to 3-sigmas for all redshifts.
 
         The module is stand alone and not compatible with other wrappers.
     '''
 
-    def __init__(self, redshift_transition = 'linear', flag_positive_gaussian = 0, flag_powerlaw_smoothing = 0):
+    def __init__(self, redshift_transition = 'linear', flag_powerlaw_smoothing = 0, flag_positive_gaussian_z0 = 0, flag_positive_gaussian_z = 0):
         
         self.population_parameters   = ['alpha_z0', 'alpha_z1', 'mmin_z0', 'mmin_z1', 'mmax_z0', 'mmax_z1', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1', 'mix_z0', 'mix_z1']
-        self.flag_positive_gaussian  = flag_positive_gaussian
-        self.flag_powerlaw_smoothing = flag_powerlaw_smoothing
-        self.redshift_transition     = redshift_transition
+        self.redshift_transition       = redshift_transition
+        self.flag_powerlaw_smoothing   = flag_powerlaw_smoothing
+        self.flag_positive_gaussian_z0 = flag_positive_gaussian_z0
+        self.flag_positive_gaussian_z  = flag_positive_gaussian_z
 
         if   self.redshift_transition == 'sigmoid':  self.population_parameters += ['zt', 'delta_zt']
         elif self.redshift_transition == 'sinusoid': self.population_parameters += ['amp', 'freq']
@@ -719,7 +731,10 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
             xp = get_module_array(m)
             return xp.exp(self.log_pdf(m))
         
-        def return_mu_sigma(self):
+        def return_mu_sigma_z0(self):
+            return self.mu_z0, self.sigma_z0
+        
+        def return_mu_sigma_z( self):
             return self.muz, self.sigmaz
 
     def pdf(self,m,z):
@@ -743,22 +758,215 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
-        if not self.flag_positive_gaussian:
+        if not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z):
             # Impose the rate to be between [0,1].
             if (xp.any(wz > 1)) or (xp.any(wz < 0)):
                 return xp.nan
             else:
                 return wz * powerlaw_part + (1-wz) * gaussian_part
         else:
-            muz, sigmaz = gaussian_class.return_mu_sigma()
+            if   self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z:
+                raise ValueError('Cannot impose peak positivity at z0 and all z simultaneously, please select only one. Exiting.')
+            elif self.flag_positive_gaussian_z0: mu, sigma = gaussian_class.return_mu_sigma_z0()
+            elif self.flag_positive_gaussian_z : mu, sigma = gaussian_class.return_mu_sigma_z()
             # Impose the gaussian peak to exclude negative mass values at 3 sigma.
-            if xp.any((muz - 3*sigmaz) < 0):
+            if xp.any((mu - 3*sigma) < 0):
                 return xp.nan
             # Impose the rate to be between [0,1].
             elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
                 return xp.nan
             else:
                 return wz * powerlaw_part + (1-wz) * gaussian_part
+    
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+
+
+class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
+    '''
+        Class implementing the mass function model conditioned on redshift p(m1|z),
+        for a stationary PowerLaw and two redshift linearly-dependent Gaussian peaks.
+
+        Some options are available:
+            - redshift_transition sets the function for the redshift transition
+            between the PowerLaw and the two Gaussian peaks. The transition is
+            the same between the PowerLaw and the first Gaussian a, and the two
+            Gaussians a and b.
+            - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            - flag_positive_gaussian_z0 forces the two Gaussians to have positive
+            values to 3-sigmas only at redshift zero.
+            - flag_positive_gaussian_z forces the two Gaussians to have positive
+            values to 3-sigmas for all redshifts.
+            - flag_separates_gaussians_z0 forces the two Gaussians to be separated
+            by the sum of their sigmas only at redshift zero.
+            - flag_separates_gaussians_z forces the two Gaussians to be separated
+            by the sum of their sigmas for all redshifts.
+
+        The module is stand alone and not compatible with other wrappers.
+    '''
+
+    def __init__(self, redshift_transition = 'linear', flag_powerlaw_smoothing = 1, flag_positive_gaussian_z0 = 0, flag_positive_gaussian_z = 0, flag_separates_gaussians_z0 = 0, flag_separates_gaussians_z = 0):
+        
+        self.population_parameters       = ['alpha', 'mmin', 'mmax', 'mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mix_z0_alpha', 'mix_z1_alpha', 'mix_z0_beta', 'mix_z1_beta']
+        self.redshift_transition         = redshift_transition
+        self.flag_powerlaw_smoothing     = flag_powerlaw_smoothing
+        self.flag_positive_gaussian_z0   = flag_positive_gaussian_z0
+        self.flag_positive_gaussian_z    = flag_positive_gaussian_z
+        self.flag_separates_gaussians_z0 = flag_separates_gaussians_z0
+        self.flag_separates_gaussians_z  = flag_separates_gaussians_z
+
+        if   self.redshift_transition == 'sigmoid':  self.population_parameters += ['zt', 'delta_zt']
+        elif self.redshift_transition == 'sinusoid': self.population_parameters += ['amp', 'freq']
+        if self.flag_powerlaw_smoothing: self.population_parameters += ['delta_m']
+
+    def update(self,**kwargs):
+
+        self.alpha        = kwargs['alpha']
+        self.mmin         = kwargs['mmin']
+        self.mmax         = kwargs['mmax']
+        self.mu_z0_a      = kwargs['mu_z0_a']
+        self.mu_z1_a      = kwargs['mu_z1_a']
+        self.sigma_z0_a   = kwargs['sigma_z0_a']
+        self.sigma_z1_a   = kwargs['sigma_z1_a']
+        self.mu_z0_b      = kwargs['mu_z0_b']
+        self.mu_z1_b      = kwargs['mu_z1_b']
+        self.sigma_z0_b   = kwargs['sigma_z0_b']
+        self.sigma_z1_b   = kwargs['sigma_z1_b']
+        self.mix_z0_alpha = kwargs['mix_z0_alpha']
+        self.mix_z1_alpha = kwargs['mix_z1_alpha']
+        self.mix_z0_beta  = kwargs['mix_z0_beta']
+        self.mix_z1_beta  = kwargs['mix_z1_beta']
+
+        if   self.redshift_transition == 'sigmoid':  self.zt,  self.delta_zt = kwargs['zt'],  kwargs['delta_zt']
+        elif self.redshift_transition == 'sinusoid': self.amp, self.freq     = kwargs['amp'], kwargs['freq']
+        if self.flag_powerlaw_smoothing: self.delta_m = kwargs['delta_m']
+
+    class PowerLawStationary():
+
+        def __init__(self, alpha, mmin, mmax):
+            self.alpha  = - alpha
+            self.minval = mmin
+            self.maxval = mmax
+
+        def log_pdf(self,m):
+            xp = get_module_array(m)
+            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact(self.minval, self.maxval, self.alpha))
+            indx = check_bounds_1D(m, self.minval, self.maxval)
+            powerlaw[indx] = -xp.inf
+            return powerlaw
+
+        def pdf(self,m):
+            xp = get_module_array(m)
+            return xp.exp(self.log_pdf(m))
+
+    class GaussianLinear():
+
+        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1):
+            self.mu_z0    = mu_z0
+            self.mu_z1    = mu_z1
+            self.sigma_z0 = sigma_z0
+            self.sigma_z1 = sigma_z1
+            # Linear expansion.
+            self.muz    = self.mu_z0    + self.mu_z1    * z
+            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
+
+        def log_pdf(self,m):
+            xp = get_module_array(m)
+            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            return gaussian
+
+        def pdf(self,m):
+            xp = get_module_array(m)
+            return xp.exp(self.log_pdf(m))
+        
+        def return_mu_sigma_z0(self):
+            return self.mu_z0, self.sigma_z0
+        
+        def return_mu_sigma_z( self):
+            return self.muz, self.sigmaz
+
+    def pdf(self,m,z):
+
+        xp = get_module_array(m)
+        if   self.redshift_transition == 'linear':
+            wz_alpha = _mixed_linear_function(         z, self.mix_z0_alpha, self.mix_z1_alpha)
+            wz_beta  = _mixed_linear_function(         z, self.mix_z0_beta , self.mix_z1_beta )
+        elif self.redshift_transition == 'sigmoid':
+            wz_alpha = _mixed_double_sigmoid_function( z, self.mix_z0_alpha, self.mix_z1_alpha, self.zt, self.delta_zt)
+            wz_beta  = _mixed_double_sigmoid_function( z, self.mix_z0_beta , self.mix_z1_beta , self.zt, self.delta_zt)
+        elif self.redshift_transition == 'sinusoid':
+            wz_alpha = _mixed_linear_sinusoid_function(z, self.mix_z0_alpha, self.mix_z1_alpha, self.amp, self.freq)
+            wz_beta  = _mixed_linear_sinusoid_function(z, self.mix_z0_beta , self.mix_z1_beta , self.amp, self.freq)
+        else:
+            raise ValueError('The slected redshift transition model {} does not exist. Exiting.'.format(self.redshift_transition))
+
+        powerlaw_class = PowerLaw_GaussianRedshiftLinear.PowerLawStationary(self.alpha, self.mmin, self.mmax)
+        # Add left smoothing to the evolving PowerLaw.
+        if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
+        gaussian_a_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a)
+        gaussian_b_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b)
+        powerlaw_part    = powerlaw_class.pdf(m)
+        gaussian_a_part  = gaussian_a_class.pdf(m)
+        gaussian_b_part  = gaussian_b_class.pdf(m)
+
+        # Neither positive nor separate peaks.
+        if not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and not (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+            # Impose the rate to be between [0,1].
+            if   (xp.any(wz_alpha > 1)) or (xp.any(wz_alpha < 0)) or (xp.any(wz_beta > 1)) or (xp.any(wz_beta < 0)) or (xp.any(wz_alpha + wz_beta > 1)):
+                return xp.nan
+            else:
+                return wz_alpha * powerlaw_part + wz_beta * gaussian_a_part + (1 - wz_beta - wz_alpha) * gaussian_b_part
+            
+        else:
+            # Positive peaks but not separate.
+            if  (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and not (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z:
+                    raise ValueError('Cannot impose peak positivity at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_positive_gaussian_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                elif self.flag_positive_gaussian_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to exclude negative mass values at 3 sigma.
+                if xp.any((mu_a - 3*sigma_a) < 0) or xp.any((mu_b - 3*sigma_b) < 0):
+                    return xp.nan
+                
+            # Separate peaks but not positive.
+            elif not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   self.flag_separates_gaussians_z0 and self.flag_separates_gaussians_z:
+                    raise ValueError('Cannot impose peak separability at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_separates_gaussians_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                elif self.flag_separates_gaussians_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to be separated at least by the sum of their standard deviations.
+                if xp.any((mu_b - mu_a) < 0):
+                    return xp.nan
+
+            # Both positive and separate peaks.
+            # FIXME: The case in which the peaks positivity and separability at different redshifts is not implemented.
+            elif  (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   (self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z) or (self.flag_separates_gaussians_z0 and self.flag_separates_gaussians_z):
+                    raise ValueError('Cannot impose peak positivity or peak separability at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_positive_gaussian_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                elif self.flag_positive_gaussian_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to exclude negative mass values at 3 sigma and to be separated at least by the sum of their standard deviations.
+                if xp.any((mu_a - 3*sigma_a) < 0) or xp.any((mu_b - 3*sigma_b) < 0) or xp.any((mu_b - mu_a) < 0):
+                    return xp.nan
+                
+            # Impose the rate to be between [0,1].
+            if (xp.any(wz_alpha > 1)) or (xp.any(wz_alpha < 0)) or (xp.any(wz_beta > 1)) or (xp.any(wz_beta < 0)) or (xp.any(wz_alpha + wz_beta > 1)):
+                return xp.nan
+            else:
+                return wz_alpha * powerlaw_part + wz_beta * gaussian_a_part + (1 - wz_beta - wz_alpha) * gaussian_b_part
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)
@@ -773,15 +981,26 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         Some options are available:
             - redshift_transition sets the function for the redshift transition
             between the PowerLaw and the Gaussian.
+            - flag_positive_gaussian_z0 forces the two Gaussians to have positive
+            values to 3-sigmas only at redshift zero.
+            - flag_positive_gaussian_z forces the two Gaussians to have positive
+            values to 3-sigmas for all redshifts.
+            - flag_separates_gaussians_z0 forces the two Gaussians to be separated
+            by the sum of their sigmas only at redshift zero.
+            - flag_separates_gaussians_z forces the two Gaussians to be separated
+            by the sum of their sigmas for all redshifts.
 
         The module is stand alone and not compatible with other wrappers.
     '''
 
-    def __init__(self, redshift_transition = 'linear', flag_gaussians_overlap = 0):
+    def __init__(self, redshift_transition = 'linear', flag_positive_gaussian_z0 = 0, flag_positive_gaussian_z = 0, flag_separates_gaussians_z0 = 0, flag_separates_gaussians_z = 0):
         
-        self.population_parameters  = ['mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mix_z0', 'mix_z1']
-        self.redshift_transition    = redshift_transition
-        self.flag_gaussians_overlap = flag_gaussians_overlap
+        self.population_parameters       = ['mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mix_z0', 'mix_z1']
+        self.redshift_transition         = redshift_transition
+        self.flag_positive_gaussian_z0   = flag_positive_gaussian_z0
+        self.flag_positive_gaussian_z    = flag_positive_gaussian_z
+        self.flag_separates_gaussians_z0 = flag_separates_gaussians_z0
+        self.flag_separates_gaussians_z  = flag_separates_gaussians_z
         
         if   self.redshift_transition == 'sigmoid':  self.population_parameters += ['zt', 'delta_zt']
         elif self.redshift_transition == 'sinusoid': self.population_parameters += ['amp', 'freq']
@@ -822,7 +1041,10 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
             xp = get_module_array(m)
             return xp.exp(self.log_pdf(m))
         
-        def return_mu_sigma(self):
+        def return_mu_sigma_z0(self):
+            return self.mu_z0, self.sigma_z0
+        
+        def return_mu_sigma_z( self):
             return self.muz, self.sigmaz
 
     def pdf(self,m,z):
@@ -842,20 +1064,60 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
 
-        if not self.flag_gaussians_overlap:
+        # Neither positive nor separate peaks.
+        if not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and not (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
             # Impose the rate to be between [0,1].
             if (xp.any(wz > 1)) or (xp.any(wz < 0)):
                 return xp.nan
             else:
                 return wz * gaussian_a_part + (1-wz) * gaussian_b_part
+            
         else:
-            muz_a, _ = gaussian_a_class.return_mu_sigma()
-            muz_b, _ = gaussian_b_class.return_mu_sigma()
-            # Impose the mean of the b-haussian to be larger than that of the a-gaussian.
-            if xp.any((muz_b - muz_a) < 0):
-                return xp.nan
+            # Positive peaks but not separate.
+            if  (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and not (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z:
+                    raise ValueError('Cannot impose peak positivity at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_positive_gaussian_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                elif self.flag_positive_gaussian_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to exclude negative mass values at 3 sigma.
+                if xp.any((mu_a - 3*sigma_a) < 0) or xp.any((mu_b - 3*sigma_b) < 0):
+                    return xp.nan
+
+            # Separate peaks but not positive.
+            elif not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   self.flag_separates_gaussians_z0 and self.flag_separates_gaussians_z:
+                    raise ValueError('Cannot impose peak separability at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_separates_gaussians_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                elif self.flag_separates_gaussians_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to be separated at least by the sum of their standard deviations.
+                if xp.any((mu_b - mu_a) < 0):
+                    return xp.nan
+
+            # Both positive and separate peaks.
+            # FIXME: The case in which the peaks positivity and separability at different redshifts is not implemented.
+            elif  (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   (self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z) or (self.flag_separates_gaussians_z0 and self.flag_separates_gaussians_z):
+                    raise ValueError('Cannot impose peak positivity or peak separability at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_positive_gaussian_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                elif self.flag_positive_gaussian_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to exclude negative mass values at 3 sigma and to be separated at least by the sum of their standard deviations.
+                if xp.any((mu_a - 3*sigma_a) < 0) or xp.any((mu_b - 3*sigma_b) < 0) or xp.any((mu_b - mu_a) < 0):
+                    return xp.nan
+            
             # Impose the rate to be between [0,1].
-            elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
+            if (xp.any(wz > 1)) or (xp.any(wz < 0)):
                 return xp.nan
             else:
                 return wz * gaussian_a_part + (1-wz) * gaussian_b_part
@@ -863,7 +1125,179 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
     def log_pdf(self,m,z):
         xp = get_module_array(m)
         return xp.log(self.pdf(m,z))
-    
+
+
+class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
+    '''
+        Class implementing the mass function model conditioned on redshift p(m1|z),
+        for three redshift linearly-dependent Gaussian peaks.
+
+        Some options are available:
+            - redshift_transition sets the function for the redshift transition
+            between the three Gaussian peaks. The transition is the same between the
+            first two Gaussians a and b, and the other two Gaussians b and c.
+            - flag_positive_gaussian_z0 forces the three Gaussians to have positive
+            values to 3-sigmas only at redshift zero.
+            - flag_positive_gaussian_z forces the three Gaussians to have positive
+            values to 3-sigmas for all redshifts.
+            - flag_separates_gaussians_z0 forces the three Gaussians to be separated
+            by the sum of their sigmas only at redshift zero.
+            - flag_separates_gaussians_z forces the three Gaussians to be separated
+            by the sum of their sigmas for all redshifts.
+
+        The module is stand alone and not compatible with other wrappers.
+    '''
+
+    def __init__(self, redshift_transition = 'linear', flag_positive_gaussian_z0 = 0, flag_positive_gaussian_z = 0, flag_separates_gaussians_z0 = 0, flag_separates_gaussians_z = 0):
+
+        self.population_parameters       = ['mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mu_z0_c', 'mu_z1_c', 'sigma_z0_c', 'sigma_z1_c', 'mix_z0_alpha', 'mix_z1_alpha', 'mix_z0_beta', 'mix_z1_beta']
+        self.redshift_transition         = redshift_transition
+        self.flag_positive_gaussian_z0   = flag_positive_gaussian_z0
+        self.flag_positive_gaussian_z    = flag_positive_gaussian_z
+        self.flag_separates_gaussians_z0 = flag_separates_gaussians_z0
+        self.flag_separates_gaussians_z  = flag_separates_gaussians_z
+
+        if   self.redshift_transition == 'sigmoid':  self.population_parameters += ['zt', 'delta_zt']
+        elif self.redshift_transition == 'sinusoid': self.population_parameters += ['amp', 'freq']
+
+    def update(self,**kwargs):
+
+        self.mu_z0_a      = kwargs['mu_z0_a']
+        self.mu_z1_a      = kwargs['mu_z1_a']
+        self.sigma_z0_a   = kwargs['sigma_z0_a']
+        self.sigma_z1_a   = kwargs['sigma_z1_a']
+        self.mu_z0_b      = kwargs['mu_z0_b']
+        self.mu_z1_b      = kwargs['mu_z1_b']
+        self.sigma_z0_b   = kwargs['sigma_z0_b']
+        self.sigma_z1_b   = kwargs['sigma_z1_b']
+        self.mu_z0_c      = kwargs['mu_z0_c']
+        self.mu_z1_c      = kwargs['mu_z1_c']
+        self.sigma_z0_c   = kwargs['sigma_z0_c']
+        self.sigma_z1_c   = kwargs['sigma_z1_c']
+        self.mix_z0_alpha = kwargs['mix_z0_alpha']
+        self.mix_z1_alpha = kwargs['mix_z1_alpha']
+        self.mix_z0_beta  = kwargs['mix_z0_beta']
+        self.mix_z1_beta  = kwargs['mix_z1_beta']
+
+        if   self.redshift_transition == 'sigmoid':  self.zt,  self.delta_zt = kwargs['zt'],  kwargs['delta_zt']
+        elif self.redshift_transition == 'sinusoid': self.amp, self.freq     = kwargs['amp'], kwargs['freq']
+
+    class GaussianLinear():
+
+        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1):
+            self.mu_z0    = mu_z0
+            self.mu_z1    = mu_z1
+            self.sigma_z0 = sigma_z0
+            self.sigma_z1 = sigma_z1
+            # Linear expansion.
+            self.muz    = self.mu_z0    + self.mu_z1    * z
+            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
+
+        def log_pdf(self,m):
+            xp = get_module_array(m)
+            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            return gaussian
+
+        def pdf(self,m):
+            xp = get_module_array(m)
+            return xp.exp(self.log_pdf(m))
+
+        def return_mu_sigma_z0(self):
+            return self.mu_z0, self.sigma_z0
+        
+        def return_mu_sigma_z( self):
+            return self.muz, self.sigmaz
+
+    def pdf(self,m,z):
+
+        xp = get_module_array(m)
+        if   self.redshift_transition == 'linear':
+            wz_alpha = _mixed_linear_function(         z, self.mix_z0_alpha, self.mix_z1_alpha)
+            wz_beta  = _mixed_linear_function(         z, self.mix_z0_beta , self.mix_z1_beta )
+        elif self.redshift_transition == 'sigmoid':
+            wz_alpha = _mixed_double_sigmoid_function( z, self.mix_z0_alpha, self.mix_z1_alpha, self.zt, self.delta_zt)
+            wz_beta  = _mixed_double_sigmoid_function( z, self.mix_z0_beta , self.mix_z1_beta , self.zt, self.delta_zt)
+        elif self.redshift_transition == 'sinusoid':
+            wz_alpha = _mixed_linear_sinusoid_function(z, self.mix_z0_alpha, self.mix_z1_alpha, self.amp, self.freq)
+            wz_beta  = _mixed_linear_sinusoid_function(z, self.mix_z0_beta , self.mix_z1_beta , self.amp, self.freq)
+        else:
+            raise ValueError('The slected redshift transition model {} does not exist. Exiting.'.format(self.redshift_transition))
+
+        gaussian_a_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a)
+        gaussian_b_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b)
+        gaussian_c_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_c, self.mu_z1_c, self.sigma_z0_c, self.sigma_z1_c)
+        gaussian_a_part  = gaussian_a_class.pdf(m)
+        gaussian_b_part  = gaussian_b_class.pdf(m)
+        gaussian_c_part  = gaussian_c_class.pdf(m)
+
+        # Neither positive nor separate peaks.
+        if not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and not (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+            # Impose the rate to be between [0,1].
+            if   (xp.any(wz_alpha > 1)) or (xp.any(wz_alpha < 0)) or (xp.any(wz_beta > 1)) or (xp.any(wz_beta < 0)) or (xp.any(wz_alpha + wz_beta > 1)):
+                return xp.nan
+            else:
+                return wz_alpha * gaussian_a_part + wz_beta * gaussian_b_part + (1 - wz_beta - wz_alpha) * gaussian_c_part
+            
+        else:
+            # Positive peaks but not separate.
+            if  (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and not (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z:
+                    raise ValueError('Cannot impose peak positivity at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_positive_gaussian_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                    mu_c, sigma_c = gaussian_c_class.return_mu_sigma_z0()
+                elif self.flag_positive_gaussian_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                    mu_c, sigma_c = gaussian_c_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to exclude negative mass values at 3 sigma.
+                if xp.any((mu_a - 3*sigma_a) < 0) or xp.any((mu_b - 3*sigma_b) < 0) or xp.any((mu_c - 3*sigma_c) < 0):
+                    return xp.nan
+            
+            # Separate peaks but not positive.
+            elif not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   self.flag_separates_gaussians_z0 and self.flag_separates_gaussians_z:
+                    raise ValueError('Cannot impose peak separability at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_separates_gaussians_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                    mu_c, sigma_c = gaussian_c_class.return_mu_sigma_z0()
+                elif self.flag_separates_gaussians_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                    mu_c, sigma_c = gaussian_c_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to be separated at least by the sum of their standard deviations.
+                if xp.any((mu_b - mu_a) < 0) or xp.any((mu_c - mu_b) < 0):
+                    return xp.nan
+
+            # Both positive and separate peaks.
+            # FIXME: The case in which the peaks positivity and separability at different redshifts is not implemented.
+            elif  (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z) and (self.flag_separates_gaussians_z0 or self.flag_separates_gaussians_z):
+                if   (self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z) or (self.flag_separates_gaussians_z0 and self.flag_separates_gaussians_z):
+                    raise ValueError('Cannot impose peak positivity or peak separability at z0 and all z simultaneously, please select only one. Exiting.')
+                elif self.flag_positive_gaussian_z0:
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z0()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z0()
+                    mu_c, sigma_c = gaussian_c_class.return_mu_sigma_z0()
+                elif self.flag_positive_gaussian_z :
+                    mu_a, sigma_a = gaussian_a_class.return_mu_sigma_z()
+                    mu_b, sigma_b = gaussian_b_class.return_mu_sigma_z()
+                    mu_c, sigma_c = gaussian_c_class.return_mu_sigma_z()
+                # Impose the gaussian peaks to exclude negative mass values at 3 sigma and to be separated at least by the sum of their standard deviations.
+                if xp.any((mu_a - 3*sigma_a) < 0) or xp.any((mu_b - 3*sigma_b) < 0) or xp.any((mu_c - 3*sigma_c) < 0) or xp.any((mu_b - mu_a) < 0) or xp.any((mu_c - mu_b) < 0):
+                    return xp.nan
+
+            # Impose the rate to be between [0,1].
+            if (xp.any(wz_alpha > 1)) or (xp.any(wz_alpha < 0)) or (xp.any(wz_beta > 1)) or (xp.any(wz_beta < 0)) or (xp.any(wz_alpha + wz_beta > 1)):
+                return xp.nan
+            else:
+                return wz_alpha * gaussian_a_part + wz_beta * gaussian_b_part + (1 - wz_beta - wz_alpha) * gaussian_c_part
+
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+
 
 class GaussianEvolving():
     '''
