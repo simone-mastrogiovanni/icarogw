@@ -635,7 +635,166 @@ class PowerLaw_GaussianRedshiftLinear():
     def log_pdf(self,m,z):
         xp = get_module_array(m)
         return xp.log(self.pdf(m,z))
+
+
+class PowerLawBroken_GaussianRedshiftLinear():
+    '''
+        Class implementing the mass function model conditioned on redshift p(m1|z),
+        for a stationary PowerLawBroken and a redshift linearly-dependent Gaussian peak.
+
+        Some options are available:
+            - redshift_transition sets the function for the redshift transition
+            between the PowerLaw and the Gaussian.
+            - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            - flag_positive_gaussian_z0 forces the Gaussian to have positive
+            values to 3-sigmas only at redshift zero.
+            - flag_positive_gaussian_z forces the Gaussian to have positive
+            values to 3-sigmas for all redshifts.
+
+        The module is stand alone and not compatible with other wrappers.
+    '''
+
+    def __init__(self, redshift_transition = 'linear', flag_powerlaw_smoothing = 1, flag_positive_gaussian_z0 = 0, flag_positive_gaussian_z = 0):
+
+        self.population_parameters     = ['alpha_a', 'alpha_b', 'break_p', 'mmin', 'mmax', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1', 'mix_z0', 'mix_z1']
+        self.redshift_transition       = redshift_transition
+        self.flag_powerlaw_smoothing   = flag_powerlaw_smoothing
+        self.flag_positive_gaussian_z0 = flag_positive_gaussian_z0
+        self.flag_positive_gaussian_z  = flag_positive_gaussian_z
+
+        if   self.redshift_transition == 'sigmoid':  self.population_parameters += ['zt', 'delta_zt']
+        elif self.redshift_transition == 'sinusoid': self.population_parameters += ['amp', 'freq']
+        if self.flag_powerlaw_smoothing: self.population_parameters += ['delta_m']
+
+    def update(self,**kwargs):
+
+        self.alpha_a  = kwargs['alpha_a']
+        self.alpha_b  = kwargs['alpha_b']
+        self.break_p  = kwargs['break_p']
+        self.mmin     = kwargs['mmin']
+        self.mmax     = kwargs['mmax']
+        self.mu_z0    = kwargs['mu_z0']
+        self.mu_z1    = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+        self.mix_z0   = kwargs['mix_z0']
+        self.mix_z1   = kwargs['mix_z1']
+
+        if   self.redshift_transition == 'sigmoid':  self.zt,  self.delta_zt = kwargs['zt'],  kwargs['delta_zt']
+        elif self.redshift_transition == 'sinusoid': self.amp, self.freq     = kwargs['amp'], kwargs['freq']
+        if self.flag_powerlaw_smoothing: self.delta_m = kwargs['delta_m']
+
+    class PowerLawStationary():
+
+        def __init__(self, alpha, mmin, mmax):
+            self.alpha  = - alpha
+            self.minval = mmin
+            self.maxval = mmax
+
+        def log_pdf(self,m):
+            xp = get_module_array(m)
+            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact(self.minval, self.maxval, self.alpha))
+            indx = check_bounds_1D(m, self.minval, self.maxval)
+            powerlaw[indx] = -xp.inf
+            return powerlaw
+
+        def pdf(self,m):
+            xp = get_module_array(m)
+            return xp.exp(self.log_pdf(m))
+
+    class PowerLawBrokenStationary():
+
+        def __init__(self, alpha_a, alpha_b, break_p, mmin, mmax):
+            self.alpha_a     = alpha_a
+            self.alpha_b     = alpha_b
+            self.break_p     = break_p
+            self.minval      = mmin
+            self.maxval      = mmax
+            self.break_point = mmin + break_p * (mmax - mmin)
+            self.powerlaw_a = PowerLawBroken_GaussianRedshiftLinear.PowerLawStationary(self.alpha_a, self.minval, self.break_point)
+            self.powerlaw_b = PowerLawBroken_GaussianRedshiftLinear.PowerLawStationary(self.alpha_b, self.break_point, self.maxval)
+
+        def log_pdf(self,m):
+            xp = get_module_array(m)
+            self.norm_fact  = ( 1 + self.powerlaw_a.pdf(np.array([self.break_point]))[0] / self.powerlaw_b.pdf(np.array([self.break_point]))[0])
+            powerlaw_a_pdf = self.powerlaw_a.log_pdf(m)
+            powerlaw_b_pdf = self.powerlaw_b.log_pdf(m)
+            powerlaw = xp.logaddexp( powerlaw_a_pdf, powerlaw_b_pdf + self.powerlaw_a.log_pdf(xp.array([self.break_point])) - self.powerlaw_b.log_pdf(xp.array([self.break_point])) ) - xp.log(self.norm_fact)
+            return powerlaw
+
+        def pdf(self,m):
+            xp = get_module_array(m)
+            return xp.exp(self.log_pdf(m))
+
+    class GaussianLinear():
+
+        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1):
+            self.mu_z0    = mu_z0
+            self.mu_z1    = mu_z1
+            self.sigma_z0 = sigma_z0
+            self.sigma_z1 = sigma_z1
+            # Linear expansion.
+            self.muz    = self.mu_z0    + self.mu_z1    * z
+            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
+
+        def log_pdf(self,m):
+            xp = get_module_array(m)
+            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            return gaussian
+
+        def pdf(self,m):
+            xp = get_module_array(m)
+            return xp.exp(self.log_pdf(m))
+
+        def return_mu_sigma_z0(self):
+            return self.mu_z0, self.sigma_z0
+        
+        def return_mu_sigma_z( self):
+            return self.muz, self.sigmaz
+
+    def pdf(self,m,z):
+
+        xp = get_module_array(m)
+        if   self.redshift_transition == 'linear':
+            wz = _mixed_linear_function(         z, self.mix_z0, self.mix_z1)
+        elif self.redshift_transition == 'sigmoid':
+            wz = _mixed_double_sigmoid_function( z, self.mix_z0, self.mix_z1, self.zt, self.delta_zt)
+        elif self.redshift_transition == 'sinusoid':
+            wz = _mixed_linear_sinusoid_function(z, self.mix_z0, self.mix_z1, self.amp, self.freq)
+        else:
+            raise ValueError('The slected redshift transition model {} does not exist. Exiting.'.format(self.redshift_transition))
+
+        powerlaw_class = PowerLawBroken_GaussianRedshiftLinear.PowerLawBrokenStationary(self.alpha_a, self.alpha_b, self.break_p, self.mmin, self.mmax)
+        # Add left smoothing to the evolving PowerLaw.
+        if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
+        gaussian_class = PowerLawBroken_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
+        powerlaw_part  = powerlaw_class.pdf(m)
+        gaussian_part  = gaussian_class.pdf(m)
+
+        if not (self.flag_positive_gaussian_z0 or self.flag_positive_gaussian_z):
+            # Impose the rate to be between [0,1].
+            if (xp.any(wz > 1)) or (xp.any(wz < 0)):
+                return xp.nan
+            else:
+                return wz * powerlaw_part + (1-wz) * gaussian_part
+        else:
+            if   self.flag_positive_gaussian_z0 and self.flag_positive_gaussian_z:
+                raise ValueError('Cannot impose peak positivity at z0 and all z simultaneously, please select only one. Exiting.')
+            elif self.flag_positive_gaussian_z0: mu, sigma = gaussian_class.return_mu_sigma_z0()
+            elif self.flag_positive_gaussian_z : mu, sigma = gaussian_class.return_mu_sigma_z()
+            # Impose the gaussian peak to exclude negative mass values at 3 sigma.
+            if xp.any((mu - 3*sigma) < 0):
+                return xp.nan
+            # Impose the rate to be between [0,1].
+            elif (xp.any(wz > 1)) or (xp.any(wz < 0)):
+                return xp.nan
+            else:
+                return wz * powerlaw_part + (1-wz) * gaussian_part
     
+    def log_pdf(self,m,z):
+        xp = get_module_array(m)
+        return xp.log(self.pdf(m,z))
+
 
 class PowerLawRedshiftLinear_GaussianRedshiftLinear():
     '''
