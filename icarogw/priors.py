@@ -1202,7 +1202,7 @@ class PowerLawGaussian(basic_1dimpdf):
         self.minpl,self.maxpl,self.alpha,self.lambdag,self.meang,self.sigmag,self.ming,self.maxg=minpl,maxpl,alpha,lambdag,meang,sigmag,ming,maxg
         self.PL=PowerLaw(minpl,maxpl,alpha)
         self.TG=TruncatedGaussian(meang,sigmag,ming,maxg)
-        
+
     def _log_pdf(self,x):
         '''
         Evaluates the log_pdf

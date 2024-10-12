@@ -177,20 +177,6 @@ class massprior_MultiPeak(pm_prob):
                                              kwargs['lambda_g'],kwargs['lambda_g_low'],kwargs['mu_g_low'],
                                              kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
                                              kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high'])
-        
-class massprior_EvolvingPowerLawPeak(object):
-    def __init__(self,mw):
-        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
-        self.mw_nonevolving = mw
-    def update(self,**kwargs):
-        self.mw_nonevolving.update(**{key:kwargs[key] for key in self.mw_nonevolving.population_parameters})
-        self.zt = kwargs['zt']
-        self.delta_zt = kwargs['delta_zt']
-        self.mu_z0 = kwargs['mu_z0']
-        self.mu_z1 = kwargs['mu_z1']
-        self.sigma_z0 = kwargs['sigma_z0']
-        self.sigma_z1 = kwargs['sigma_z1']
-        self.prior = EvolvingPowerLawPeak(self.mw_nonevolving, self.zt, self.delta_zt, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
 
 class m1m2_conditioned(pm1m2_prob):
     def __init__(self,wrapper_m):
@@ -352,8 +338,9 @@ class spinprior_default_beta_window_gaussian(object):
     def log_pdf(self,chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source):
         
         xp = get_module_array(chi_1)
-        wz_1 = _mixed_sigmoid_function(mass_1_source, self.mt, self.delta_mt, self.mix_f)
-        wz_2 = _mixed_sigmoid_function(mass_2_source, self.mt, self.delta_mt, self.mix_f)
+        # FIXME: The sigmoid function implementation has been changed. Check it is correct.
+        wz_1 = _mixed_double_sigmoid_function(mass_1_source, self.mix_f, 0., self.mt, self.delta_mt)
+        wz_2 = _mixed_double_sigmoid_function(mass_2_source, self.mix_f, 0., self.mt, self.delta_mt)
 
         pdf_1 = wz_1*self.beta_pdf_chi.pdf(chi_1)+(1-wz_1)*self.gaussian_pdf_chi.pdf(chi_1)
         pdf_2 = wz_2*self.beta_pdf_chi.pdf(chi_2)+(1-wz_2)*self.gaussian_pdf_chi.pdf(chi_2)
@@ -401,8 +388,9 @@ class spinprior_default_beta_window_beta(object):
     def log_pdf(self,chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source):
         
         xp = get_module_array(chi_1)
-        wz_1 = _mixed_sigmoid_function(mass_1_source, self.mt, self.delta_mt, self.mix_f)
-        wz_2 = _mixed_sigmoid_function(mass_2_source, self.mt, self.delta_mt, self.mix_f)
+        # FIXME: The sigmoid function implementation has been changed. Check it is correct.
+        wz_1 = _mixed_double_sigmoid_function(mass_1_source, self.mix_f, 0., self.mt, self.delta_mt)
+        wz_2 = _mixed_double_sigmoid_function(mass_2_source, self.mix_f, 0., self.mt, self.delta_mt)
 
         pdf_1 = wz_1*self.beta_pdf_chi_low.pdf(chi_1)+(1-wz_1)*self.beta_pdf_chi_high.pdf(chi_1)
         pdf_2 = wz_2*self.beta_pdf_chi_low.pdf(chi_2)+(1-wz_2)*self.beta_pdf_chi_high.pdf(chi_2)
@@ -569,18 +557,21 @@ class PowerLaw_GaussianRedshiftLinear():
 
     class GaussianLinear():
 
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1):
+        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
             self.mu_z0    = mu_z0
             self.mu_z1    = mu_z1
             self.sigma_z0 = sigma_z0
             self.sigma_z1 = sigma_z1
+            self.mmin     = mmin
             # Linear expansion.
             self.muz    = self.mu_z0    + self.mu_z1    * z
             self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
 
         def log_pdf(self,m):
             xp = get_module_array(m)
-            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            sx = get_module_array_scipy(m)
+            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
             return gaussian
 
         def pdf(self,m):
@@ -608,7 +599,7 @@ class PowerLaw_GaussianRedshiftLinear():
         powerlaw_class = PowerLaw_GaussianRedshiftLinear.PowerLawStationary(self.alpha, self.mmin, self.mmax)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
-        gaussian_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
+        gaussian_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin)
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
@@ -704,20 +695,23 @@ class PowerLaw_GaussianRedshiftQuadratic():
 
     class GaussianQuadratic():
 
-        def __init__(self, z, mu_z0, mu_z1, mu_z2, sigma_z0, sigma_z1, sigma_z2):
+        def __init__(self, z, mu_z0, mu_z1, mu_z2, sigma_z0, sigma_z1, sigma_z2, mmin):
             self.mu_z0    = mu_z0
             self.mu_z1    = mu_z1
             self.mu_z2    = mu_z2
             self.sigma_z0 = sigma_z0
             self.sigma_z1 = sigma_z1
             self.sigma_z2 = sigma_z2
+            self.mmin     = mmin
             # Quadratic expansion.
             self.muz    = self.mu_z0    + self.mu_z1    * z + self.mu_z2    * z*z
             self.sigmaz = self.sigma_z0 + self.sigma_z1 * z + self.sigma_z2 * z*z
 
         def log_pdf(self,m):
             xp = get_module_array(m)
-            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            sx = get_module_array_scipy(m)
+            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
             return gaussian
 
         def pdf(self,m):
@@ -745,7 +739,7 @@ class PowerLaw_GaussianRedshiftQuadratic():
         powerlaw_class = PowerLaw_GaussianRedshiftQuadratic.PowerLawStationary(self.alpha, self.mmin, self.mmax)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
-        gaussian_class = PowerLaw_GaussianRedshiftQuadratic.GaussianQuadratic(z, self.mu_z0, self.mu_z1, self.mu_z2, self.sigma_z0, self.sigma_z1, self.sigma_z2)
+        gaussian_class = PowerLaw_GaussianRedshiftQuadratic.GaussianQuadratic(z, self.mu_z0, self.mu_z1, self.mu_z2, self.sigma_z0, self.sigma_z1, self.sigma_z2, self.mmin)
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
@@ -865,18 +859,21 @@ class PowerLawBroken_GaussianRedshiftLinear():
 
     class GaussianLinear():
 
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1):
+        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
             self.mu_z0    = mu_z0
             self.mu_z1    = mu_z1
             self.sigma_z0 = sigma_z0
             self.sigma_z1 = sigma_z1
+            self.mmin     = mmin
             # Linear expansion.
             self.muz    = self.mu_z0    + self.mu_z1    * z
             self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
 
         def log_pdf(self,m):
             xp = get_module_array(m)
-            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            sx = get_module_array_scipy(m)
+            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
             return gaussian
 
         def pdf(self,m):
@@ -904,7 +901,7 @@ class PowerLawBroken_GaussianRedshiftLinear():
         powerlaw_class = PowerLawBroken_GaussianRedshiftLinear.PowerLawBrokenStationary(self.alpha_a, self.alpha_b, self.break_p, self.mmin, self.mmax)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
-        gaussian_class = PowerLawBroken_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
+        gaussian_class = PowerLawBroken_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin)
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
@@ -1009,18 +1006,21 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
 
     class GaussianLinear():
 
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1):
+        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
             self.mu_z0    = mu_z0
             self.mu_z1    = mu_z1
             self.sigma_z0 = sigma_z0
             self.sigma_z1 = sigma_z1
+            self.mmin     = mmin
             # Linear expansion.
             self.muz    = self.mu_z0    + self.mu_z1    * z
             self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
 
         def log_pdf(self,m):
             xp = get_module_array(m)
-            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            sx = get_module_array_scipy(m)
+            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
             return gaussian
 
         def pdf(self,m):
@@ -1050,7 +1050,7 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
         # WARNING: The implementation is very slow, because the integral to normalise the windowed
         # distribution p(m1|z) needs to be computed at all redshifts corresponding to the PE samples and injections.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProbEvolving(powerlaw_class, self.delta_m)
-        gaussian_class = PowerLawRedshiftLinear_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
+        gaussian_class = PowerLawRedshiftLinear_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin)
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
@@ -1158,18 +1158,21 @@ class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
 
     class GaussianLinear():
 
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1):
+        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
             self.mu_z0    = mu_z0
             self.mu_z1    = mu_z1
             self.sigma_z0 = sigma_z0
             self.sigma_z1 = sigma_z1
+            self.mmin     = mmin
             # Linear expansion.
             self.muz    = self.mu_z0    + self.mu_z1    * z
             self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
 
         def log_pdf(self,m):
             xp = get_module_array(m)
-            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            sx = get_module_array_scipy(m)
+            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
             return gaussian
 
         def pdf(self,m):
@@ -1200,8 +1203,8 @@ class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
         powerlaw_class = PowerLaw_GaussianRedshiftLinear.PowerLawStationary(self.alpha, self.mmin, self.mmax)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
-        gaussian_a_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a)
-        gaussian_b_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b)
+        gaussian_a_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin)
+        gaussian_b_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin)
         powerlaw_part    = powerlaw_class.pdf(m)
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
@@ -1330,7 +1333,9 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
 
         def log_pdf(self,m):
             xp = get_module_array(m)
-            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            sx = get_module_array_scipy(m)
+            a, b = (0. - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
             return gaussian
 
         def pdf(self,m):
@@ -1491,7 +1496,9 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
 
         def log_pdf(self,m):
             xp = get_module_array(m)
-            gaussian = xp.log( xp.power(2*xp.pi,-0.5) / self.sigmaz ) + -.5*xp.power((m-self.muz) / self.sigmaz, 2.)
+            sx = get_module_array_scipy(m)
+            a, b = (0. - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
             return gaussian
 
         def pdf(self,m):
@@ -1631,9 +1638,11 @@ class GaussianEvolving():
     def log_pdf(self, m, z):
 
         xp = get_module_array(m)
+        sx = get_module_array_scipy(m)
         self.muz    = self.polynomial(self.order, z, 'mu')
         self.sigmaz = self.polynomial(self.order, z, 'sigma')
-        gaussian = xp.log(xp.power(2 * xp.pi, -0.5) / self.sigmaz) + -.5 * xp.power((m - self.muz) / self.sigmaz, 2.)
+        a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+        gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
         return gaussian
 
     def pdf(self, m, z):
