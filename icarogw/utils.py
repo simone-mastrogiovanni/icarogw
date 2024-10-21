@@ -420,7 +420,7 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw'):
     fp.write('z_grid = np.genfromtxt(\'{:s}\') \n'.format(
         os.path.join(outfolder,'{:s}_common_zgrid.txt'.format(grouping))))
     fp.write('filled_pixels = filled_pixels[bot_pix:top_pix] \n')
-    fp.write('for pix in tqdm(filled_pixels,desc=\'Cleaning pixel\'):\n')
+    fp.write('for pix in tqdm(filled_pixels,desc=\'Calculating interpolant\'):\n')
     fp.write('\ticarogw.catalog.calculate_interpolant_files(outfolder,z_grid,pix,grouping,subgrouping,band,cosmo_ref,epsilon,ptype=ptype)\n')
     fp.close()
 

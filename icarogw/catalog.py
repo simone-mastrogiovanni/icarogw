@@ -15,7 +15,7 @@ import mpmath
 LOWERL=np.nan_to_num(-np.inf)
 
 
-def create_pixelated_catalogs(outfolder,nside,groups_dict,batch=100000,nest=False):
+def create_pixelated_catalogs(outfolder,nside,groups_dict,fields_to_take=None,batch=100000,nest=False):
     '''
     Divide a galaxy catlalog file into pixelated files
 
@@ -28,29 +28,38 @@ def create_pixelated_catalogs(outfolder,nside,groups_dict,batch=100000,nest=Fals
     groups_dict: int
         A dictionary containing the h5py datasets to save. The dictionary should have at least
         'ra' [rad], 'dec' [rad], 'z' and 'sigmaz and some apparent magnitude
+    fields_to_take: list of strings
+        They are the list of variables you would like to save or append to the pixelated files.
+        If this keyword is None, then it means you are creating the  files for the first time
     batch: int
         How many galaxies to process
     nest: bool
         Nest flag for healpy
     '''
     list_of_keys = list(groups_dict.keys())
-    if not os.path.isdir(outfolder):
-        os.mkdir(outfolder)
-        for i in tqdm(range(hp.nside2npix(nside)),desc='Creating the file with pixels fields'):    
-            cat = h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(i)),'w-')
-            cat.create_group('catalog')
-            cat.attrs['nside']=nside
-            cat.attrs['nest']=nest
-            cat.attrs['dOmega_sterad']=hp.nside2pixarea(nside,degrees=False)
-            cat.attrs['dOmega_deg2']=hp.nside2pixarea(nside,degrees=True)
-            cat.attrs['Ntotal_galaxies_original']=0
-            for key in list_of_keys:
-                cat['catalog'].create_dataset(key, data=np.array([]), compression="gzip", chunks=True, maxshape=(None,))
-            cat.close()
+    if fields_to_take == None:
+        fields_to_take = list_of_keys
 
+    # Loops over the pixels and create fiels if they do not exist, otherwise open them in append mode
+    for i in tqdm(range(hp.nside2npix(nside)),desc='Creating the file with pixels fields'):    
+        cat = h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(i)),'a')
+        # Create catalog group if it does not exist
+        catobj = cat.require_group('catalog')
+        cat.attrs['nside']=nside
+        cat.attrs['nest']=nest
+        cat.attrs['dOmega_sterad']=hp.nside2pixarea(nside,degrees=False)
+        cat.attrs['dOmega_deg2']=hp.nside2pixarea(nside,degrees=True)
+        cat.attrs['Ntotal_galaxies_original']=0
+        for key in list_of_keys:
+            # Creates the field if it does not exist
+            if key not in list(catobj.keys()): 
+                catobj.create_dataset(key, data=np.array([]), compression="gzip", chunks=True, maxshape=(None,))
+        cat.close()
+
+    # Creates the checkpoint file if it does not exist
+    if not os.path.isfile(os.path.join(outfolder,'checkpoint_creation.txt')):
         istart = 0
-        np.savetxt(os.path.join(outfolder,'checkpoint_creation.txt'),np.array([istart]),fmt='%d')    
-        
+        np.savetxt(os.path.join(outfolder,'checkpoint_creation.txt'),np.array([istart]),fmt='%d')           
     else:
         istart = np.genfromtxt(os.path.join(outfolder,'checkpoint_creation.txt')).astype(int)
     
@@ -64,14 +73,25 @@ def create_pixelated_catalogs(outfolder,nside,groups_dict,batch=100000,nest=Fals
             with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as pp:
                 pix = pp['catalog']
                 galaxies_id = np.where(indices==ipix)[0] # They are all the galaxies staying in this pixel
-                pp.attrs['Ntotal_galaxies_original']+=len(galaxies_id)
-                for key in list_of_keys:
+
+                # If the fields to take is equal to the list of keys of the galaxy catalog
+                # It means you are writing the file for the first time, so you cound galaxies
+                # Note that Ntotal_galaxies_original contains all the galaxies even with ones with NaNs
+                if fields_to_take == list_of_keys:
+                    pp.attrs['Ntotal_galaxies_original']+=len(galaxies_id)
+                    
+                # The loop is only on the fields to take as you might want to add fields when the file is created
+                for key in fields_to_take:
                     pix[key].resize((pix[key].shape[0] + len(galaxies_id)), axis = 0)
                     pix[key][-len(galaxies_id):] = groups_dict[key][istart:istart+batch][galaxies_id]
         istart+=batch
         pbar.update(batch)
         np.savetxt(os.path.join(outfolder,'checkpoint_creation.txt'),np.array([istart]),fmt='%d')
     pbar.close()
+
+    # Reset the checkpoint creation as we might want to add more fields later
+    istart = 0
+    np.savetxt(os.path.join(outfolder,'checkpoint_creation.txt'),np.array([istart]),fmt='%d')    
 
 def clear_empty_pixelated_files(outfolder,nside):
     '''
@@ -333,7 +353,10 @@ def initialize_icarogw_catalog(outfolder,outfile,grouping):
             icat.attrs['nest']=tmpcat.attrs['nest']
             icat.attrs['dOmega_sterad']=tmpcat.attrs['dOmega_sterad']
             icat.attrs['dOmega_deg2']=tmpcat.attrs['dOmega_deg2']
-            icat.require_group(grouping)
+            subicat = icat.require_group(grouping)
+            subicat.attrs['zcut'] = tmpcat[grouping].attrs['zcut']
+            subicat.attrs['zcut'] = tmpcat[grouping].attrs['Nintegration']
+            
 
     if Nintegration=='fixed-array':       
         with h5py.File(outfile,'a') as icat:
@@ -341,10 +364,24 @@ def initialize_icarogw_catalog(outfolder,outfile,grouping):
             mth_map = []
             for pix in tqdm(filled_pixels,desc='Finding a common redshift grid among pixels'):
                 with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r') as subcat:
+                    
+                    # If there is at least a galaxy in the pixel valid for the interpolant
+                    # this variable is true
+                    valid_gal = np.any(subcat[grouping]['valid_galaxies_interpolant'][:])
+
+                    # If no galaxy is valid for the interpolant, goes to the next pixel
+                    if valid_gal:
+                        pass
+                    else:
+                        continue
+                    
                     z_grid = subcat[grouping]['z_grid'][:] # In this case, z_grid is all the same
+                    # Extra check to see if the pixel is empty
                     if np.isfinite(subcat[grouping].attrs['mthr']):
                         actual_filled_pixels.append(pix)
                         mth_map.append(subcat[grouping].attrs['mthr']) 
+    
+    # TO-DO: Optimize this method as for deep galaxy catalogs it is too demanding
     else:
         # Initialize an array with grid points equally distribuited. Now we are
         # going to populate it
@@ -496,7 +533,7 @@ class  icarogw_catalog(object):
         
     def build_from_pixelated_files(self,outfolder):
         '''
-        Build the catalog file from the pixelated files
+        Build the catalog file from the pixelated fileszcut
 
         Parameters
         ----------
