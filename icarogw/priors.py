@@ -71,7 +71,7 @@ def _mixed_linear_function(x, mix_x0, mix_x1):
     func = (mix_x1 - mix_x0) * x + mix_x0
     return func
 
-def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
+def _mixed_double_sigmoid_function(x, mix_x0, mix_x1, xt, delta_xt):
     sigma = sigma =  mix_x1 + (mix_x0 - mix_x1) / (1 + np.exp((x-xt) * delta_xt))
     return sigma
 
