@@ -513,6 +513,7 @@ def calculate_interpolant_files(outfolder,z_grid,pixel,grouping,subgrouping,
                 subcat.create_dataset('vals_interpolant',data=interpo)
                 subcat.attrs['interpolant_calculated'] = True
 
+
 class  icarogw_catalog(object):
     '''
     This is the class used to handle the icarogw catalog
@@ -796,7 +797,95 @@ class  icarogw_catalog(object):
         ax[1].legend()
         
         return gcp,bgp,inco,fig,ax
+
+
+#############################################
+# A set of function from gwcosmo below to query the gwcosmo 
+# galaxy catalogs
+
+def gwcosmo_get_offset(LOS_catalog):
+    diction = eval(LOS_catalog.attrs['opts'])
+    return diction["offset"]
+
+def gwcosmo_get_z_array(LOS_catalog):
+    return LOS_catalog['z_array'][:]
+
+def gwcosmo_get_array(LOS_catalog, arr_name):
+    offset = gwcosmo_get_offset(LOS_catalog)
+
+    arr = LOS_catalog[str(arr_name)][:]
+    arr = np.exp(arr)
+    arr -= offset
+
+    return arr
+
+def gwcosmo_get_empty_catalog(LOS_catalog):
+    return gwcosmo_get_array(LOS_catalog, "empty_catalogue")
+
+def gwcosmo_get_zprior_full_sky(LOS_catalog):
+    return gwcosmo_get_array(LOS_catalog, "combined_pixels")
+
+def gwcosmo_get_zprior(LOS_catalog, pixel_index):
+    return gwcosmo_get_array(LOS_catalog, str(pixel_index))
+
+
+class gwcosmo_catalog(object):
+    def __init__(self,gwcosmo_file,nside,band,epsilon):
+        self.band = band
+        self.epsilon = epsilon
+        self.nside = nside
+        self.sch_fun=galaxy_MF(band=self.band)
+        self.sch_fun.build_effective_number_density_interpolant(self.epsilon)
+        self.sky_grid = np.arange(0,hp.nside2npix(nside),1).astype(int)
+        with h5py.File(gwcosmo_file,'r') as gwcosmo:
+            self.z_grid = gwcosmo_get_z_array(gwcosmo)
+            self.pz_empty = gwcosmo_get_empty_catalog(gwcosmo)
+            self.dNgal_dzdOm_vals_av = gwcosmo_get_zprior_full_sky(gwcosmo)
+            self.dNgal_dzdOm_vals = []
+            for ipix in self.sky_grid:
+                self.dNgal_dzdOm_vals.append(gwcosmo_get_zprior(gwcosmo,ipix))
+        self.dNgal_dzdOm_vals = np.column_stack(self.dNgal_dzdOm_vals)
         
+    def make_me_empty(self):
+        self.dNgal_dzdOm_vals_av = self.pz_empty
+        self.dNgal_dzdOm_vals = np.column_stack([self.pz_empty for i in range(hp.nside2npix(self.nside))])
+        
+    def get_NUNIQ_pixel(self,ra,dec):
+        return hp.ang2pix(self.nside,np.pi/2-dec,ra,nest=True) 
+
+    def effective_galaxy_number_interpolant(self,z,skypos,cosmology,dl=None,average=False): 
+        '''
+        Note that everything here is in the in-catalog part
+        '''
+        xp=get_module_array(z)
+        sx=get_module_array_scipy(z)
+       
+        originshape=z.shape
+        z=z.flatten()
+        skypos=skypos.flatten()
+        
+        if dl is None:
+            dl=cosmology.z2dl(z)
+        dl=dl.flatten()
+        
+        z_grid = self.z_grid
+        dNgal_dzdOm_vals = self.dNgal_dzdOm_vals
+        pixel_grid = self.sky_grid
+        
+        if average:
+            gcpart=xp.interp(z,z_grid,self.dNgal_dzdOm_vals_av,left=0.,right=0.)
+            bgpart=xp.zeros_like(gcpart)           
+        else:
+            gcpart=sx.interpolate.interpn((z_grid,pixel_grid),dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
+                                fill_value=0.,method='linear') 
+            bgpart=xp.zeros_like(gcpart)           
+
+        return gcpart.reshape(originshape),bgpart.reshape(originshape)
+
+
+
+#############################################
+
 # ---------------------------------------------------------------------------------------
 
 # LVK Reviewed
