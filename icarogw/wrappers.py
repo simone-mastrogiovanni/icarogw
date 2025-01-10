@@ -2060,6 +2060,7 @@ class PowerLaw_PowerLaw():
 
     def pdf(self,m):
 
+        xp = get_module_array(m)
         powerlaw_class_a = PowerLaw_PowerLaw.PowerLawStationary(self.alpha_a, self.mmin_a, self.mmax_a)
         powerlaw_class_b = PowerLaw_PowerLaw.PowerLawStationary(self.alpha_b, self.mmin_b, self.mmax_b)
         # Add left smoothing to the evolving PowerLaw.
@@ -2069,7 +2070,11 @@ class PowerLaw_PowerLaw():
         powerlaw_part_a = powerlaw_class_a.pdf(m)
         powerlaw_part_b = powerlaw_class_b.pdf(m)
 
-        return self.mix * powerlaw_part_a + (1-self.mix) * powerlaw_part_b
+        # Impose the rate to be between [0,1].
+        if (self.mix > 1) or (self.mix < 0):
+            return xp.nan
+        else:
+            return self.mix * powerlaw_part_a + (1-self.mix) * powerlaw_part_b
     
     def log_pdf(self,m):
         xp = get_module_array(m)
@@ -2139,6 +2144,7 @@ class PowerLaw_PowerLaw_PowerLaw():
 
     def pdf(self,m):
 
+        xp = get_module_array(m)
         powerlaw_class_a = PowerLaw_PowerLaw_PowerLaw.PowerLawStationary(self.alpha_a, self.mmin_a, self.mmax_a)
         powerlaw_class_b = PowerLaw_PowerLaw_PowerLaw.PowerLawStationary(self.alpha_b, self.mmin_b, self.mmax_b)
         powerlaw_class_c = PowerLaw_PowerLaw_PowerLaw.PowerLawStationary(self.alpha_c, self.mmin_c, self.mmax_c)
@@ -2151,8 +2157,12 @@ class PowerLaw_PowerLaw_PowerLaw():
         powerlaw_part_b = powerlaw_class_b.pdf(m)
         powerlaw_part_c = powerlaw_class_c.pdf(m)
 
-        return self.mix_alpha * powerlaw_part_a + self.mix_beta * powerlaw_part_b + (1 - self.mix_beta - self.mix_alpha) * powerlaw_part_c
-    
+        # Impose the rate to be between [0,1].
+        if (self.mix_alpha > 1) or (self.mix_alpha < 0) or (self.mix_beta > 1) or (self.mix_beta < 0) or (self.mix_alpha + self.mix_beta > 1):
+            return xp.nan
+        else:
+            return self.mix_alpha * powerlaw_part_a + self.mix_beta * powerlaw_part_b + (1 - self.mix_beta - self.mix_alpha) * powerlaw_part_c
+
     def log_pdf(self,m):
         xp = get_module_array(m)
         return xp.log(self.pdf(m))
@@ -2237,6 +2247,7 @@ class PowerLaw_PowerLaw_Gaussian():
 
     def pdf(self,m):
 
+        xp = get_module_array(m)
         powerlaw_class_a = PowerLaw_PowerLaw_Gaussian.PowerLawStationary(self.alpha_a, self.mmin_a,  self.mmax_a)
         powerlaw_class_b = PowerLaw_PowerLaw_Gaussian.PowerLawStationary(self.alpha_b, self.mmin_b,  self.mmax_b)
         gaussian_class   = PowerLaw_PowerLaw_Gaussian.GaussianStationary(self.mu_g,    self.sigma_g, self.mmin_a)
@@ -2248,7 +2259,11 @@ class PowerLaw_PowerLaw_Gaussian():
         powerlaw_part_b = powerlaw_class_b.pdf(m)
         gaussian_part   = gaussian_class.pdf(m)
 
-        return self.mix_alpha * powerlaw_part_a + self.mix_beta * powerlaw_part_b + (1 - self.mix_beta - self.mix_alpha) * gaussian_part
+        # Impose the rate to be between [0,1].
+        if (self.mix_alpha > 1) or (self.mix_alpha < 0) or (self.mix_beta > 1) or (self.mix_beta < 0) or (self.mix_alpha + self.mix_beta > 1):
+            return xp.nan
+        else:
+            return self.mix_alpha * powerlaw_part_a + self.mix_beta * powerlaw_part_b + (1 - self.mix_beta - self.mix_alpha) * gaussian_part
     
     def log_pdf(self,m):
         xp = get_module_array(m)
@@ -2355,7 +2370,11 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear():
         powerlaw_part_b  = powerlaw_class_b.pdf(m)
         powerlaw_part_c  = powerlaw_class_c.pdf(m)
 
-        return wz_alpha * powerlaw_part_a + wz_beta * powerlaw_part_b + (1 - wz_beta - wz_alpha) * powerlaw_part_c
+        # Impose the rate to be between [0,1].
+        if (xp.any(wz_alpha > 1)) or (xp.any(wz_alpha < 0)) or (xp.any(wz_beta > 1)) or (xp.any(wz_beta < 0)) or (xp.any(wz_alpha + wz_beta > 1)):
+            return xp.nan
+        else:
+            return wz_alpha * powerlaw_part_a + wz_beta * powerlaw_part_b + (1 - wz_beta - wz_alpha) * powerlaw_part_c
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)
@@ -2482,8 +2501,12 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear():
         powerlaw_part_a  = powerlaw_class_a.pdf(m)
         powerlaw_part_b  = powerlaw_class_b.pdf(m)
         gaussian_part    = gaussian_class.pdf(m)
-
-        return wz_alpha * powerlaw_part_a + wz_beta * powerlaw_part_b + (1 - wz_beta - wz_alpha) * gaussian_part
+    
+        # Impose the rate to be between [0,1].
+        if (xp.any(wz_alpha > 1)) or (xp.any(wz_alpha < 0)) or (xp.any(wz_beta > 1)) or (xp.any(wz_beta < 0)) or (xp.any(wz_alpha + wz_beta > 1)):
+            return xp.nan
+        else:
+            return wz_alpha * powerlaw_part_a + wz_beta * powerlaw_part_b + (1 - wz_beta - wz_alpha) * gaussian_part
     
     def log_pdf(self,m,z):
         xp = get_module_array(m)
