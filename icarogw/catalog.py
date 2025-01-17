@@ -246,7 +246,8 @@ def get_redshift_grid_for_files(outfolder,pixel,grouping,cosmo_ref,
         zcut = cosmo_ref.zmax
 
     if isinstance(Nintegration, np.ndarray):
-        if zcut != np.max(Nintegration):
+        # zcut might no deviate from the maximum of the redshift grid by 1e-4
+        if np.abs(zcut-np.max(Nintegration))>=1e-4:
             raise ValueError('The maximum of the grid should be equal to the zcut')
         with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
             subcat = cat[grouping]
@@ -261,8 +262,10 @@ def get_redshift_grid_for_files(outfolder,pixel,grouping,cosmo_ref,
                 zmin[zmin<np.min(Nintegration)] = np.min(Nintegration)
                 zmax[zmax>zcut] = zcut
                 # Select all the galaxies for which zmax>zmin and zmax< maximum cosmology redshift
-                # zmax<zmin when the galaxy is much beyond zcut.
-                valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:]
+                # zmax<zmin when the galaxy is much beyond zcut or the galaxy is at redshift<-1
+                # The condition (zmax<cosmo_ref.zmax) is always satisfied if zcut<cosmo_ref.zmax
+                # The and condition is also with not_NaN_indices as galaxies should have all the entries to be used for interpolant
+                valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:] & subcat['not_NaN_indices'][:]
                 # We put this here as we might be in a situation where a job crashed
                 if 'valid_galaxies_interpolant' not in list(subcat.keys()):
                     subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
@@ -293,7 +296,9 @@ def get_redshift_grid_for_files(outfolder,pixel,grouping,cosmo_ref,
                 resolutions = (zmax-zmin)/Nintegration 
                 # Select all the galaxies for which zmax>zmin and zmax< maximum cosmology redshift
                 # zmax<zmin when the galaxy is much beyond zcut.
-                valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:]
+                # The condition (zmax<cosmo_ref.zmax) is always satisfied if zcut<cosmo_ref.zmax
+                # The and condition is also with not_NaN_indices as galaxies should have all the entries to be used for interpolant
+                valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:] & subcat['not_NaN_indices'][:]
                 # We put this here as we might be in a situation where a job crashed
                 if 'valid_galaxies_interpolant' not in list(subcat.keys()):
                     subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
@@ -504,10 +509,34 @@ def calculate_interpolant_files(outfolder,z_grid,pixel,grouping,subgrouping,
                 Ngalaxies = len(cat['catalog']['z'][:])
                 toloop = np.where(cat[grouping]['valid_galaxies_interpolant'][:])[0]
                 for j in toloop:
-                    Mv=m2M(cat['catalog'][cat[grouping].attrs['apparent_magnitude_flag']][j],cosmo_ref.z2dl(z_grid),calc_kcorr(z_grid))  
+                    # A patch to use K-corrections from upGLADE
+                    if band=='g-upglade':
+                        kcorr_arr = calc_kcorr(z_grid, k0 = cat['catalog']['K_g'][j] , dkbydz = cat['catalog']['dKbydz_g'][j] ,z0 = cat['catalog']['z'][j])
+                    elif band=='r-upglade':
+                        kcorr_arr = calc_kcorr(z_grid, k0 = cat['catalog']['K_r'][j] , dkbydz = cat['catalog']['dKbydz_r'][j] ,z0 = cat['catalog']['z'][j])
+                    elif band=='W1-upglade':
+                        kcorr_arr = calc_kcorr(z_grid, k0 = cat['catalog']['K_W1'][j] , dkbydz = cat['catalog']['dKbydz_W1'][j] ,z0 = cat['catalog']['z'][j])
+                    else:
+                        kcorr_arr = calc_kcorr(z_grid)
+                        
+                    Mv=m2M(cat['catalog'][cat[grouping].attrs['apparent_magnitude_flag']][j],cosmo_ref.z2dl(z_grid),kcorr_arr)                      
                     interpo+=absM_rate.evaluate(sch_fun,Mv)*EM_likelihood_prior_differential_volume(z_grid,
                                                                 cat['catalog']['z'][j],
                                                                 cat['catalog']['sigmaz'][j],cosmo_ref,Numsigma=cat[grouping].attrs['Numsigma'],ptype=ptype)/cat.attrs['dOmega_sterad'] 
+
+                    # An additional check to see if something is going wrong.
+                    if np.isnan(interpo).all():
+                        print(j)
+                        print('dk',cat['catalog']['dKbydz_g'][j])
+                        print('k',cat['catalog']['K_g'][j])
+                        print('Mv', Mv)
+                        print('m', cat['catalog'][cat[grouping].attrs['apparent_magnitude_flag']][j])
+                        print('z', cat['catalog']['z'][j])
+                        print('sigmaz', cat['catalog']['sigmaz'][j])
+
+                        raise ValueError('All NANS')
+
+                
                     # We can divide by the old grid dOmega_sterad as full pixels are all of same size
         
                 subcat.create_dataset('vals_interpolant',data=interpo)
@@ -676,7 +705,10 @@ class  icarogw_catalog(object):
             dl=cosmology.z2dl(z)
         
         mthr_arrays=self.moc_mthr_map[radec_indices]
-        return m2M(mthr_arrays,dl,self.calc_kcorr(z))
+        xp = get_module_array(mthr_arrays)
+        # Once the K-corrections are taken into account in the construction of the 
+        # LOS prior we do not need to account them anymore
+        return m2M(mthr_arrays,dl, xp.zeros_like(dl))
 
     def effective_galaxy_number_interpolant(self,z,skypos,cosmology,dl=None,average=False):
         '''
@@ -888,7 +920,6 @@ class gwcosmo_catalog(object):
 
 # ---------------------------------------------------------------------------------------
 
-# LVK Reviewed
 class kcorr(object):
     def __init__(self,band):
         '''
@@ -900,10 +931,10 @@ class kcorr(object):
             W1, K or bJ band. Others are not implemented
         '''
         self.band=band
-        if self.band not in ['W1-glade+','K-glade+','bJ-glade+','W1-upglade','g-upglade']:
+        if self.band not in ['W1-glade+','K-glade+','bJ-glade+','W1-upglade','g-upglade','r-upglade']:
             raise ValueError('Band not known please use either {:s}'.format(' '.join(['W1-glade+','K-glade+','bJ-glade+',
-                                                                                     'W1-upglade','g-upglade'])))
-    def __call__(self,z):
+                                                                                     'W1-upglade','g-upglade','r-upglade'])))
+    def __call__(self,z, k0 = None, dkbydz=None, z0 = None):
         '''
         Evaluates the K-corrections at a given redshift, See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
         
@@ -911,7 +942,13 @@ class kcorr(object):
         ----------
         z: xp.array
             Redshift
-        
+        k0: xp.array
+            Array of K-corrections computed for a z0 (only used with upglade)
+        dkbydz: xp.array
+            Array of K-corrections derivatives
+        z0: xp.array
+            Redshift at which the K-correction is computed
+            
         Returns
         -------
         k_corrections: xp.array
@@ -925,12 +962,11 @@ class kcorr(object):
             to_ret[z>0.3]=-6.0*xp.log10(1+0.3)
             k_corr=-6.0*xp.log10(1+z)
         elif self.band == 'bJ-glade+':
-            # Fig 5 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
+            # Fig 8 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
             # Note that these corrections also includes evolution corrections
-            k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
-        elif (self.band == 'W1-upglade') | (self.band == 'g-upglade'):
-            # In upglade k-corrections are already applied
-            k_corr = xp.zeros_like(z) 
+            k_corr=(z+6*xp.power(z,2.))/(1+20.*xp.power(z,3.))
+        elif (self.band == 'W1-upglade') | (self.band == 'g-upglade') | (self.band == 'r-upglade'):
+            k_corr = k0+dkbydz*(z-z0)
         return k_corr
 
 # LVK Reviewed
@@ -952,7 +988,7 @@ def user_normal(x,mu,sigma):
     return xp.power(2*xp.pi*(sigma**2),-0.5)*xp.exp(-0.5*xp.power((x-mu)/sigma,2.))
 
 # LVK Reviewed
-def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,ptype='uniform'):
+def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=3.,ptype='uniform'):
     ''' 
     A utility function meant only for this module. Calculates the EM likelihood in redshift times a uniform in comoving volume prior
     

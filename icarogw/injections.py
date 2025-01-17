@@ -1,6 +1,7 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 import copy as cp
 from .conversions import  radec2indeces
+from .utils import check_posterior_samples_and_prior
 
 # LVK Reviewed
 class injections(object):
@@ -25,6 +26,7 @@ class injections(object):
         self.injections_data_original={key:injections_dict[key] for key in injections_dict.keys()}
         self.injections_data={key:injections_dict[key] for key in injections_dict.keys()}
         self.prior_original=cp.deepcopy(prior)
+        check_posterior_samples_and_prior(self.injections_data,self.prior_original)
         self.prior=cp.deepcopy(prior)
         self.detection_index=xp.ones_like(prior,dtype=bool)
         self.ntotal=ntotal
