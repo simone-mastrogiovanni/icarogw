@@ -304,6 +304,31 @@ class cM_astropycosmology(astropycosmology):
         if is_there_cupy():
             self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
             self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
+
+# LVK Reviewed        
+class eps0_astropycosmology(astropycosmology):
+    def  build_cosmology(self,astropy_cosmo,eps0):
+        '''
+        Construct the cosmology
+        
+        Parameters
+        ----------
+        astropy_cosmo: Astropy.cosmology class
+            initialize the cosmology up to zmax
+        eps0: float
+            Parameter such that dLgw=(1+z)^eps0 dLLCDM
+        '''
+        
+        super().build_cosmology(astropy_cosmo)
+        dlem = np.power(10.,self.log10_dl_at_z_cpu)
+        dlbydz_em = np.power(10.,self.log10_ddl_by_dz_cpu)
+        self.log10_dl_at_z_cpu = eps0*np.log10(1+self.z_cpu)+self.log10_dl_at_z_cpu
+        # We put the absolute value for the Jacobian (because this is needed for probabilities)
+        self.log10_ddl_by_dz_cpu= np.log10(np.abs(np.power(1+self.z_cpu,eps0)*(eps0*dlem/(1+self.z_cpu)+dlbydz_em)))
+    
+        if is_there_cupy():
+            self.log10_dl_at_z_gpu=np2cp(self.log10_dl_at_z_cpu)
+            self.log10_ddl_by_dz_gpu=np2cp(self.log10_ddl_by_dz_cpu)
         
 # LVK Reviewed        
 class Xi0_astropycosmology(astropycosmology):
