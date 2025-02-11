@@ -38,7 +38,7 @@ class hierarchical_likelihood(bilby.Likelihood):
             self.neffINJ=4*self.posterior_samples_dict.n_ev
         else:
             self.neffINJ=neffINJ
-            
+        
         super().__init__(parameters={ll: None for ll in self.rate_model.population_parameters})
                 
     def log_likelihood(self):
@@ -68,9 +68,7 @@ class hierarchical_likelihood(bilby.Likelihood):
         self.posterior_samples_dict.update_weights(self.rate_model)
         if xp.any(self.posterior_samples_dict.get_effective_number_of_PE()<self.neffPE):
             return float(xp.nan_to_num(-xp.inf))
-        
-        integ=self.posterior_samples_dict.log_weights # Extract a matrix N_ev X N_samples of log weights
-             
+                     
         # Combine all the terms  
         if self.rate_model.scale_free:
             # Log likelihood for scale free model, Eq. 1.3 on the document

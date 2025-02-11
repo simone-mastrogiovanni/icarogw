@@ -1,5 +1,6 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .conversions import radec2indeces
+from .utils import check_posterior_samples_and_prior
 
 # LVK Reviewed
 class posterior_samples_catalog(object):
@@ -17,7 +18,7 @@ class posterior_samples_catalog(object):
         self.posterior_samples_dict = posterior_samples_dict
         self.n_ev = len(posterior_samples_dict)
     
-    def build_parallel_posterior(self,nparallel=None):
+    def build_parallel_posterior(self,nparallel):
         '''
         Build a matrix of GW parameters by selecting random samples from each posterior
         
@@ -29,12 +30,7 @@ class posterior_samples_catalog(object):
         
         
         # Saves the minimum number of samples to use per event
-        nsamps=np.array([self.posterior_samples_dict[key].nsamples for key in self.posterior_samples_dict.keys()])
-        if nparallel is None:
-            nparallel=np.min(nsamps)
-        else:
-            nparallel=np.min(np.hstack([nsamps,nparallel]))
-        
+        nsamps=np.array([self.posterior_samples_dict[key].nsamples for key in self.posterior_samples_dict.keys()])        
         self.nparallel=nparallel
         llev=list(self.posterior_samples_dict.keys()) # Name of events
         print('\n\tUsing {:d} samples from each of the {:d} event posteriors.'.format(self.nparallel,self.n_ev))
@@ -45,14 +41,29 @@ class posterior_samples_catalog(object):
         self.posterior_parallel={key:xp.empty([self.n_ev,self.nparallel],
                                               dtype=self.posterior_samples_dict[llev[0]].posterior_data[key].dtype) for key in self.posterior_samples_dict[llev[0]].posterior_data.keys()}
 
+        self.posterior_parallel_logmask=xp.ones([self.n_ev,self.nparallel],
+                                              dtype=self.posterior_samples_dict[llev[0]].posterior_data[key].dtype)
+
+        self.Ns_array = xp.ones(self.n_ev)
         # Saves the posterior samples in a dictionary containing events on rows and posterior samples on columns
         for i,event in enumerate(list(self.posterior_samples_dict.keys())):
             len_single = self.posterior_samples_dict[event].nsamples
-            rand_perm = xp.random.permutation(len_single)
+            Ntake = xp.minimum(len_single,self.nparallel)
+            self.Ns_array[i] = xp.minimum(len_single,self.nparallel)
+            print('Taking {:d} posterior samples from {:s} that has {:d} samples'.format(Ntake,event,len_single))
+            # Permute the posterior samples below and then take the first Ntake
+            rand_perm = xp.random.permutation(len_single)[:Ntake]
             for key in self.posterior_parallel.keys():
-                self.posterior_parallel[key][i,:]=self.posterior_samples_dict[event].posterior_data[key][rand_perm[:self.nparallel]]
-            self.posterior_samples_dict[event].numpyfy() # Big data is forced to be on CPU
+                self.posterior_parallel[key][i,:len(rand_perm)]=self.posterior_samples_dict[event].posterior_data[key][rand_perm]
+                self.posterior_parallel[key][i,len(rand_perm):]=self.posterior_samples_dict[event].posterior_data[key][rand_perm[-1]] # Fill the matrix with last sample
+
+            self.posterior_parallel_logmask[i,len(rand_perm):]=-xp.inf # Set the mask of the filled samples to -inf
             
+            self.posterior_samples_dict[event].numpyfy() # Big data is forced to be on CPU
+
+        self.weights_mask = xp.logical_not(xp.isfinite(self.posterior_parallel_logmask))
+        del self.posterior_parallel_logmask
+        
     def cupyfy(self):
         ''' Converts all the posterior samples to cupy'''
         self.posterior_parallel={key:np2cp(self.posterior_parallel[key]) for key in self.posterior_parallel}
@@ -77,9 +88,10 @@ class posterior_samples_catalog(object):
                                                     **{key:self.posterior_parallel[key] for key in rate_wrapper.PEs_parameters})
         xp = get_module_array(self.log_weights)
         sx = get_module_array_scipy(self.log_weights)
+        self.log_weights[self.weights_mask] = -xp.inf # Mask the fake samples and replace 0 weight
         kk = list(self.posterior_parallel.keys())[0]
-        self.sum_weights=xp.exp(sx.special.logsumexp(self.log_weights,axis=1))/self.nparallel
-        self.sum_weights_squared= xp.exp(sx.special.logsumexp(2*self.log_weights,axis=1))/xp.power(self.nparallel,2.)
+        self.sum_weights=xp.exp(sx.special.logsumexp(self.log_weights,axis=1))/self.Ns_array
+        self.sum_weights_squared= xp.exp(sx.special.logsumexp(2*self.log_weights,axis=1))/xp.power(self.Ns_array,2.)
         
     def get_effective_number_of_PE(self):
         '''
@@ -105,6 +117,15 @@ class posterior_samples_catalog(object):
             self.posterior_samples_dict[event].pixelize(nside)
 
     def pixelize_with_catalog(self,catalog):
+        '''
+        This method pixelize the posterior samples using the UNIQ scheme by a MOC 
+        map of the galaxy catalog
+
+        Parameters
+        ----------
+        catalog: class
+            icarogw catalog class
+        '''
         for i,event in enumerate(list(self.posterior_samples_dict.keys())):
             self.posterior_samples_dict[event].pixelize_with_catalog(catalog)
             
@@ -141,6 +162,8 @@ class posterior_samples(object):
         prior: np.array
             Prior to use in order to reweight posterior samples written in the same variables that you provide, e.g. if you provide d_l and m1d, then p(d_l,m1d)
         '''
+        check_posterior_samples_and_prior(posterior_dict, prior)
+
         self.posterior_data={key: posterior_dict[key] for key in posterior_dict.keys()}
         self.posterior_data['prior']=prior
         self.nsamples=len(prior)

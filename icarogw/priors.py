@@ -66,8 +66,66 @@ def _lowpass_filter(mass, mmax, delta_max):
     to_ret[select_one]=1.
     return to_ret
 
+def _mixed_sigmoid_function(x, xt, delta_xt, mix_x0):
+    '''
+    A Window function that starts from a float and goes to 0
+
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    xt: float/np.array
+        Transition point for the window
+    delta_xt: float/np.array
+        Width of the transition
+    mix_x0: float/np.array
+        Initial value of the window, then it goes to 0.
+
+    Returns
+    -------
+    Values of the window
+    '''
+    sigma = mix_x0 / (1 + np.exp((x-xt)/delta_xt))
+    return sigma
+
+def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
+    '''
+    A Window function that starts from a float and goes to 0
+
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    xt: float/np.array
+        Transition point for the window
+    delta_xt: float/np.array
+        Width of the transition
+    mix_x0: float/np.array
+        Initial value of the window, then it goes to 0.
+
+    Returns
+    -------
+    Values of the window
+    '''
+    sigma = sigma =  mix_x1 + (mix_x0 - mix_x1) / (1 + np.exp((x-xt) / delta_xt))
+    return sigma
 
 def _mixed_linear_function(x, mix_x0, mix_x1):
+    '''
+    A Window function that starts from mix_0 and linearly evolves (x=1 f=miz_x1)
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    mix_x0: float/np.array
+        Initial value of the window at x=0.
+    mix_x0: float/np.array
+        Initial value of the window at x=1.
+
+    Returns
+    -------
+    Values of the window
+    '''
     func = (mix_x1 - mix_x0) * x + mix_x0
     return func
 
@@ -1236,6 +1294,67 @@ class PowerLawGaussian(basic_1dimpdf):
         xp = get_module_array(x)
         toret=xp.log((1-self.lambdag)*self.PL.cdf(x)+self.lambdag*self.TG.cdf(x))
         return toret
+
+
+class BrokenPowerLawMultiPeak(basic_1dimpdf):
+    
+    def __init__(self,minpl,maxpl,alpha_1,alpha_2,b,lambdag,lambdaglow,meanglow,sigmaglow,minglow,maxglow,
+  meanghigh,sigmaghigh,minghigh,maxghigh):
+        '''
+        Class for a broken power law + 2 Gaussians probability
+        
+        Parameters
+        ----------
+        minpl,maxpl,alpha,lambdag,lambdaglow,meanglow,sigmaglow,minglow,maxglow,
+  meanghigh,sigmaghigh,minghigh,maxghigh: float
+            In sequence, minimum, maximum, exponential of the powerlaw part. Fraction of pdf in gaussians and fraction in the lower gaussian.
+            Mean, sigma, minvalue and maxvalue of the lower gaussian. Mean, sigma, minvalue and maxvalue of the higher gaussian 
+        '''
+        super().__init__(min(minpl,minglow,minghigh),max(maxpl,maxglow,maxghigh))
+        self.minpl,self.maxpl,self.alpha_1,self.alpha_2,self.b,self.lambdag,self.lambdaglow,self.meanglow,self.sigmaglow,self.minglow,self.maxglow,\
+        self.meanghigh,self.sigmaghigh,self.minghigh,self.maxghigh=minpl,maxpl,alpha_1,alpha_2,b,lambdag,lambdaglow,\
+        meanglow,sigmaglow,minglow,maxglow,meanghigh,sigmaghigh,minghigh,maxghigh
+        self.BPL=BrokenPowerLaw(minpl,maxpl,alpha_1,alpha_2,b)
+        self.TGlow=TruncatedGaussian(meanglow,sigmaglow,minglow,maxglow)
+        self.TGhigh=TruncatedGaussian(meanghigh,sigmaghigh,minghigh,maxghigh)
+        
+    def _log_pdf(self,x):
+        '''
+        Evaluates the log_pdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_pdf
+        
+        Returns
+        -------
+        log_pdf: xp.array
+        '''
+        xp = get_module_array(x)
+        bpl_part = xp.log1p(-self.lambdag)+self.BPL.log_pdf(x)
+        g_low = self.TGlow.log_pdf(x)+xp.log(self.lambdag)+xp.log(self.lambdaglow)
+        g_high = self.TGhigh.log_pdf(x)+xp.log(self.lambdag)+xp.log1p(-self.lambdaglow)
+        return xp.logaddexp(xp.logaddexp(bpl_part,g_low),g_high)
+    
+    def _log_cdf(self,x):
+        '''
+        Evaluates the log_cdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_cdf
+        
+        Returns
+        -------
+        log_cdf: xp.array
+        '''
+        xp = get_module_array(x)
+        bpl_part = (1.-self.lambdag)*self.BPL.cdf(x)
+        g_part =self.TGlow.cdf(x)*self.lambdag*self.lambdaglow+self.TGhigh.cdf(x)*self.lambdag*(1-self.lambdaglow)
+        return xp.log(bpl_part+g_part)
+
 
 
 # LVK Reviewed

@@ -1,11 +1,11 @@
-from .cupy_pal import get_module_array, get_module_array_scipy, iscupy, np, check_bounds_1D
-from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology
+from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, check_bounds_1D
+from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology, eps0_astropycosmology
 from .cosmology import  md_rate, md_gamma_rate, powerlaw_rate, beta_rate, beta_rate_line
-from .priors import LowpassSmoothedProb, LowpassSmoothedProbEvolving, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb, PL_normfact, PL_normfact_z
-from .priors import  PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, conditional_2dimpdf, conditional_2dimz_pdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
-from .priors import _mixed_linear_function, _mixed_double_sigmoid_function, _mixed_linear_sinusoid_function
+from .priors import LowpassSmoothedProb, LowpassSmoothedProbEvolving, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb, PL_normfact, PL_normfact_z, basic_1dimpdf
+from .priors import  EvolvingPowerLawPeak, PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, absL_PL_inM, conditional_2dimpdf, conditional_2dimz_pdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
+from .priors import _lowpass_filter, _mixed_sigmoid_function, _mixed_double_sigmoid_function, _mixed_linear_function, _mixed_linear_sinusoid_function, BrokenPowerLawMultiPeak
 import copy
-from astropy.cosmology import FlatLambdaCDM, FlatwCDM
+from astropy.cosmology import FlatLambdaCDM, FlatwCDM, Flatw0waCDM
 
 
     
@@ -66,6 +66,24 @@ class FlatwCDM_wrap(object):
         self.astropycosmo=FlatwCDM
     def update(self,**kwargs):
         self.cosmology.build_cosmology(self.astropycosmo(**kwargs))
+
+
+class Flatw0waCDM_wrap(object):
+    def __init__(self,zmax):
+        self.population_parameters=['H0','Om0','w0','wa']
+        self.cosmology=astropycosmology(zmax)
+        self.astropycosmo=Flatw0waCDM
+    def update(self,**kwargs):
+        self.cosmology.build_cosmology(self.astropycosmo(**kwargs))
+
+class eps0_mod_wrap(object):
+    def __init__(self,bgwrap):
+        self.bgwrap=copy.deepcopy(bgwrap)
+        self.population_parameters=self.bgwrap.population_parameters+['eps0']
+        self.cosmology=eps0_astropycosmology(bgwrap.cosmology.zmax)
+    def update(self,**kwargs):
+        bgdict={key:kwargs[key] for key in self.bgwrap.population_parameters}
+        self.cosmology.build_cosmology(self.bgwrap.astropycosmo(**bgdict),eps0=kwargs['eps0'])
 
 # LVK Reviewed
 class Xi0_mod_wrap(object):
@@ -178,6 +196,30 @@ class massprior_MultiPeak(pm_prob):
                                              kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
                                              kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high'])
 
+
+class massprior_BrokenPowerLawMultiPeak(pm_prob):
+    def __init__(self):
+        self.population_parameters=['alpha_1','alpha_2','mmin','mmax','b','mu_g_low','sigma_g_low','lambda_g_low','mu_g_high','sigma_g_high','lambda_g']
+    def update(self,**kwargs):
+        self.prior=BrokenPowerLawMultiPeak(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha_1'],-kwargs['alpha_2'],kwargs['b'],
+                                             kwargs['lambda_g'],kwargs['lambda_g_low'],kwargs['mu_g_low'],
+                                             kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
+                                             kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high'])
+        
+class massprior_EvolvingPowerLawPeak(object):
+    def __init__(self,mw):
+        self.population_parameters = mw.population_parameters + ['zt', 'delta_zt', 'mu_z0', 'mu_z1', 'sigma_z0', 'sigma_z1']
+        self.mw_nonevolving = mw
+    def update(self,**kwargs):
+        self.mw_nonevolving.update(**{key:kwargs[key] for key in self.mw_nonevolving.population_parameters})
+        self.zt = kwargs['zt']
+        self.delta_zt = kwargs['delta_zt']
+        self.mu_z0 = kwargs['mu_z0']
+        self.mu_z1 = kwargs['mu_z1']
+        self.sigma_z0 = kwargs['sigma_z0']
+        self.sigma_z1 = kwargs['sigma_z1']
+        self.prior = EvolvingPowerLawPeak(self.mw_nonevolving, self.zt, self.delta_zt, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1)
+
 class m1m2_conditioned(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters+['beta']
@@ -208,6 +250,7 @@ class m1m2_conditioned_lowpass(pm1m2_prob):
         p2 = LowpassSmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
         self.prior=conditional_2dimpdf(p1,p2)
 
+
 class m1m2_paired_massratio_dip(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters + ['beta','bottomsmooth', 'topsmooth', 
@@ -228,6 +271,123 @@ class m1m2_paired_massratio_dip(pm1m2_prob):
         
         self.prior=paired_2dimpdf(p,pairing_function)
 
+
+class m1m2_paired_massratio_dip_general(pm1m2_prob):
+    def __init__(self,wrapper_m):
+        self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters})
+        p = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
+        
+        def pairing_function(m1,m2,beta_bottom=kwargs['beta_bottom'],beta_top=kwargs['beta_top'],
+                            rightdip=kwargs['rightdip']):
+            
+            xp = get_module_array(m1)
+            q = m2/m1
+            toret = xp.ones_like(q)
+            idx = m2<=rightdip
+            toret[idx] = xp.power(q[idx],beta_bottom)
+            idx = m2>rightdip
+            toret[idx] = xp.power(q[idx],beta_top)
+            toret[q>1] = 0.
+            return toret
+        
+        self.prior=paired_2dimpdf(p,pairing_function)
+
+
+class m1m2_paired_massratio_bpl_dip_farah_2022(pm1m2_prob):
+    def __init__(self):
+        wrapper_m = massprior_BrokenPowerLaw()
+        wrapper_m.population_parameters.remove('b')
+        self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        kwargs['b'] = (kwargs['leftdip']-kwargs['mmin'])/(kwargs['mmax']-kwargs['mmin'])
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters+['b']})
+        p = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
+        
+        def pairing_function(m1,m2,beta_bottom=kwargs['beta_bottom'],beta_top=kwargs['beta_top']):
+            
+            xp = get_module_array(m1)
+            q = m2/m1
+            toret = xp.ones_like(q)
+            idx = m2<=5.
+            toret[idx] = xp.power(q[idx],beta_bottom)
+            idx = m2>5.
+            toret[idx] = xp.power(q[idx],beta_top)
+            toret[q>1] = 0.
+            return toret
+        
+        self.prior=paired_2dimpdf(p,pairing_function)
+
+
+class m1m2_paired_massratio_bplmulti_dip(pm1m2_prob):
+    def __init__(self):
+        wrapper_m = massprior_BrokenPowerLawMultiPeak()
+        wrapper_m.population_parameters.remove('b')
+        self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        mbreak_NS = kwargs['leftdip'] + kwargs['leftdipsmooth']
+        mbreak_BH = kwargs['rightdip'] - kwargs['rightdipsmooth']
+        mbreak = 0.5*(mbreak_NS+mbreak_BH)
+        kwargs['b'] = (mbreak-kwargs['mmin'])/(kwargs['mmax']-kwargs['mmin'])
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters+['b']})
+        p = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
+        
+        def pairing_function(m1,m2,beta_bottom=kwargs['beta_bottom'],beta_top=kwargs['beta_top'],mbreak=mbreak):
+            # The motivation for using only m2 for beta top and bottom is that if m2 is a NS for sure 
+            # it is more probable that the binary comes from isolated stellar binaries.
+            xp = get_module_array(m1)
+            q = m2/m1
+            toret = xp.ones_like(q)
+            idx = m2<=mbreak
+            toret[idx] = xp.power(q[idx],beta_bottom)
+            idx = m2>mbreak
+            toret[idx] = xp.power(q[idx],beta_top)
+            toret[q>1] = 0.
+            return toret
+        
+        self.prior=paired_2dimpdf(p,pairing_function)
+
+
+
+class m1m2_paired_massratio_bplmulti_dip_conditioned(pm1m2_prob):
+    def __init__(self):
+        wrapper_m = massprior_BrokenPowerLawMultiPeak()
+        wrapper_m.population_parameters.remove('b')
+        self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    def update(self,**kwargs):
+        mbreak_NS = kwargs['leftdip'] + kwargs['leftdipsmooth']
+        mbreak_BH = kwargs['rightdip'] - kwargs['rightdipsmooth']
+        mbreak = 0.5*(mbreak_NS+mbreak_BH)
+        kwargs['b'] = (mbreak-kwargs['mmin'])/(kwargs['mmax']-kwargs['mmin'])
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters+['b']})
+        p1 = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
+        
+        # Equivalent to a broken power law distribution in q = m2/m1
+        bpl = BrokenPowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta_bottom'],kwargs['beta_top'],kwargs['b'])
+        p2 = LowpassSmoothedProb(bpl,kwargs['bottomsmooth'])
+        
+        self.prior=conditional_2dimpdf(p1,p2)
 
 class m1m2_paired(pm1m2_prob):
     def __init__(self,wrapper_m):

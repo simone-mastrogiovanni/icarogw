@@ -1,375 +1,412 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn, is_there_cupy
 from .conversions import radec2indeces, indices2radec, M2m, m2M
-from .cosmology import galaxy_MF, log_powerlaw_absM_rate
+from .cosmology import galaxy_MF, log_powerlaw_absM_rate, astropycosmology
+from astropy.cosmology import Planck15
 
 import healpy as hp
 import h5py
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import shutil
 import os
 import shutil
 from mhealpy import HealpixBase, HealpixMap
+import mpmath
 
 LOWERL=np.nan_to_num(-np.inf)
 
 
-# LVK Reviewed
-class kcorr(object):
-    def __init__(self,band):
-        '''
-        A class to handle K-corrections
-        
-        Parameters
-        ----------
-        band: string
-            W1, K or bJ band. Others are not implemented
-        '''
-        self.band=band
-        if self.band not in ['W1','K','bJ']:
-            raise ValueError('Band not known, please use W1 or K or bJ')
-    def __call__(self,z):
-        '''
-        Evaluates the K-corrections at a given redshift, See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
-        
-        Parameters
-        ----------
-        z: xp.array
-            Redshift
-        
-        Returns
-        -------
-        k_corrections: xp.array
-        '''
-        xp = get_module_array(z)
-        if self.band == 'W1':
-            k_corr = -1*(4.44e-2+2.67*z+1.33*(z**2.)-1.59*(z**3.)) #From Maciej email
-        elif self.band == 'K':
-            # https://iopscience.iop.org/article/10.1086/322488/pdf 4th page lhs
-            to_ret=-6.0*xp.log10(1+z)
-            to_ret[z>0.3]=-6.0*xp.log10(1+0.3)
-            k_corr=-6.0*xp.log10(1+z)
-        elif self.band == 'bJ':
-            # Fig 5 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
-            # Note that these corrections also includes evolution corrections
-            k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
-        return k_corr
+def create_pixelated_catalogs(outfolder,nside,groups_dict,fields_to_take=None,batch=100000,nest=False):
+    '''
+    Divide a galaxy catlalog file into pixelated files
 
-def create_pixelated_catalog(outfile,nside,groups_dict,batch=100000,nest=False):
-
+    Parameters
+    ----------
+    outfolder: str
+        Path where to save the pixels files
+    nside: int
+        Nside for the healpy pixelization
+    groups_dict: int
+        A dictionary containing the h5py datasets to save. The dictionary should have at least
+        'ra' [rad], 'dec' [rad], 'z' and 'sigmaz and some apparent magnitude
+    fields_to_take: list of strings
+        They are the list of variables you would like to save or append to the pixelated files.
+        If this keyword is None, then it means you are creating the  files for the first time
+    batch: int
+        How many galaxies to process
+    nest: bool
+        Nest flag for healpy
+    '''
     list_of_keys = list(groups_dict.keys())
-    
-    if not os.path.isfile(outfile):
-        cat = h5py.File(outfile,'w-')
+    if fields_to_take == None:
+        fields_to_take = list_of_keys
+
+    # Loops over the pixels and create fiels if they do not exist, otherwise open them in append mode
+    for i in tqdm(range(hp.nside2npix(nside)),desc='Creating the file with pixels fields'):    
+        cat = h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(i)),'a')
+        # Create catalog group if it does not exist
+        catobj = cat.require_group('catalog')
         cat.attrs['nside']=nside
         cat.attrs['nest']=nest
         cat.attrs['dOmega_sterad']=hp.nside2pixarea(nside,degrees=False)
         cat.attrs['dOmega_deg2']=hp.nside2pixarea(nside,degrees=True)
-        cat.attrs['checkpoint']=0
-        cat.attrs['Ntotal_galaxies_original']=len(groups_dict['ra'])
-        subcat=cat.create_group('catalog')
-        for i in range(hp.nside2npix(nside)):
-            pix=subcat.create_group('pixel_{:d}'.format(i))
-            for key in list_of_keys:
-                pix.create_dataset(key, data=np.array([]), compression="gzip", chunks=True, maxshape=(None,))
-                pix.attrs['N_galaxies']=0
+        cat.attrs['Ntotal_galaxies_original']=0
+        for key in list_of_keys:
+            # Creates the field if it does not exist
+            if key not in list(catobj.keys()): 
+                catobj.create_dataset(key, data=np.array([]), compression="gzip", chunks=True, maxshape=(None,))
+        cat.close()
+
+    # Creates the checkpoint file if it does not exist
+    if not os.path.isfile(os.path.join(outfolder,'checkpoint_creation.txt')):
+        istart = 0
+        np.savetxt(os.path.join(outfolder,'checkpoint_creation.txt'),np.array([istart]),fmt='%d')           
     else:
-        cat = h5py.File(outfile,'r+')
-        subcat = cat['catalog']
-        
-    istart = cat.attrs['checkpoint']
-    Ntotal = len(groups_dict['ra'])
+        istart = np.genfromtxt(os.path.join(outfolder,'checkpoint_creation.txt')).astype(int)
     
+    Ntotal = len(groups_dict['ra'])  
     pbar = tqdm(total=Ntotal-istart)
 
     while istart < Ntotal:
-        idx = radec2indeces(groups_dict['ra'][istart:istart+batch],groups_dict['dec'][istart:istart+batch],nside)
+        idx = radec2indeces(groups_dict['ra'][istart:istart+batch],groups_dict['dec'][istart:istart+batch],nside,nest=nest)
         u, indices = np.unique(idx, return_inverse=True) # u array of unique indices
-        # Note that u[indices] = idx
-        for ipix, pixel in enumerate(u):        
-            pix = subcat['pixel_{:d}'.format(pixel)]
-            galaxies_id = np.where(indices==ipix)[0] # They are all the galaxies staying in this pixel
-            pix.attrs['N_galaxies']+=len(galaxies_id)
-            for key in list_of_keys:
-                pix[key].resize((pix[key].shape[0] + len(galaxies_id)), axis = 0)
-                pix[key][-len(galaxies_id):] = groups_dict[key][istart:istart+batch][galaxies_id]
+        for ipix, pixel in enumerate(u):
+            with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as pp:
+                pix = pp['catalog']
+                galaxies_id = np.where(indices==ipix)[0] # They are all the galaxies staying in this pixel
+
+                # If the fields to take is equal to the list of keys of the galaxy catalog
+                # It means you are writing the file for the first time, so you cound galaxies
+                # Note that Ntotal_galaxies_original contains all the galaxies even with ones with NaNs
+                if fields_to_take == list_of_keys:
+                    pp.attrs['Ntotal_galaxies_original']+=len(galaxies_id)
+                    
+                # The loop is only on the fields to take as you might want to add fields when the file is created
+                for key in fields_to_take:
+                    pix[key].resize((pix[key].shape[0] + len(galaxies_id)), axis = 0)
+                    pix[key][-len(galaxies_id):] = groups_dict[key][istart:istart+batch][galaxies_id]
         istart+=batch
         pbar.update(batch)
-        cat.attrs['checkpoint']=istart
-
-    del cat.attrs['checkpoint']
-
-    cat.close()
+        np.savetxt(os.path.join(outfolder,'checkpoint_creation.txt'),np.array([istart]),fmt='%d')
     pbar.close()
 
-    cat = h5py.File(outfile,'r+')
-    subcat=cat['catalog']
-    for key in list(subcat.keys()):
-        if subcat[key].attrs['N_galaxies'] == 0:
-            del subcat[key]
+    # Reset the checkpoint creation as we might want to add more fields later
+    istart = 0
+    np.savetxt(os.path.join(outfolder,'checkpoint_creation.txt'),np.array([istart]),fmt='%d')    
 
-    cat.create_dataset('filled_pixels',data=np.array([a[6::] for a in list(subcat.keys())]).astype(int))
-    cat.close()
+def clear_empty_pixelated_files(outfolder,nside):
+    '''
+    This function deletes the files with empty pixels and also saves a 
+    file in outfolder/filled_pixels.txt with the pixel labels of the filled 
+    pixels
 
-
-class large_galaxy_catalog(object):
-
-    def __init__(self):
-        pass
-        
-    def initialize_catalog(self,input_catalog,out_catalog,fields_to_take):
-
-        if not os.path.isfile(out_catalog):
-            shutil.copyfile(input_catalog,out_catalog)
-            catalog = h5py.File(out_catalog,'r+')
-            catalog.attrs['checkpoint_clean'] = 0
-        else:
-            catalog = h5py.File(out_catalog,'r+')
-        
-        subcatalog = catalog['catalog']
-        list_of_pixels = list(subcatalog.keys())
-        iterator = np.arange(catalog.attrs['checkpoint_clean'],len(list_of_pixels),1).astype(int)
-        
-        # This for loop removes the galaxies with NaNs or inf as entries
-        for ip in tqdm(iterator,desc='Removing galaxies with Nan values in specified fields'):
-            pixel = list_of_pixels[ip]
-            for key in list(subcatalog[pixel].keys()):
-                # If the key is not in the field to take then continue
-                if key not in fields_to_take:
-                    del subcatalog[pixel][key]
-                    continue
-                tokeep=np.where(np.isfinite(subcatalog[pixel][key]))[0]
-                for subkey in list(subcatalog[pixel].keys()):
-                    arr = subcatalog[pixel][subkey][tokeep]
-                    del subcatalog[pixel][subkey]
-                    subcatalog[pixel].create_dataset(subkey,data=arr)
-            subcatalog[pixel].attrs['N_galaxies'] = len(subcatalog[pixel][subkey])
-            catalog.attrs['checkpoint_clean']=ip+1
-            
-            
-        self.hdf5pointer = catalog
-        self.clear_empty_pixels()
-
-    def clear_empty_pixels(self):
-        
-        # Check again for empty pixels
-        Ntotal = 0
-        for pixel in list(self.hdf5pointer['catalog'].keys()):
-            if self.hdf5pointer['catalog'][pixel].attrs['N_galaxies'] == 0:
-                del self.hdf5pointer['catalog'][pixel]
+    Parameters
+    ----------
+    outfolder: str
+        Where the pixel files are saved
+    nside: int
+        nside used for the analysis
+    '''
+    filled_pixels = []
+    for pix in tqdm(range(hp.nside2npix(nside)),desc='Checking pixel files'):
+        if not os.path.isfile(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix))):
+            continue
+        with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r') as subcat:
+            if subcat.attrs['Ntotal_galaxies_original']!=0:
+                filled_pixels.append(pix)
             else:
-                Ntotal+=1
-        self.hdf5pointer.attrs['Ntotal_galaxies_original']=Ntotal
+                os.remove(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)))
+    np.savetxt(os.path.join(outfolder,'filled_pixels.txt'),np.array(filled_pixels),fmt='%d')
 
-        del self.hdf5pointer['filled_pixels']
-        # Save the indeces of the filled pixel
-        self.hdf5pointer.create_dataset('filled_pixels',data=np.array([a[6::] for a in list(self.hdf5pointer['catalog'].keys())]).astype(int))
+def remove_nans_pixelated_files(outfolder,pixel,fields_to_take,grouping):
+    '''
+    The function creates a group in the pixelated files and record what galaxies have 
+    NaNs.
+
+    Parameters
+    ----------
+    outfolder: str
+        Where are the pixelated files
+    pixel: int
+        The pixel label you want to read
+    fields_to_take: list
+        List of strings of the field in the group you want to take
+    grouping: str
+        How the new group should be called
+    '''
+    with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
+        gg=cat.require_group(grouping)
+        if 'NaNs_removed' not in list(gg.attrs.keys()):
+            gg.attrs['NaNs_removed'] = False
+
+        if not gg.attrs['NaNs_removed']:
+            bigbool = np.isfinite(np.vstack([cat['catalog'][key][:] for key in fields_to_take]))
+            tokeep = np.all(bigbool,axis=0)
+            gg.create_dataset('not_NaN_indices',data=tokeep)
+            gg.attrs['NaNs_removed'] = True
+        
+def calculate_mthr_pixelated_files(outfolder,
+                                   pixel,
+                                   apparent_magnitude_flag,grouping,nside_mthr,
+                                   mthr_percentile=50):
+    '''
+    The function calculates the apparent magnitude threshold for each pixelated file
+
+    Parameters
+    ----------
+    outfolder: str
+        Where are the pixelated files
+    pixel: int
+        The pixel label you want to read
+    apparent_magnitude_flag: str
+        The flag of the apparent magnitude 
+    grouping: str
+        How the new group should be called
+    nside_mthr: int
+        nside to use for the calculation of mthr
+    mthr_percentile: float
+        Percentage used to define the apperent magnitude threhosld
+    '''
     
+    filled_pixels = np.genfromtxt(os.path.join(outfolder,'filled_pixels.txt')).astype(int)
+    with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
+        subcat = cat[grouping]
+        subcat.attrs['apparent_magnitude_flag']=apparent_magnitude_flag
 
-    def calculate_mthr(self,apparent_magnitude_flag,mthr_percentile=50,nside_mthr=None):
+        if 'mthr_calculated' not in list(subcat.attrs.keys()):
+            subcat.attrs['mthr_calculated'] = False
 
-        self.hdf5pointer.attrs['apparent_magnitude_flag']=apparent_magnitude_flag
+        if not  subcat.attrs['mthr_calculated']:
         
-        if nside_mthr is None:
-            nside_mthr = int(self.hdf5pointer.attrs['nside'])
-
-        rafilled, decfilled = indices2radec(self.hdf5pointer['filled_pixels'][:],self.hdf5pointer.attrs['nside'],
-                                           nest=self.hdf5pointer.attrs['nest'])
-
-        # This array is mapped to self.hdf5pointer['filled_pixels'][:] and it is the big pixel labrl
-        skypixmthr = radec2indeces(rafilled,decfilled,nside_mthr,nest=self.hdf5pointer.attrs['nest'])
-        npixelsmthr = hp.nside2npix(nside_mthr)
-
-        # This try is used to make the group
-        try:
-            mthgroup = self.hdf5pointer.create_group('mthr_map')
-            mthgroup.attrs['mthr_percentile'] = mthr_percentile
-            mthgroup.attrs['nside_mthr'] = nside_mthr
-            mthgroup.create_dataset('mthr_sky',data=np.nan_to_num(
-                -np.ones(len(self.hdf5pointer['filled_pixels'][:]))*np.inf))
-            mthgroup.attrs['map_cut_is_applied'] = 0
-            indx_sky=0
-        except:
-            mthgroup = self.hdf5pointer['mthr_map']
-            indx_sky = mthgroup.attrs['sky_checkpoint']
-            print('Group already exists, resuming from pixel {:d}'.format(indx_sky))
-
-        pbar = tqdm(total=len(self.hdf5pointer['filled_pixels'][:])-indx_sky)
-        print('Calculating apparent magnitude threshold')
-        for i,indx in enumerate(self.hdf5pointer['filled_pixels'][:]):
-            if i<indx_sky:
-                continue
-            
-            # This line finds all the small pixels labels belonging to the big pixel
-            pix_to_take = self.hdf5pointer['filled_pixels'][np.where(skypixmthr==skypixmthr[i])[0]] 
-            m_array = np.hstack([self.hdf5pointer['catalog']['pixel_{:d}'.format(p)][apparent_magnitude_flag][:] for p in pix_to_take])
-            mthgroup['mthr_sky'][i] = np.percentile(m_array,mthgroup.attrs['mthr_percentile'])
-            pbar.update(1)
-            mthgroup.attrs['sky_checkpoint']=i+1
-            
-        pbar.close()
-
-        if mthgroup.attrs['map_cut_is_applied'] !=0:
-            # The block below throws away all the galaxies fainter than
-            # the apparent magnitude threshold
-            pbar = tqdm(total=len(self.hdf5pointer['filled_pixels'][:]))
-            print('Removing galaxies below threshold')
-            
-            for i,indx in enumerate(self.hdf5pointer['filled_pixels'][:]):
-                mthrpixel = mthgroup['mthr_sky'][i] # This is the threshold in the pixel  
-                # Takes only the galaxies in the pixel that are birghter (below) than apparent magnitude threshold
-                tokeep=np.where(self.hdf5pointer['catalog/pixel_{:d}'.format(indx)][apparent_magnitude_flag][:]<=mthrpixel)[0]
-                for subkey in list(self.hdf5pointer['catalog/pixel_{:d}'.format(indx)].keys()):
-                    arr = self.hdf5pointer['catalog/pixel_{:d}'.format(indx)][subkey][tokeep]
-                    del self.hdf5pointer['catalog/pixel_{:d}'.format(indx)][subkey]
-                    self.hdf5pointer['catalog/pixel_{:d}'.format(indx)].create_dataset(subkey,data=arr)
-                # Reassign the galaxy number
-                self.hdf5pointer['catalog/pixel_{:d}'.format(indx)].attrs['N_galaxies'] = len(self.hdf5pointer['catalog/pixel_{:d}'.format(indx)][subkey])
-                pbar.update(1)
-            pbar.close()
-            self.clear_empty_pixels()
-            mthgroup.attrs['map_cut_is_applied'] = 1
-
-
-    def load_hdf5(self,filename,band,epsilon):
-        # Load the catalog, initialize the MOC mthr map and also the kcorrection model
-        self.hdf5pointer = h5py.File(filename,'r+')
-        
-        print('Initializing MOC mthr map')
-        try:
-            self.initialize_moc_mthr_map()
-            print('Success: MOC mthr map initialized')
-        except:
-            print('Failure: MOC mthr map initialized')
-        
-        self.calc_kcorr=kcorr(band)
-        self.sch_fun=galaxy_MF(band=band)
-        self.sch_fun.build_effective_number_density_interpolant(epsilon)
-
-        print('Loading galaxy density interpolant')
-        try:
-            self.z_grid = self.hdf5pointer['dNgal_dzdOm_interpolant/z_grid'][:]
-            self.sky_pix_nuniq_grid = np.sort(self.hdf5pointer['dNgal_dzdOm_interpolant/sky_pixels_nuniq'][:])
-            self.dNgal_dzdOm_vals = np.column_stack([self.hdf5pointer['dNgal_dzdOm_interpolant/nuniq_pixel_{:d}/vals_interpolant'.format(moc_pixel)][:]
-                                        for moc_pixel in self.sky_pix_nuniq_grid])
-
-
-            
-            print('Success: Interpolant loaded')
-        except:
-            print('Failure: Interpolant not present')
-            
-
-    def get_NUNIQ_pixel(self,ra,dec):
-        return self.moc_mthr_map.ang2pix(np.pi/2-dec,ra)        
+            ra_central, dec_central = indices2radec(np.array([pixel]),cat.attrs['nside'],nest=cat.attrs['nest'])
+            # The big pixel to which it belongs this pixel
+            newbig = radec2indeces(ra_central,dec_central,nside_mthr,nest=cat.attrs['nest'])[0]
+          
+            rafilled, decfilled = indices2radec(filled_pixels,cat.attrs['nside'],nest=cat.attrs['nest'])
+            # The big pixels to which all the pixels belong
+            skypixmthr = radec2indeces(rafilled,decfilled,nside_mthr,nest=cat.attrs['nest'])
     
-    def initialize_moc_mthr_map(self):
-        self.moc_mthr_map = HealpixMap.moc_from_pixels(self.hdf5pointer.attrs['nside'], self.hdf5pointer['filled_pixels'], 
-                               nest = self.hdf5pointer.attrs['nest'],density=False)
-
-        # The map is initialized with 0 in empty spaces, here we replace with -inf to say complete brightness
-        self.moc_mthr_map.data[self.moc_mthr_map.data==0.]=-np.inf
-        # This array tells you to what pixel of the filled map it corresponds the filled pixels
-        self.mapping_filled_pixels = np.ones_like(self.hdf5pointer['filled_pixels'])  
-        
-        for i,pixo in enumerate(self.hdf5pointer['filled_pixels']):
-            theta,phi = hp.pix2ang(self.hdf5pointer.attrs['nside'],pixo,nest=self.hdf5pointer.attrs['nest'])
-            pix = self.moc_mthr_map.ang2pix(theta,phi)
-            self.moc_mthr_map[pix] = self.hdf5pointer['mthr_map']['mthr_sky'][i]
-            self.mapping_filled_pixels[i]=pix
+            to_read = filled_pixels[skypixmthr==newbig]
     
-    def calc_Mthr(self,z,radec_indices,cosmology,dl=None):
-        # RADEC insidec must be in moc map
-
-        if dl is None:
-            dl=cosmology.z2dl(z)
-        
-        mthr_arrays=self.moc_mthr_map[radec_indices]
-        return m2M(mthr_arrays,dl,self.calc_kcorr(z))
-    
-    def calc_dN_by_dzdOmega_interpolant(self,cosmo_ref,epsilon,
-                                        Nintegration=10,Numsigma=3,zcut=None,ptype='gaussian'):
-     
-        # If zcut is none, it uses the maximum of the cosmology
-        if zcut is None:
-            zcut = cosmo_ref.zmax
-        
-        try:
-            interpogroup = self.hdf5pointer.create_group('dNgal_dzdOm_interpolant')
-            interpogroup.attrs['epsilon'] = epsilon
-            interpogroup.attrs['ptype']=ptype
-            interpogroup.attrs['Nintegration']=Nintegration
-            interpogroup.attrs['Numsigma']=Numsigma
-            interpogroup.attrs['zcut']=zcut
-            interpogroup.attrs['sky_checkpoint']=0
-            interpogroup.attrs['sky_checkpoint_zgrid']=0
-            indx_sky = 0 # An array on NUNIQ
-            indx_sky_zgrid = 0 # An array on NUNIQ
-        except:
-            interpogroup = self.hdf5pointer['dNgal_dzdOm_interpolant']
-            indx_sky = interpogroup.attrs['sky_checkpoint']
-            indx_sky_zgrid = interpogroup.attrs['sky_checkpoint_zgrid']
-    
-        
-        cat_data=self.hdf5pointer['catalog']
-        name_of_pixels = list(cat_data.keys())
-        iterator = np.arange(indx_sky_zgrid,len(name_of_pixels),1).astype(int)
-
-        for ipix in tqdm(iterator,desc='Building redshift grids over pixels'):
-            pix = name_of_pixels[ipix]
-            # Initialize an array with grid points equally distribuited. Now we are
-            # going to populate it
-            z_grid=np.linspace(1e-6,zcut,Nintegration)
-            #Array with the resolution required between point i and i+1
-            resolution_grid=np.ones_like(z_grid)*(zcut-1e-6)/Nintegration
+            m_selected = []
+            m_selected = np.append(m_selected,cat['catalog'][apparent_magnitude_flag][cat[grouping]['not_NaN_indices'][:]])
             
-            zmin = cat_data[pix]['z'][:]-Numsigma*cat_data[pix]['sigmaz'][:]
-            zmax = cat_data[pix]['z'][:]+Numsigma*cat_data[pix]['sigmaz'][:]
-            zmin[zmin<1e-6] = 1e-6
-            zmax[zmax>zcut] = zcut
-            resolutions = (zmax-zmin)/Nintegration
-            # Select all the galaxies for which zmax>zmin and zmax< maximum cosmology redshift
-            # zmax<zmin when the galaxy is much beyond zcut.
-            valid_galaxies = np.where((zmax>zmin) & (zmax<cosmo_ref.zmax))[0]
-
-            idx_sorted = np.argsort(resolutions)
-            # This is the index it would sort in decreasing order the resolution needed
-            # they corresponds to galaxies
-            idx_sorted = idx_sorted[::-1] 
-            for i in idx_sorted:
-                # if a galaxy index is not in the valid galaxies index, skip
-                if i not in valid_galaxies:
+            for pix in to_read:
+                # If it is the same pixel, just continue
+                if pix == pixel:
                     continue
-
-                # These are the points from the old grid falling inside the new grid
-                # These points are not necessary since the new points have a finer resolution
-                to_eliminate = np.where((z_grid>zmin[i]) & (z_grid<zmax[i]))[0]
-                z_grid = np.delete(z_grid,to_eliminate)
-                resolution_grid = np.delete(resolution_grid,to_eliminate)
+                # It removes the file
+                shutil.copyfile(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),
+                               os.path.join(outfolder,'pixel_{:d}_{:d}.hdf5'.format(pix,pixel)))
+                with h5py.File(os.path.join(outfolder,'pixel_{:d}_{:d}.hdf5'.format(pix,pixel)),'r+') as othercat:
+                    m_selected = np.append(
+                        m_selected,othercat['catalog'][apparent_magnitude_flag][othercat[grouping]['not_NaN_indices'][:]])
+                os.remove(os.path.join(outfolder,'pixel_{:d}_{:d}.hdf5'.format(pix,pixel)))
                 
-                z_integrator = np.linspace(zmin[i],zmax[i],Nintegration)
+            # If there is no valid galaxy with which to compute the redshift, skip
+            if len(m_selected)!=0:
+                mthr = np.percentile(m_selected,mthr_percentile)
+            else:
+                print('Pixel {:d} is empty'.format(pixel))
+                mthr = -np.inf
+                
+            subcat.attrs['mthr_percentile'] = mthr_percentile
+            subcat.attrs['nside_mthr'] = nside_mthr
+            subcat.attrs['mthr'] = mthr
+            # Note that this already include the nans, i.e. np.nan<-np.inf is false
+            subcat.create_dataset('brigther_than_mthr',data=cat['catalog'][apparent_magnitude_flag][:]<=mthr)
+            subcat.attrs['mthr_calculated'] = True
+
+
+def get_redshift_grid_for_files(outfolder,pixel,grouping,cosmo_ref,
+                               Nintegration=10,Numsigma=3,zcut=None):
+    '''
+    This function calculates an optimized redshift grid to calculate
+    the interpolant for each pixelated file
+
+    Parameters
+    ----------
+    outfolder: str
+        Where are the pixelated files
+    pixel: int
+        The pixel label you want to read
+    grouping: str
+        How the new group should be called
+    cosmo_ref: class
+        Cosmology class for the construnction, should be initialized
+    Nintegration: int
+        Number of integration points for each likelihood, if array supersede the method
+    Numsigma: int
+        Number of sigmas for each gaussian likelihood
+    zcut: float
+        At what redshift to cut the interpolation, if None use cosmo_ref.zmax
+    '''
+    # If zcut is none, it uses the maximum of the cosmology
+    if zcut is None:
+        zcut = cosmo_ref.zmax
+
+    if isinstance(Nintegration, np.ndarray):
+        # zcut might no deviate from the maximum of the redshift grid by 1e-4
+        if np.abs(zcut-np.max(Nintegration))>=1e-4:
+            raise ValueError('The maximum of the grid should be equal to the zcut')
+        with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
+            subcat = cat[grouping]
+            subcat.attrs['Nintegration']='fixed-array'
+            subcat.attrs['Numsigma']=Numsigma
+            subcat.attrs['zcut']=zcut
+            if 'z_grid_calculated' not in list(subcat.attrs.keys()):
+                subcat.attrs['z_grid_calculated'] = False
+            if not  subcat.attrs['z_grid_calculated']:
+                zmin = cat['catalog']['z'][:]-Numsigma*cat['catalog']['sigmaz'][:]
+                zmax = cat['catalog']['z'][:]+Numsigma*cat['catalog']['sigmaz'][:]
+                zmin[zmin<np.min(Nintegration)] = np.min(Nintegration)
+                zmax[zmax>zcut] = zcut
+                # Select all the galaxies for which zmax>zmin and zmax< maximum cosmology redshift
+                # zmax<zmin when the galaxy is much beyond zcut or the galaxy is at redshift<-1
+                # The condition (zmax<cosmo_ref.zmax) is always satisfied if zcut<cosmo_ref.zmax
+                # The and condition is also with not_NaN_indices as galaxies should have all the entries to be used for interpolant
+                valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:] & subcat['not_NaN_indices'][:]
+                # We put this here as we might be in a situation where a job crashed
+                if 'valid_galaxies_interpolant' not in list(subcat.keys()):
+                    subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
+                else:
+                    del subcat['valid_galaxies_interpolant']
+                    subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
+                z_grid = Nintegration
+                subcat.create_dataset('z_grid',data=z_grid)
+                subcat.attrs['z_grid_calculated'] = True
+    else:
+        with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
+            subcat = cat[grouping]
+            subcat.attrs['Nintegration']=Nintegration
+            subcat.attrs['Numsigma']=Numsigma
+            subcat.attrs['zcut']=zcut
+            if 'z_grid_calculated' not in list(subcat.attrs.keys()):
+                subcat.attrs['z_grid_calculated'] = False
+            if not  subcat.attrs['z_grid_calculated']:
+                # Initialize an array with grid points equally distribuited. Now we are
+                # going to populate it
+                z_grid=np.linspace(1e-6,zcut,Nintegration)
+                #Array with the resolution required between point i and i+1
+                resolution_grid=np.ones_like(z_grid)*(zcut-1e-6)/Nintegration  
+                zmin = cat['catalog']['z'][:]-Numsigma*cat['catalog']['sigmaz'][:]
+                zmax = cat['catalog']['z'][:]+Numsigma*cat['catalog']['sigmaz'][:]
+                zmin[zmin<1e-6] = 1e-6
+                zmax[zmax>zcut] = zcut
+                resolutions = (zmax-zmin)/Nintegration 
+                # Select all the galaxies for which zmax>zmin and zmax< maximum cosmology redshift
+                # zmax<zmin when the galaxy is much beyond zcut.
+                # The condition (zmax<cosmo_ref.zmax) is always satisfied if zcut<cosmo_ref.zmax
+                # The and condition is also with not_NaN_indices as galaxies should have all the entries to be used for interpolant
+                valid_galaxies = (zmax>zmin) & (zmax<cosmo_ref.zmax) & subcat['brigther_than_mthr'][:] & subcat['not_NaN_indices'][:]
+                # We put this here as we might be in a situation where a job crashed
+                if 'valid_galaxies_interpolant' not in list(subcat.keys()):
+                    subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
+                else:
+                    del subcat['valid_galaxies_interpolant']
+                    subcat.create_dataset('valid_galaxies_interpolant',data=valid_galaxies)
+                idx_sorted = np.argsort(resolutions)
+                # This is the index it would sort in decreasing order the resolution needed
+                # they corresponds to galaxies
+                # Note that if there is no valid galxy, the arrays will stay they are initialized
+                idx_sorted = idx_sorted[::-1] 
+                for i in idx_sorted:
+                    # if a galaxy index is not in the valid galaxies index, skip
+                    if not valid_galaxies[i]:
+                        continue
+                    # These are the points from the old grid falling inside the new grid
+                    # These points are not necessary since the new points have a finer resolution
+                    to_eliminate = np.where((z_grid>zmin[i]) & (z_grid<zmax[i]))[0]
+                    z_grid = np.delete(z_grid,to_eliminate)
+                    resolution_grid = np.delete(resolution_grid,to_eliminate)
+                    z_integrator = np.linspace(zmin[i],zmax[i],Nintegration)
+                    z_grid = np.hstack([z_grid,z_integrator])
+                    resolution_grid = np.hstack([resolution_grid,
+                                                 np.ones_like(z_integrator)*resolutions[i]/Nintegration])
+                    sortme = np.argsort(z_grid)
+                    z_grid=z_grid[sortme]
+                    resolution_grid=resolution_grid[sortme]
+                    z_grid,uind = np.unique(z_grid,return_index=True)
+                    resolution_grid = resolution_grid[uind]
+                subcat.create_dataset('resolution_grid',data=resolution_grid)
+
+                subcat.create_dataset('z_grid',data=z_grid)
+                subcat.attrs['z_grid_calculated'] = True
+
+
+def initialize_icarogw_catalog(outfolder,outfile,grouping):
+    '''
+    Iintialize the grouping of the icarogw catalog
+
+    Parameters
+    ----------
+    outfolder: str
+        Where are the pixelated files
+    outfile: str
+        Name of the icarogw file
+    grouping: str
+        How the new group should be called
+    '''
+
+    filled_pixels = np.genfromtxt(os.path.join(outfolder,'filled_pixels.txt')).astype(int)
+
+    with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(filled_pixels[0])),'r') as tmpcat:
+        Nintegration = tmpcat[grouping].attrs['Nintegration']
+        zcut = tmpcat[grouping].attrs['zcut']
+        with h5py.File(outfile,'a') as icat:
+
+            icat.attrs['nside']=tmpcat.attrs['nside']
+            icat.attrs['nest']=tmpcat.attrs['nest']
+            icat.attrs['dOmega_sterad']=tmpcat.attrs['dOmega_sterad']
+            icat.attrs['dOmega_deg2']=tmpcat.attrs['dOmega_deg2']
+            subicat = icat.require_group(grouping)
+            subicat.attrs['zcut'] = tmpcat[grouping].attrs['zcut']
+            subicat.attrs['zcut'] = tmpcat[grouping].attrs['Nintegration']
+            
+
+    if Nintegration=='fixed-array':       
+        with h5py.File(outfile,'a') as icat:
+            actual_filled_pixels = []
+            mth_map = []
+            for pix in tqdm(filled_pixels,desc='Finding a common redshift grid among pixels'):
+                with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r') as subcat:
+                    
+                    # If there is at least a galaxy in the pixel valid for the interpolant
+                    # this variable is true
+                    valid_gal = np.any(subcat[grouping]['valid_galaxies_interpolant'][:])
+
+                    # If no galaxy is valid for the interpolant, goes to the next pixel
+                    if valid_gal:
+                        pass
+                    else:
+                        continue
+                    
+                    z_grid = subcat[grouping]['z_grid'][:] # In this case, z_grid is all the same
+                    # Extra check to see if the pixel is empty
+                    if np.isfinite(subcat[grouping].attrs['mthr']):
+                        actual_filled_pixels.append(pix)
+                        mth_map.append(subcat[grouping].attrs['mthr']) 
+    
+    # TO-DO: Optimize this method as for deep galaxy catalogs it is too demanding
+    else:
+        # Initialize an array with grid points equally distribuited. Now we are
+        # going to populate it
+        z_grid=np.linspace(1e-6,zcut,Nintegration)
+        #Array with the resolution required between point i and i+1
+        resolution_grid=np.ones_like(z_grid)*(zcut-1e-6)/Nintegration
        
-                z_grid = np.hstack([z_grid,z_integrator])
-                resolution_grid = np.hstack([resolution_grid,
-                                             np.ones_like(z_integrator)*resolutions[i]/Nintegration])
-                sortme = np.argsort(z_grid)
-                z_grid=z_grid[sortme]
-                resolution_grid=resolution_grid[sortme]
-
-            cat_data[pix].create_dataset('z_grid',data=z_grid)
-            cat_data[pix].create_dataset('resolution_grid',data=resolution_grid)
-            interpogroup.attrs['sky_checkpoint_zgrid']=ipix+1 # It completed the iteration
-
-        # There is no checkpoint here as I believe it should be a straightforward computation
-        if 'z_grid' not in list(interpogroup.keys()):
-            # Initialize an array with grid points equally distribuited. Now we are
-            # going to populate it
-            z_grid=np.linspace(1e-6,zcut,Nintegration)
-            #Array with the resolution required between point i and i+1
-            resolution_grid=np.ones_like(z_grid)*(zcut-1e-6)/Nintegration
-            for pix in tqdm(list(cat_data.keys()),desc='Finding a common redshift grid among pixels'):
+        with h5py.File(outfile,'a') as icat:
+            actual_filled_pixels = []
+            mth_map = []
+            for pix in tqdm(filled_pixels,desc='Finding a common redshift grid among pixels'):
                 
-                z_grid = np.hstack([z_grid,cat_data[pix]['z_grid'][:]])
-                resolution_grid = np.hstack([resolution_grid,cat_data[pix]['resolution_grid'][:]])           
+                with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)),'r') as subcat:
+                    z_grid = np.hstack([z_grid,subcat[grouping]['z_grid'][:]])
+                    resolution_grid = np.hstack([resolution_grid,subcat[grouping]['resolution_grid'][:]])  
+                    if np.isfinite(subcat[grouping].attrs['mthr']):
+                        actual_filled_pixels.append(pix)
+                        mth_map.append(subcat[grouping].attrs['mthr'])
+                
                 sortme = np.argsort(z_grid)
                 z_grid=z_grid[sortme]
                 resolution_grid=resolution_grid[sortme]
@@ -378,73 +415,305 @@ class large_galaxy_catalog(object):
     
                 to_eliminate = []
                 for i in np.arange(1,len(z_grid)-1,1).astype(int):
-                    if (resolution_grid[i]>resolution_grid[i+1]) & (resolution_grid[i]>resolution_grid[i-1]):
+                    if (resolution_grid[i]>=resolution_grid[i+1]) & (resolution_grid[i]>=resolution_grid[i-1]):
                         to_eliminate.append(i)
                 
                 z_grid = np.delete(z_grid,to_eliminate)
                 resolution_grid = np.delete(resolution_grid,to_eliminate)
-                del cat_data[pix]['z_grid']
-                del cat_data[pix]['resolution_grid']
-                
-            print('Z array is long {:d}'.format(len(z_grid)))
-            interpogroup.create_dataset('z_grid',data=z_grid)
-            interpogroup.create_dataset('resolution_grid',data=resolution_grid)
-            interpogroup.create_dataset('sky_pixels_nuniq',data=self.moc_mthr_map.uniq)
-
-
-
-        # Build the schecter function, this is only needed bececause we need 
-        # to extract the fainth end of the Schecter function
-        self.sch_fun.build_MF(cosmo_ref)
-        self.sch_fun.build_effective_number_density_interpolant(epsilon)
-        absM_rate=log_powerlaw_absM_rate(epsilon=epsilon)
+                print('Z array is long {:d}'.format(len(z_grid)))
+            icat[grouping].create_dataset('resolution_grid',data=resolution_grid)
         
-        # This is the loop on the nuniq of the entire moc map
-        skyloop=np.arange(indx_sky,len(interpogroup['sky_pixels_nuniq']),1).astype(int) 
-     
-        for i in tqdm(skyloop,desc='Calculating interpolant'):
-            moc_pixel = interpogroup['sky_pixels_nuniq'][i] # This is the pixel on the moc
-            origin_pixel = self.hdf5pointer['filled_pixels'][np.where(self.mapping_filled_pixels==moc_pixel)[0]]
+    
+    actual_filled_pixels = np.array(actual_filled_pixels)
+    mth_map = np.array(mth_map)
+    
+    with h5py.File(outfile,'a') as icat:
+        icat[grouping].create_dataset('z_grid',data=z_grid)    
+        
+        moc_mthr_map = HealpixMap.moc_from_pixels(icat.attrs['nside'], actual_filled_pixels, 
+                               nest = icat.attrs['nest'],density=False)
+        
+        # The map is initialized with 0 in empty spaces, here we replace with -inf to say complete brightness
+        moc_mthr_map[moc_mthr_map.data==0.]=-np.inf
+        # This array tells you to what pixel of the filled map it corresponds the filled pixels
+        mapping_filled_pixels = np.ones_like(actual_filled_pixels)  
+        
+        for i,pixo in enumerate(actual_filled_pixels):
+            theta,phi = hp.pix2ang(icat.attrs['nside'],pixo,nest=icat.attrs['nest'])
+            pix = moc_mthr_map.ang2pix(theta,phi)
+            moc_mthr_map[pix] = mth_map[i]
+            mapping_filled_pixels[i]=pix
+    
+            
+        # Saves the actually filled helpy pixels
+        icat[grouping].create_dataset('mthr_filled_pixels_healpy',data=actual_filled_pixels)
+    
+        # Saves an array that indicates the filled healpy pixels to which pixel label they correspond on the non uniform map
+        icat[grouping].create_dataset('mthr_filled_pixels_healpy_to_moc_labels',data=mapping_filled_pixels)
+    
+        # Saves the mthr map
+        icat[grouping].create_dataset('mthr_moc_map',data=moc_mthr_map.data)
+    
+        # Array with uniq identifier
+        icat[grouping].create_dataset('uniq_moc_map',data = moc_mthr_map.uniq)
 
-            if 'nuniq_pixel_{:d}'.format(moc_pixel) not in list(interpogroup.keys()): 
-                moc_grp = interpogroup.create_group('nuniq_pixel_{:d}'.format(moc_pixel))
+    np.savetxt(os.path.join(outfolder,'{:s}_common_zgrid.txt'.format(grouping)),z_grid)    
+        
+
+def calculate_interpolant_files(outfolder,z_grid,pixel,grouping,subgrouping,
+                                band,cosmo_ref,epsilon,ptype='gaussian'):
+        '''
+        This function calculates an optimized redshift grid to calculate
+        the interpolant for each pixelated file
+    
+        Parameters
+        ----------
+        outfolder: str
+            Where are the pixelated files
+        z_grid: np.array
+            Numpy array with the redshift grid
+        pixel: int
+            The pixel label you want to read
+        grouping: str
+            How the new group should be called
+        subgrouping: str
+            How to call the new group for the interpolant
+        band: str
+            Electromagnetic band to use, should be a valid icarogw band
+        cosmo_ref: class
+            Cosmology class for the construnction, should be initialized
+        epsilon: float
+            Exponent of the luminosity weight
+        ptype: str
+            Type of likelihood for the EM side.
+        '''
+       
+        calc_kcorr=kcorr(band)
+        sch_fun=galaxy_MF(band=band)
+        sch_fun.build_MF(cosmo_ref)
+        sch_fun.build_effective_number_density_interpolant(epsilon)
+
+        absM_rate=log_powerlaw_absM_rate(epsilon=epsilon)
+
+        with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pixel)),'r+') as cat:
+            subcat=cat[grouping].require_group(subgrouping)
+            subcat.attrs['band'] = band
+
+            if 'interpolant_calculated' not in list(subcat.attrs.keys()):
+                subcat.attrs['interpolant_calculated'] = False
+
+            if not  subcat.attrs['interpolant_calculated']:            
+                subcat.attrs['epsilon']=epsilon
+                subcat.attrs['ptype']=ptype   
+                interpo = np.zeros_like(z_grid)
+                Ngalaxies = len(cat['catalog']['z'][:])
+                toloop = np.where(cat[grouping]['valid_galaxies_interpolant'][:])[0]
+                for j in toloop:
+                    # A patch to use K-corrections from upGLADE
+                    if band=='g-upglade':
+                        kcorr_arr = calc_kcorr(z_grid, k0 = cat['catalog']['K_g'][j] , dkbydz = cat['catalog']['dKbydz_g'][j] ,z0 = cat['catalog']['z'][j])
+                    elif band=='r-upglade':
+                        kcorr_arr = calc_kcorr(z_grid, k0 = cat['catalog']['K_r'][j] , dkbydz = cat['catalog']['dKbydz_r'][j] ,z0 = cat['catalog']['z'][j])
+                    elif band=='W1-upglade':
+                        kcorr_arr = calc_kcorr(z_grid, k0 = cat['catalog']['K_W1'][j] , dkbydz = cat['catalog']['dKbydz_W1'][j] ,z0 = cat['catalog']['z'][j])
+                    else:
+                        kcorr_arr = calc_kcorr(z_grid)
+                        
+                    Mv=m2M(cat['catalog'][cat[grouping].attrs['apparent_magnitude_flag']][j],cosmo_ref.z2dl(z_grid),kcorr_arr)                      
+                    interpo+=absM_rate.evaluate(sch_fun,Mv)*EM_likelihood_prior_differential_volume(z_grid,
+                                                                cat['catalog']['z'][j],
+                                                                cat['catalog']['sigmaz'][j],cosmo_ref,Numsigma=cat[grouping].attrs['Numsigma'],ptype=ptype)/cat.attrs['dOmega_sterad'] 
+
+                    # An additional check to see if something is going wrong.
+                    if np.isnan(interpo).all():
+                        print(j)
+                        print('dk',cat['catalog']['dKbydz_g'][j])
+                        print('k',cat['catalog']['K_g'][j])
+                        print('Mv', Mv)
+                        print('m', cat['catalog'][cat[grouping].attrs['apparent_magnitude_flag']][j])
+                        print('z', cat['catalog']['z'][j])
+                        print('sigmaz', cat['catalog']['sigmaz'][j])
+
+                        raise ValueError('All NANS')
+
+                
+                    # We can divide by the old grid dOmega_sterad as full pixels are all of same size
+        
+                subcat.create_dataset('vals_interpolant',data=interpo)
+                subcat.attrs['interpolant_calculated'] = True
+
+
+class  icarogw_catalog(object):
+    '''
+    This is the class used to handle the icarogw catalog
+
+    Parameters
+    ----------
+    outfile: str
+        The original icarogw file
+    grouping: str
+        What group to use for the analysis, i.e. the EM band used
+    subgrouping: str
+        What case to use for the galaxy weights
+    '''
+    
+    def __init__(self,outfile,grouping,subgrouping):
+        self.outfile = outfile
+        self.grouping = grouping
+        self.subgrouping = subgrouping
+        
+    def build_from_pixelated_files(self,outfolder):
+        '''
+        Build the catalog file from the pixelated files
+
+        Parameters
+        ----------
+        outfolder: str
+            Path where the pixelated files can be found
+        '''
+
+        with h5py.File(self.outfile,'r') as icat:
+            self.moc_mthr_map = HealpixMap(data=icat[self.grouping]['mthr_moc_map'][:],uniq=icat[self.grouping]['uniq_moc_map'][:])
+            self.z_grid = icat[self.grouping]['z_grid'][:]
+            # Saves the actually filled helpy pixels
+            filled_pixels = icat[self.grouping]['mthr_filled_pixels_healpy'][:]
+            # Saves an array that indicates the filled healpy pixels to which pixel label they correspond
+            moc_pixels = icat[self.grouping]['mthr_filled_pixels_healpy_to_moc_labels'][:]
+            
+        # That indentifies the index of the pixels on the mthr map in sorted order
+        self.sky_grid = np.arange(0,len(self.moc_mthr_map.data),1).astype(int)
+        dNgal_dzdOm_vals = []
+        bg_vals = []
+        loaded_sch = False
+        for pix in tqdm(self.sky_grid,desc='Bulding sky grid'):
+            idx = np.where(moc_pixels == pix)[0]
+            if len(idx) == 0:
+                dNgal_dzdOm_vals.append(np.zeros_like(self.z_grid))
+                bg_vals.append(self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(self.z_grid),self.z_grid)
+                    *cosmology_proxy.dVc_by_dzdOmega_at_z(self.z_grid))
             else:
-                moc_grp = interpogroup['nuniq_pixel_{:d}'.format(moc_pixel)]
+                with h5py.File(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(filled_pixels[idx[0]]))) as pcat:
+                    dNgal_dzdOm_vals.append(pcat[self.grouping][self.subgrouping]['vals_interpolant'][:])
+                    if not loaded_sch:                
+                        band = pcat[self.grouping][self.subgrouping].attrs['band']
+                        epsilon = pcat[self.grouping][self.subgrouping].attrs['epsilon']
+                        self.band = band
+                        self.epsilon = epsilon
+                        self.calc_kcorr=kcorr(band)
+                        self.sch_fun=galaxy_MF(band=band)
+                        self.sch_fun.build_effective_number_density_interpolant(epsilon)
+                        # Initialize a cosmology with zmax at double the distance
+                        cosmology_proxy = astropycosmology(zmax=self.z_grid[-1]*2)
+                        cosmology_proxy.build_cosmology(Planck15)
+                        self.sch_fun.build_MF(cosmology_proxy)
+                        dl_proxy=cosmology_proxy.z2dl(self.z_grid)
+                        loaded_sch = True
 
-            # It means the pixel did not exist as it is empty
-            if len(origin_pixel)==0:
-                moc_grp.create_dataset('vals_interpolant',data=np.zeros_like(interpogroup['z_grid'][:]))
-                interpogroup.attrs['sky_checkpoint']=i+1 # Because it completed the iteration
-                continue
+                    # Mthr array as function of redshift in pixel
+                    Mthr_array=self.calc_Mthr(self.z_grid,pix*np.ones_like(self.z_grid).astype(int),cosmology_proxy,dl=dl_proxy)
+                    bg_vals.append(self.sch_fun.background_effective_galaxy_density(Mthr_array,self.z_grid)*cosmology_proxy.dVc_by_dzdOmega_at_z(self.z_grid))
+        
+        self.dNgal_dzdOm_vals = np.column_stack(dNgal_dzdOm_vals)
+        self.bg_vals = np.column_stack(bg_vals)
 
-            origin_pixel_string = 'pixel_{:d}'.format(origin_pixel[0])
+    def make_me_empty(self):
+        self.moc_mthr_map._data = -np.inf*np.ones_like(self.moc_mthr_map._data)
+        self.dNgal_dzdOm_vals = np.zeros_like(self.dNgal_dzdOm_vals)
+        self.dNgal_dzdOm_vals_av = np.zeros_like(self.dNgal_dzdOm_vals_av)
+        cosmology_proxy = astropycosmology(zmax=self.z_grid[-1]*2)
+        cosmology_proxy.build_cosmology(Planck15)
+        self.sch_fun.build_MF(cosmology_proxy)
+        self.bg_vals_av = self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(self.z_grid),self.z_grid)*cosmology_proxy.dVc_by_dzdOmega_at_z(self.z_grid)
+        
 
-            interpo = 0.
-            for j in range(len(cat_data[origin_pixel_string]['z'])):
-                zmin = cat_data[origin_pixel_string]['z'][j]-Numsigma*cat_data[origin_pixel_string]['sigmaz'][j]
-                zmax = cat_data[origin_pixel_string]['z'][j]+Numsigma*cat_data[origin_pixel_string]['sigmaz'][j]
-                if zmin<1e-6: 
-                    zmin = 1e-6
-                if zmax>zcut: 
-                    zmax = zcut
-                # if the galaxy is not in range skip
-                if (zmax<zmin) | (zmax>cosmo_ref.zmax):
-                    continue
-                
-                Mv=m2M(cat_data[origin_pixel_string][self.hdf5pointer.attrs['apparent_magnitude_flag']][j]
-                       ,cosmo_ref.z2dl(interpogroup['z_grid'][:]),self.calc_kcorr(interpogroup['z_grid'][:]))               
-                interpo+=absM_rate.evaluate(self.sch_fun,Mv)*EM_likelihood_prior_differential_volume(interpogroup['z_grid'][:],
-                                                            cat_data[origin_pixel_string]['z'][j],
-                                                            cat_data[origin_pixel_string]['sigmaz'][j],cosmo_ref,
-                                                            Numsigma=Numsigma,ptype=ptype)/self.hdf5pointer.attrs['dOmega_sterad'] 
-                # We can divide by the old grid dOmega_sterad as full pixels are all of same size
+    def save_to_hdf5_file(self):
+        '''
+        Saves the interpolants and everything neeeded in a single hdf5 file
+        '''
 
-            moc_grp.create_dataset('vals_interpolant',data=interpo)
-            interpogroup.attrs['sky_checkpoint']=i+1
-                
-    def effective_galaxy_number_interpolant(self,z,skypos,cosmology,dl=None):
+        with h5py.File(self.outfile,'a') as icat:
+            subgroup = icat[self.grouping].require_group(self.subgrouping)
+            subgroup.attrs['epsilon'] = self.epsilon
+            subgroup.attrs['band'] = self.band
+            subgroup.create_dataset('vals_interpolant',data=self.dNgal_dzdOm_vals)
+            subgroup.create_dataset('bg_vals_interpolant',data=self.bg_vals)
+
+    def load_from_hdf5_file(self):
+        '''
+        Load the catalog and everything needed
+        '''
+        
+        with h5py.File(self.outfile,'r') as icat:
+            self.moc_mthr_map = HealpixMap(data=icat[self.grouping]['mthr_moc_map'][:],uniq=icat[self.grouping]['uniq_moc_map'][:])
+            self.z_grid = icat[self.grouping]['z_grid'][:]
+            self.band = icat[self.grouping][self.subgrouping].attrs['band']
+            self.epsilon = icat[self.grouping][self.subgrouping].attrs['epsilon']
+            self.dNgal_dzdOm_vals = icat[self.grouping][self.subgrouping]['vals_interpolant'][:]
+            self.bg_vals = icat[self.grouping][self.subgrouping]['bg_vals_interpolant'][:]
+         
+        self.calc_kcorr=kcorr(self.band)
+        self.sch_fun=galaxy_MF(band=self.band)
+        self.sch_fun.build_effective_number_density_interpolant(self.epsilon)           
+        # Sorted uniq grid
+        self.sky_grid = np.arange(0,len(self.moc_mthr_map.data),1).astype(int)
+
+        # Sky averaged in-catalog part
+        self.dNgal_dzdOm_vals_av = np.mean(self.dNgal_dzdOm_vals,axis=1)
+        self.bg_vals_av = np.mean(self.bg_vals,axis=1)
+        # Deleting as this is not necessary
+        del self.bg_vals
+
+    def get_NUNIQ_pixel(self,ra,dec):
+        '''
+        Gets the MOC map pixels from RA and dec
+
+        Parameters
+        ----------
+        ra, dec: np.array
+            Right Ascension and declination in radians
+
+        Returns
+        -------
+        uniq pixel of the MOC map
+        '''
+        return self.moc_mthr_map.ang2pix(np.pi/2-dec,ra) 
+
+    def calc_Mthr(self,z,radec_indices,cosmology,dl=None):
+        ''' 
+        This function returns the Absolute magnitude threshold calculated from the apparent magnitude threshold
+        
+        Parameters
+        ----------
+        z: xp.array
+            Redshift
+        radec_indices: xp.array
+            Healpy indices
+        cosmology: class 
+            cosmology class
+        dl: xp.array
+            dl values already calculated
+        
+        Returns
+        -------
+        Mthr: xp.array
+            Apparent magnitude threshold
+        '''
+        
+        # RADEC insidec must be in moc map
+
+        if dl is None:
+            dl=cosmology.z2dl(z)
+        
+        mthr_arrays=self.moc_mthr_map[radec_indices]
+        xp = get_module_array(mthr_arrays)
+        # Once the K-corrections are taken into account in the construction of the 
+        # LOS prior we do not need to account them anymore
+        return m2M(mthr_arrays,dl, xp.zeros_like(dl))
+
+    def effective_galaxy_number_interpolant(self,z,skypos,cosmology,dl=None,average=False):
         '''
         Returns an evaluation of dNgal/dzdOmega, it requires `calc_dN_by_dzdOmega_interpolant` to be called first.
+        It needs the schecter function to be updated
         
         Parameters
         ----------
@@ -453,16 +722,18 @@ class large_galaxy_catalog(object):
         skypos: xp.array
             Array containing the healpix indeces where to evaluate the interpolant
         cosmology: class
-            cosmology class to use for the computation
+            cosmology class to use for the computations
         dl: xp.array
             Luminosity distance in Mpc
+        average: bool
+            Use the sky averaged differential of effective number of galaxies in each pixel
         '''
+        
         xp=get_module_array(z)
         sx=get_module_array_scipy(z)
        
         originshape=z.shape
         z=z.flatten()
-        self.sch_fun.build_MF(cosmology)
         skypos=skypos.flatten()
         
         if dl is None:
@@ -471,16 +742,31 @@ class large_galaxy_catalog(object):
         
         z_grid = self.z_grid
         dNgal_dzdOm_vals = self.dNgal_dzdOm_vals
-        pixel_grid = self.sky_pix_nuniq_grid
+        pixel_grid = self.sky_grid
     
         Mthr_array=self.calc_Mthr(z,skypos,cosmology,dl=dl)
-        # Baiscally tells that if you are above the maximum interpolation range, you detect nothing
-        Mthr_array[z>z_grid[-1]]=-xp.inf
+        # Baiscally tells that if you are above the maximum interpolation range or below, you detect nothing
+        # By definition
+        idx_out = (z>z_grid[-1]) | (z<z_grid[0])
+        Mthr_array[idx_out]=-xp.inf
         
-        gcpart=sx.interpolate.interpn((z_grid,pixel_grid),dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
-                            fill_value=0.,method='linear') # If a posterior samples fall outside, then you return 0
-        
-        bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array)*cosmology.dVc_by_dzdOmega_at_z(z)
+        if average:
+            # The zero is there to indicate that if you fall outside
+            # the interpolant is 0, as in the sky-dependent part
+            gcpart=xp.interp(z,z_grid,self.dNgal_dzdOm_vals_av,left=0.,right=0.)
+
+            # If you are outside the redshift interpolantion range, the values are replaced later
+            bgpart=xp.interp(z,z_grid,self.bg_vals_av,left=self.bg_vals_av[0],right=self.bg_vals_av[-1])
+            # the values outside the interpolantion range have a backround given by the out-of-catalog
+            if xp.any(idx_out):
+                # It puts totally an out of catalog
+                bgpart[idx_out] = self.sch_fun.background_effective_galaxy_density(Mthr_array[idx_out],z[idx_out])*cosmology.dVc_by_dzdOmega_at_z(z[idx_out])
+        else:
+            gcpart=sx.interpolate.interpn((z_grid,pixel_grid),dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
+                                fill_value=0.,method='linear') # If a posterior samples fall outside, then you return 0
+
+            # The values outside interpolation range have an out-of-catalog given by the full completeness correction
+            bgpart=self.sch_fun.background_effective_galaxy_density(Mthr_array,z)*cosmology.dVc_by_dzdOmega_at_z(z)
         
         return gcpart.reshape(originshape),bgpart.reshape(originshape)
         
@@ -511,20 +797,17 @@ class large_galaxy_catalog(object):
         ax: object
             Handle to the axis object
         '''
-        
-        
-        
         gcp,bgp,inco=np.zeros([len(z),len(radec_indices_list)]),np.zeros([len(z),len(radec_indices_list)]),np.zeros([len(z),len(radec_indices_list)])
         
         for i,skypos in enumerate(radec_indices_list):
             gcp[:,i],bgp[:,i]=self.effective_galaxy_number_interpolant(z,skypos*np.ones_like(z).astype(int),cosmology)
             Mthr_array=self.calc_Mthr(z,np.ones_like(z,dtype=int)*skypos,cosmology)
             Mthr_array[z>self.z_grid[-1]]=-np.inf
-            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array)/self.sch_fun.background_effective_galaxy_density(-np.ones_like(Mthr_array)*np.inf)
+            inco[:,i]=self.sch_fun.background_effective_galaxy_density(Mthr_array,z)/self.sch_fun.background_effective_galaxy_density(-np.ones_like(Mthr_array)*np.inf,z)
             
         fig,ax=plt.subplots(2,1,sharex=True)
         
-        theo=self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(z))*cosmology.dVc_by_dzdOmega_at_z(z)
+        theo=self.sch_fun.background_effective_galaxy_density(-np.inf*np.ones_like(z),z)*cosmology.dVc_by_dzdOmega_at_z(z)
                 
         ax[0].fill_between(z,np.percentile(gcp,5,axis=1),np.percentile(gcp,95,axis=1),color='limegreen',alpha=0.2)
         ax[0].plot(z,np.median(gcp,axis=1),label='Catalog part',color='limegreen',lw=2)
@@ -546,59 +829,145 @@ class large_galaxy_catalog(object):
         ax[1].legend()
         
         return gcp,bgp,inco,fig,ax
+
+
+#############################################
+# A set of function from gwcosmo below to query the gwcosmo 
+# galaxy catalogs
+
+def gwcosmo_get_offset(LOS_catalog):
+    diction = eval(LOS_catalog.attrs['opts'])
+    return diction["offset"]
+
+def gwcosmo_get_z_array(LOS_catalog):
+    return LOS_catalog['z_array'][:]
+
+def gwcosmo_get_array(LOS_catalog, arr_name):
+    offset = gwcosmo_get_offset(LOS_catalog)
+
+    arr = LOS_catalog[str(arr_name)][:]
+    arr = np.exp(arr)
+    arr -= offset
+
+    return arr
+
+def gwcosmo_get_empty_catalog(LOS_catalog):
+    return gwcosmo_get_array(LOS_catalog, "empty_catalogue")
+
+def gwcosmo_get_zprior_full_sky(LOS_catalog):
+    return gwcosmo_get_array(LOS_catalog, "combined_pixels")
+
+def gwcosmo_get_zprior(LOS_catalog, pixel_index):
+    return gwcosmo_get_array(LOS_catalog, str(pixel_index))
+
+
+class gwcosmo_catalog(object):
+    def __init__(self,gwcosmo_file,nside,band,epsilon):
+        self.band = band
+        self.epsilon = epsilon
+        self.nside = nside
+        self.sch_fun=galaxy_MF(band=self.band)
+        self.sch_fun.build_effective_number_density_interpolant(self.epsilon)
+        self.sky_grid = np.arange(0,hp.nside2npix(nside),1).astype(int)
+        with h5py.File(gwcosmo_file,'r') as gwcosmo:
+            self.z_grid = gwcosmo_get_z_array(gwcosmo)
+            self.pz_empty = gwcosmo_get_empty_catalog(gwcosmo)
+            self.dNgal_dzdOm_vals_av = gwcosmo_get_zprior_full_sky(gwcosmo)
+            self.dNgal_dzdOm_vals = []
+            for ipix in self.sky_grid:
+                self.dNgal_dzdOm_vals.append(gwcosmo_get_zprior(gwcosmo,ipix))
+        self.dNgal_dzdOm_vals = np.column_stack(self.dNgal_dzdOm_vals)
         
-    
-
-
-    
-# # This function belows create pixels on the way. It is slower since it needs to check if the pixel exists
-# def create_pixelated_catalog(outfile,nside,groups_dict,batch=100000,nest=False):
-
-#     list_of_keys = list(groups_dict.keys())
-    
-#     if not os.path.isfile(outfile):
-#         cat = h5py.File(outfile,'w-')
-#         cat.attrs['nside']=nside
-#         cat.attrs['nest']=nest
-#         cat.attrs['dOmega_sterad']=hp.nside2pixarea(nside,degrees=False)
-#         cat.attrs['dOmega_deg2']=hp.nside2pixarea(nside,degrees=True)
-#         cat.attrs['checkpoint']=0
-#         cat.attrs['Ntotal_galaxies_original']=len(groups_dict['ra'])
-#     else:
-#         cat = h5py.File(outfile,'r+')
+    def make_me_empty(self):
+        self.dNgal_dzdOm_vals_av = self.pz_empty
+        self.dNgal_dzdOm_vals = np.column_stack([self.pz_empty for i in range(hp.nside2npix(self.nside))])
         
-#     istart = cat.attrs['checkpoint']
-#     Ntotal = len(groups_dict['ra'])
-    
-#     pbar = tqdm(total=Ntotal-istart)
+    def get_NUNIQ_pixel(self,ra,dec):
+        return hp.ang2pix(self.nside,np.pi/2-dec,ra,nest=True) 
 
-#     while istart < Ntotal:
-#         list_of_pixels = list(cat.keys())
-#         array_of_pixels = np.array([a[6::] for a in list_of_pixels]).astype(int) # Create an array of pixels
-#         # finds the indices for all the pixels
-#         idx = radec2indeces(groups_dict['ra'][istart:istart+batch],groups_dict['dec'][istart:istart+batch],nside)
-#         u, indices = np.unique(idx, return_inverse=True) # u array of unique indices
-#         # u[indices] = idx
-#         for ipix, pixel in enumerate(u):
-#             if pixel not in array_of_pixels:
-#                 pix=cat.create_group('pixel_{:d}'.format(pixel))
-#                 for key in list_of_keys:
-#                     pix.create_dataset(key, data=np.array([]), compression="gzip", chunks=True, maxshape=(None,))
-#             else:            
-#                 pix = cat['pixel_{:d}'.format(pixel)]
-                
-#             galaxies_id = np.where(indices==ipix)[0] # They are all the galaxies staying in this pixel
-#             for key in list_of_keys:
-#                 pix[key].resize((pix[key].shape[0] + len(galaxies_id)), axis = 0)
-#                 pix[key][-len(galaxies_id):] = groups_dict[key][istart:istart+batch][galaxies_id]
-#         istart+=batch
-#         pbar.update(batch)
-#         cat.attrs['checkpoint']=istart
+    def effective_galaxy_number_interpolant(self,z,skypos,cosmology,dl=None,average=False): 
+        '''
+        Note that everything here is in the in-catalog part
+        '''
+        xp=get_module_array(z)
+        sx=get_module_array_scipy(z)
+       
+        originshape=z.shape
+        z=z.flatten()
+        skypos=skypos.flatten()
+        
+        if dl is None:
+            dl=cosmology.z2dl(z)
+        dl=dl.flatten()
+        
+        z_grid = self.z_grid
+        dNgal_dzdOm_vals = self.dNgal_dzdOm_vals
+        pixel_grid = self.sky_grid
+        
+        if average:
+            gcpart=xp.interp(z,z_grid,self.dNgal_dzdOm_vals_av,left=0.,right=0.)
+            bgpart=xp.zeros_like(gcpart)           
+        else:
+            gcpart=sx.interpolate.interpn((z_grid,pixel_grid),dNgal_dzdOm_vals,xp.column_stack([z,skypos]),bounds_error=False,
+                                fill_value=0.,method='linear') 
+            bgpart=xp.zeros_like(gcpart)           
 
-#     pbar.close()
-#     cat.close()
+        return gcpart.reshape(originshape),bgpart.reshape(originshape)
 
 
+
+#############################################
+
+# ---------------------------------------------------------------------------------------
+
+class kcorr(object):
+    def __init__(self,band):
+        '''
+        A class to handle K-corrections
+        
+        Parameters
+        ----------
+        band: string
+            W1, K or bJ band. Others are not implemented
+        '''
+        self.band=band
+        if self.band not in ['W1-glade+','K-glade+','bJ-glade+','W1-upglade','g-upglade','r-upglade']:
+            raise ValueError('Band not known please use either {:s}'.format(' '.join(['W1-glade+','K-glade+','bJ-glade+',
+                                                                                     'W1-upglade','g-upglade','r-upglade'])))
+    def __call__(self,z, k0 = None, dkbydz=None, z0 = None):
+        '''
+        Evaluates the K-corrections at a given redshift, See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
+        
+        Parameters
+        ----------
+        z: xp.array
+            Redshift
+        k0: xp.array
+            Array of K-corrections computed for a z0 (only used with upglade)
+        dkbydz: xp.array
+            Array of K-corrections derivatives
+        z0: xp.array
+            Redshift at which the K-correction is computed
+            
+        Returns
+        -------
+        k_corrections: xp.array
+        '''
+        xp = get_module_array(z)
+        if self.band == 'W1-glade+':
+            k_corr = -1*(4.44e-2+2.67*z+1.33*(z**2.)-1.59*(z**3.)) #From Maciej email
+        elif self.band == 'K-glade+':
+            # https://iopscience.iop.org/article/10.1086/322488/pdf 4th page lhs
+            to_ret=-6.0*xp.log10(1+z)
+            to_ret[z>0.3]=-6.0*xp.log10(1+0.3)
+            k_corr=-6.0*xp.log10(1+z)
+        elif self.band == 'bJ-glade+':
+            # Fig 8 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
+            # Note that these corrections also includes evolution corrections
+            k_corr=(z+6*xp.power(z,2.))/(1+20.*xp.power(z,3.))
+        elif (self.band == 'W1-upglade') | (self.band == 'g-upglade') | (self.band == 'r-upglade'):
+            k_corr = k0+dkbydz*(z-z0)
+        return k_corr
 
 # LVK Reviewed
 def user_normal(x,mu,sigma):
@@ -619,7 +988,7 @@ def user_normal(x,mu,sigma):
     return xp.power(2*xp.pi*(sigma**2),-0.5)*xp.exp(-0.5*xp.power((x-mu)/sigma,2.))
 
 # LVK Reviewed
-def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,ptype='uniform'):
+def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=3.,ptype='uniform'):
     ''' 
     A utility function meant only for this module. Calculates the EM likelihood in redshift times a uniform in comoving volume prior
     
@@ -697,7 +1066,7 @@ def EM_likelihood_prior_differential_volume(z,zobs,sigmaz,cosmology,Numsigma=1.,
         prior_eval/=normfact
 
     return prior_eval
-
+    
 # LVK Reviewed
 class galaxy_catalog(object):
     '''
@@ -749,7 +1118,7 @@ class galaxy_catalog(object):
             cat.attrs['Ngal']=len(cat['z'])  
             
         self.hdf5pointer = h5py.File(filename,'r+')
-        self.calc_kcorr=kcorr(self.hdf5pointer['catalog'].attrs['band'])
+        self.calc_kcorr=kcorr_dep(self.hdf5pointer['catalog'].attrs['band'])
     
     def load_hdf5(self,filename,cosmo_ref=None,epsilon=None):
         '''
@@ -766,8 +1135,8 @@ class galaxy_catalog(object):
         '''
         
         self.hdf5pointer = h5py.File(filename,'r')
-        self.sch_fun=galaxy_MF(band=self.hdf5pointer['catalog'].attrs['band'])
-        self.calc_kcorr=kcorr(self.hdf5pointer['catalog'].attrs['band'])
+        self.sch_fun=galaxy_MF_dep(band=self.hdf5pointer['catalog'].attrs['band'])
+        self.calc_kcorr=kcorr_dep(self.hdf5pointer['catalog'].attrs['band'])
         # Stores it internally
         try:
             if self.hdf5pointer['catalog/mthr_map'].attrs['mthr_percentile'] == 'empty':
@@ -973,7 +1342,7 @@ class galaxy_catalog(object):
             'uniform' or 'gaussian' for the EM likelihood type of galaxies
         '''
         
-        self.sch_fun=galaxy_MF(band=self.hdf5pointer['catalog'].attrs['band'])
+        self.sch_fun=galaxy_MF_depr(band=self.hdf5pointer['catalog'].attrs['band'])
         self.sch_fun.build_effective_number_density_interpolant(epsilon)
 
         # If zcut is none, it uses the maximum of the cosmology
@@ -1199,13 +1568,232 @@ class galaxy_catalog(object):
         ax[1].legend()
         
         return gcp,bgp,inco,fig,ax
-        
- 
 
+
+# LVK Reviewed    
+class galaxy_MF_dep(object):
+    def __init__(self,band=None,Mmin=None,Mmax=None,Mstar=None,alpha=None,phistar=None):
+        '''
+        A class to handle the Schechter function in absolute magnitude
+        
+        Parameters
+        ----------
+        band: string
+            W1, K or bJ band. Others are not implemented
+        Mmin, Mmax,Mstar,alpha,phistar: float
+            Minimum, maximum absolute magnitude. Knee-absolute magnitude (for h=1), Powerlaw factor and galaxy number density per Gpc-3 
+        '''
+        # Note, we convert phistar to Gpc-3
+        if band is None:
+            self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=Mmin,Mmax,Mstar,alpha,phistar
+        else:
+            if band=='W1':
+                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-28, -16.6, -24.09, -1.12, 1.45e-2*1e9
+            elif band=='bJ':
+                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-22.00, -16.5, -19.66, -1.21, 1.61e-2*1e9
+            elif band=='K':
+                self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-27.0, -19.0, -23.39, -1.09, 1.16e-2*1e9
+            else:
+                raise ValueError('Band not known')
+    def build_MF(self,cosmology):
+        '''
+        Build the Magnitude function
+        
+        Parameters
+        ----------
+        cosmology: cosmology class
+            cosmology class from the cosmology module
+        '''
+        self.cosmology=cosmology
+        self.Mstarobs=self.Mstar+5*np.log10(cosmology.little_h)
+        self.Mminobs=self.Mmin+5*np.log10(cosmology.little_h)
+        self.Mmaxobs=self.Mmax+5*np.log10(cosmology.little_h)
+        
+        self.phistarobs=self.phistar*np.power(cosmology.little_h,3.)
+        xmax=np.power(10.,0.4*(self.Mstarobs-self.Mminobs))
+        xmin=np.power(10.,0.4*(self.Mstarobs-self.Mmaxobs))
+        # Check if you need to replace this with a numerical integral.
+        self.norm=self.phistarobs*float(mpmath.gammainc(self.alpha+1,a=xmin,b=xmax))
+
+    def log_evaluate(self,M):
+        '''
+        Evluates the log of the Sch function
+        
+        Parameters
+        ----------
+        M: xp.array
+            Absolute magnitude
+            
+        Returns
+        -------
+        log of the Sch function
+        '''
+        xp = get_module_array(M)
+        toret=xp.log(0.4*xp.log(10)*self.phistarobs)+ \
+        ((self.alpha+1)*0.4*(self.Mstarobs-M))*xp.log(10.)-xp.power(10.,0.4*(self.Mstarobs-M))
+        toret[(M<self.Mminobs) | (M>self.Mmaxobs)]=-xp.inf
+        return toret
+
+    def log_pdf(self,M):
+        '''
+        Evluates the log of the Sch function as pdf
+        
+        Parameters
+        ----------
+        M: xp.array
+            Absolute magnitude
+            
+        Returns
+        -------
+        log of the Sch function as pdf
+        '''
+        xp = get_module_array(M)
+        return self.log_evaluate(M)-xp.log(self.norm)
+
+    def pdf(self,M):
+        '''
+        Evluates the Sch as pdf
+        
+        Parameters
+        ----------
+        M: xp.array
+            Absolute magnitude
+            
+        Returns
+        -------
+        log of the Sch as pdf
+        '''
+        xp = get_module_array(M)
+        return xp.exp(self.log_pdf(M))
+
+    def evaluate(self,M):
+        '''
+        Evluates the Sch as pdf
+        
+        Parameters
+        ----------
+        M: xp.array
+            Absolute magnitude
+            
+        Returns
+        -------
+        Sch function in Gpc-3
+        '''
+        xp = get_module_array(M)
+        return xp.exp(self.log_evaluate(M))
+
+    def sample(self,N):
+        '''
+        Samples from the pdf
+        
+        Parameters
+        ----------
+        N: int
+            Number of samples to generate
+        
+        Returns
+        -------
+        Samples: xp.array
+        '''
+        sarray=np.linspace(self.Mminobs,self.Mmaxobs,10000)
+        cdfeval=np.cumsum(self.pdf(sarray))/self.pdf(sarray).sum()
+        cdfeval[0]=0.
+        randomcdf=np.random.rand(N)
+        return np.interp(randomcdf,cdfeval,sarray,left=self.Mminobs,right=self.Mmaxobs)
     
-    
-    
-    
-    
-    
+    def build_effective_number_density_interpolant(self,epsilon):
+        '''This method build the number density interpolant. This is defined as the integral from the Schecter function faint end to a value M_thr for the Schechter
+        function times the luminosity weights. Note that this integral is done in x=Mstar-M, which is a cosmology independent quantity.
+        
+        Parameters
+        ----------
+        epsilon: float
+            Powerlaw slope for the luminosity weights
+        '''
+        
+        minv,maxv=self.Mmin,self.Mmax
+        self.epsilon=epsilon
+        Mvector_interpolant=np.linspace(minv,maxv,100)
+        self.effective_density_interpolant=np.zeros_like(Mvector_interpolant)
+        xmin=np.power(10.,0.4*(self.Mstar-maxv))
+        for i in range(len(Mvector_interpolant)):
+            xmax=np.power(10.,0.4*(self.Mstar-Mvector_interpolant[i]))
+            self.effective_density_interpolant[i]=float(mpmath.gammainc(self.alpha+1+epsilon,a=xmin,b=xmax))
+        
+        self.effective_density_interpolant_cpu=self.effective_density_interpolant[::-1]
+        self.xvector_interpolant_cpu=self.Mstar-Mvector_interpolant[::-1]
+        
+        
+        if is_there_cupy():
+            self.effective_density_interpolant_gpu=np2cp(self.effective_density_interpolant[::-1])
+            self.xvector_interpolant_gpu=np2cp(self.Mstar-Mvector_interpolant[::-1])
+        
+    def background_effective_galaxy_density(self,Mthr):
+        '''Returns the effective galaxy density, i.e. dN_{gal,eff}/dVc, the effective number is given by the luminosity weights.
+        This is Eq. 2.37 on the Overleaf documentation
+        
+        Parameters
+        ----------
+        Mthr: xp.array
+            Absolute magnitude threshold (faint) used to compute the integral
+        '''
+        
+        origin=Mthr.shape
+        xp = get_module_array(Mthr)
+        ravelled=xp.ravel(self.Mstarobs-Mthr)
+        # Schecter function is 0 outside intervals that's why we set limit on boundaries
+        
+        if iscupy(Mthr):
+            xvector_interpolant=self.xvector_interpolant_gpu
+            effective_density_interpolant=self.effective_density_interpolant_gpu
+        else:
+            xvector_interpolant=self.xvector_interpolant_cpu
+            effective_density_interpolant=self.effective_density_interpolant_cpu
+            
+        outp=self.phistarobs*xp.interp(ravelled,xvector_interpolant,effective_density_interpolant
+                           ,left=effective_density_interpolant[0],right=effective_density_interpolant[-1])
+        return xp.reshape(outp,origin)
+
+
+# LVK Reviewed
+class kcorr_dep(object):
+    def __init__(self,band):
+        '''
+        A class to handle K-corrections
+        
+        Parameters
+        ----------
+        band: string
+            W1, K or bJ band. Others are not implemented
+        '''
+        self.band=band
+        if self.band not in ['W1','K','bJ']:
+            raise ValueError('Band not known, please use W1 or K or bJ')
+    def __call__(self,z):
+        '''
+        Evaluates the K-corrections at a given redshift, See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
+        
+        Parameters
+        ----------
+        z: xp.array
+            Redshift
+        
+        Returns
+        -------
+        k_corrections: xp.array
+        '''
+        xp = get_module_array(z)
+        if self.band == 'W1':
+            k_corr = -1*(4.44e-2+2.67*z+1.33*(z**2.)-1.59*(z**3.)) #From Maciej email
+        elif self.band == 'K':
+            # https://iopscience.iop.org/article/10.1086/322488/pdf 4th page lhs
+            to_ret=-6.0*xp.log10(1+z)
+            to_ret[z>0.3]=-6.0*xp.log10(1+0.3)
+            k_corr=-6.0*xp.log10(1+z)
+        elif self.band == 'bJ':
+            # Fig 5 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
+            # Note that these corrections also includes evolution corrections
+            k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
+        return k_corr
+
     
