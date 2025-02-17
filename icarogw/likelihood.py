@@ -85,8 +85,9 @@ class hierarchical_likelihood(bilby.Likelihood):
             xp.power(neff_PE_ev,-1.)*(1-neff_PE_ev/self.posterior_samples_dict.Ns_array)
         )
 
-        if self.likelihood_variance > self.likelihood_variance_thr:
-            return float(xp.nan_to_num(-xp.inf))
+        if self.likelihood_variance_thr is not None:
+            if self.likelihood_variance > self.likelihood_variance_thr:
+                return float(xp.nan_to_num(-xp.inf))
             
         # Combine all the terms  
         if self.rate_model.scale_free:
