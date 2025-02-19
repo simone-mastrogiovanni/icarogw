@@ -7,7 +7,7 @@ from .wrappers import FlatLambdaCDM_wrap
 
 # LVK Reviewed
 class hierarchical_likelihood(bilby.Likelihood):
-    def __init__(self, posterior_samples_dict, injections, rate_model, nparallel=None, neffPE=20,neffINJ=None):
+    def __init__(self, posterior_samples_dict, injections, rate_model, nparallel=None, neffPE=20,neffINJ=None,likelihood_variance_thr=None):
         '''
         Base class for an hierachical liklihood. It just saves all the input requirements for a general hierarchical analysis
         
@@ -25,6 +25,8 @@ class hierarchical_likelihood(bilby.Likelihood):
             Effective number of samples per event that must contribute the prior evaluation
         neffINJ: int
             Number of effective injections needed to evaluate the selection bias, if None we will assume 4* observed signals.
+        likelihood_variance_thr: int
+            Likelihood variance to use for the cut, the suggested value if 1 from (2304.06138).
         '''
         
         # Saves injections in a cupyfied format
@@ -33,11 +35,19 @@ class hierarchical_likelihood(bilby.Likelihood):
         self.rate_model=rate_model
         self.posterior_samples_dict=posterior_samples_dict
         self.posterior_samples_dict.build_parallel_posterior(nparallel=nparallel)
-        
-        if neffINJ is None:
-            self.neffINJ=4*self.posterior_samples_dict.n_ev
-        else:
-            self.neffINJ=neffINJ
+        self.likelihood_variance_thr = likelihood_variance_thr
+
+        if likelihood_variance_thr is not None:
+            print('Using Likelihood variance as numerical stability estimator \n We will not consider neffPE or neffINJ')
+            self.neffPE = -1.
+            self.neffINJ = -1.
+        else:    
+            print('Using neffPE and neffINJ as numerical stability estimators')
+            if neffINJ is None:
+                print('Setting neffINJ as 4 times observed signals')
+                self.neffINJ=4*self.posterior_samples_dict.n_ev
+            else:
+                self.neffINJ=neffINJ
         
         super().__init__(parameters={ll: None for ll in self.rate_model.population_parameters})
                 
@@ -66,9 +76,19 @@ class hierarchical_likelihood(bilby.Likelihood):
         
         # Update the weights on the PE
         self.posterior_samples_dict.update_weights(self.rate_model)
-        if xp.any(self.posterior_samples_dict.get_effective_number_of_PE()<self.neffPE):
+        neff_PE_ev = self.posterior_samples_dict.get_effective_number_of_PE()
+      
+        if xp.any(neff_PE_ev<self.neffPE):
             return float(xp.nan_to_num(-xp.inf))
-                     
+
+        self.likelihood_variance = (xp.power(self.posterior_samples_dict.n_ev,2.)/Neff)*(1-Neff/self.injections.ntotal)+xp.sum(
+            xp.power(neff_PE_ev,-1.)*(1-neff_PE_ev/self.posterior_samples_dict.Ns_array)
+        )
+
+        if self.likelihood_variance_thr is not None:
+            if self.likelihood_variance > self.likelihood_variance_thr:
+                return float(xp.nan_to_num(-xp.inf))
+            
         # Combine all the terms  
         if self.rate_model.scale_free:
             # Log likelihood for scale free model, Eq. 1.3 on the document
