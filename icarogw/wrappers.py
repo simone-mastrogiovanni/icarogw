@@ -1590,7 +1590,7 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         The module is stand alone and not compatible with other wrappers.
     '''
 
-    def __init__(self, redshift_transition = 'linear', flag_positive_gaussian_z0 = 0, flag_redshift_mixture = 1):
+    def __init__(self, redshift_transition = 'linear', flag_redshift_mixture = 1):
         
         self.population_parameters = ['mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mix_z0', 'mmin_g']
         self.redshift_transition   = redshift_transition
