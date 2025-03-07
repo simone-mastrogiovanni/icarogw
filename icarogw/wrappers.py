@@ -2150,7 +2150,7 @@ class GaussianEvolving():
         sx = get_module_array_scipy(m)
         self.muz    = self.polynomial(self.order, z, 'mu')
         self.sigmaz = self.polynomial(self.order, z, 'sigma')
-        a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+        a, b = (0. - self.muz) / self.sigmaz, (self.muz + 6*self.muz - self.muz) / self.sigmaz  # Truncte the Gaussian at zero and mu+6*sigma. This improve the numerical stability.
         gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
         return gaussian
 
