@@ -193,7 +193,7 @@ class Poisson_times_Stochastic_CBC_likelihood(hierarchical_likelihood):
 
         omega_gw = spectral_siren_vanilla_omega_gw(freqs, self.look_up_Om0, self.rate_model)
 
-        # likelihood in eq. 23
+        # likelihood in eq. 9 from https://arxiv.org/abs/2503.14686
         diff = np.abs(omega_gw - Cf)
         log_stoch = -0.5 * np.sum(((diff**2.) / sigma2s)) #-0.5*np.sum(np.log(2*np.pi*(sigma2s)))
         # Controls on the value of the log-likelihood. If the log-likelihood is -inf, then set it to the smallest
@@ -247,7 +247,7 @@ class Stochastic_likelihood_only(bilby.Likelihood):
         # Rate model is updated from the call of the poisson likelihood
 
         omega_gw = spectral_siren_vanilla_omega_gw(freqs, self.look_up_Om0, self.rate_model)
-        # likelihood in eq. 23
+        # likelihood in eq. 9 from https://arxiv.org/abs/2503.14686
         diff = np.abs(omega_gw - Cf)
         log_stoch = -0.5 * np.sum(((diff**2.) / sigma2s)) #-0.5*np.sum(np.log(2*np.pi*(sigma2s)))
         # Controls on the value of the log-likelihood. If the log-likelihood is -inf, then set it to the smallest
