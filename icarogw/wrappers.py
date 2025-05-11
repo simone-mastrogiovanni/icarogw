@@ -1,9 +1,9 @@
-from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, check_bounds_1D
+from .cupy_pal import get_module_array, get_module_array_scipy, np
 from .cosmology import alphalog_astropycosmology, cM_astropycosmology, extraD_astropycosmology, Xi0_astropycosmology, astropycosmology, eps0_astropycosmology
 from .cosmology import  md_rate, md_gamma_rate, powerlaw_rate, beta_rate, beta_rate_line
-from .priors import LowpassSmoothedProb, LowpassSmoothedProbEvolving, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb, PL_normfact, PL_normfact_z
+from .priors import LowpassSmoothedProb, LowpassSmoothedProbEvolving, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb, BrokenPowerLawMultiPeak
 from .priors import PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, conditional_2dimpdf, conditional_2dimz_pdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
-from .priors import _mixed_linear_function, _mixed_double_sigmoid_function, BrokenPowerLawMultiPeak
+from .priors import PowerLawStationary, PowerLawLinear, GaussianStationary, GaussianLinear, _mixed_linear_function, _mixed_double_sigmoid_function
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM, Flatw0waCDM
 
@@ -670,29 +670,11 @@ class PowerLaw_PowerLaw():
             self.delta_m_a = kwargs['delta_m_a']
             self.delta_m_b = kwargs['delta_m_b']
 
-    class PowerLawStationary():
-
-        def __init__(self, alpha, mmin, mmax):
-            self.alpha  = - alpha
-            self.minval = mmin
-            self.maxval = mmax
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact(self.minval, self.maxval, self.alpha))
-            indx = check_bounds_1D(m, self.minval, self.maxval)
-            powerlaw[indx] = -xp.inf
-            return powerlaw
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
     def pdf(self,m):
 
         xp = get_module_array(m)
-        powerlaw_class_a = PowerLaw_PowerLaw.PowerLawStationary(self.alpha_a, self.mmin_a, self.mmax_a)
-        powerlaw_class_b = PowerLaw_PowerLaw.PowerLawStationary(self.alpha_b, self.mmin_b, self.mmax_b)
+        powerlaw_class_a = PowerLawStationary(self.alpha_a, self.mmin_a, self.mmax_a)
+        powerlaw_class_b = PowerLawStationary(self.alpha_b, self.mmin_b, self.mmax_b)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing:
             powerlaw_class_a = LowpassSmoothedProb(powerlaw_class_a, self.delta_m_a)
@@ -748,30 +730,12 @@ class PowerLaw_PowerLaw_PowerLaw():
             self.delta_m_b = kwargs['delta_m_b']
             self.delta_m_c = kwargs['delta_m_c']
 
-    class PowerLawStationary():
-
-        def __init__(self, alpha, mmin, mmax):
-            self.alpha  = - alpha
-            self.minval = mmin
-            self.maxval = mmax
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact(self.minval, self.maxval, self.alpha))
-            indx = check_bounds_1D(m, self.minval, self.maxval)
-            powerlaw[indx] = -xp.inf
-            return powerlaw
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
     def pdf(self,m):
 
         xp = get_module_array(m)
-        powerlaw_class_a = PowerLaw_PowerLaw_PowerLaw.PowerLawStationary(self.alpha_a, self.mmin_a, self.mmax_a)
-        powerlaw_class_b = PowerLaw_PowerLaw_PowerLaw.PowerLawStationary(self.alpha_b, self.mmin_b, self.mmax_b)
-        powerlaw_class_c = PowerLaw_PowerLaw_PowerLaw.PowerLawStationary(self.alpha_c, self.mmin_c, self.mmax_c)
+        powerlaw_class_a = PowerLawStationary(self.alpha_a, self.mmin_a, self.mmax_a)
+        powerlaw_class_b = PowerLawStationary(self.alpha_b, self.mmin_b, self.mmax_b)
+        powerlaw_class_c = PowerLawStationary(self.alpha_c, self.mmin_c, self.mmax_c)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing:
             powerlaw_class_a = LowpassSmoothedProb(powerlaw_class_a, self.delta_m_a)
@@ -827,48 +791,12 @@ class PowerLaw_PowerLaw_Gaussian():
             self.delta_m_a = kwargs['delta_m_a']
             self.delta_m_b = kwargs['delta_m_b']
 
-    class PowerLawStationary():
-
-        def __init__(self, alpha, mmin, mmax):
-            self.alpha  = - alpha
-            self.minval = mmin
-            self.maxval = mmax
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact(self.minval, self.maxval, self.alpha))
-            indx = check_bounds_1D(m, self.minval, self.maxval)
-            powerlaw[indx] = -xp.inf
-            return powerlaw
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
-    class GaussianStationary():
-
-        def __init__(self, mu, sigma, mmin_g):
-            self.mu     = mu
-            self.sigma  = sigma
-            self.mmin_g = mmin_g
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            sx = get_module_array_scipy(m)
-            a, b = (self.mmin_g - self.mu) / self.sigma, (xp.inf - self.mu) / self.sigma 
-            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.mu, scale = self.sigma) )
-            return gaussian
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
     def pdf(self,m):
 
         xp = get_module_array(m)
-        powerlaw_class_a = PowerLaw_PowerLaw_Gaussian.PowerLawStationary(self.alpha_a, self.mmin_a,  self.mmax_a)
-        powerlaw_class_b = PowerLaw_PowerLaw_Gaussian.PowerLawStationary(self.alpha_b, self.mmin_b,  self.mmax_b)
-        gaussian_class   = PowerLaw_PowerLaw_Gaussian.GaussianStationary(self.mu_g,    self.sigma_g, self.mmin_a)
+        powerlaw_class_a = PowerLawStationary(self.alpha_a, self.mmin_a,  self.mmax_a)
+        powerlaw_class_b = PowerLawStationary(self.alpha_b, self.mmin_b,  self.mmax_b)
+        gaussian_class   = GaussianStationary(self.mu_g,    self.sigma_g, self.mmin_a)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing:
             powerlaw_class_a = LowpassSmoothedProb(powerlaw_class_a, self.delta_m_a)
@@ -929,53 +857,6 @@ class PowerLaw_GaussianRedshiftLinear():
             if self.redshift_transition == 'sigmoid': self.zt, self.delta_zt = kwargs['zt'], kwargs['delta_zt']
         if self.flag_powerlaw_smoothing: self.delta_m = kwargs['delta_m']
 
-    class PowerLawStationary():
-
-        def __init__(self, alpha, mmin, mmax):
-            self.alpha  = - alpha
-            self.minval = mmin
-            self.maxval = mmax
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact(self.minval, self.maxval, self.alpha))
-            indx = check_bounds_1D(m, self.minval, self.maxval)
-            powerlaw[indx] = -xp.inf
-            return powerlaw
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
-    class GaussianLinear():
-
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
-            self.mu_z0    = mu_z0
-            self.mu_z1    = mu_z1
-            self.sigma_z0 = sigma_z0
-            self.sigma_z1 = sigma_z1
-            self.mmin     = mmin
-            # Linear expansion.
-            self.muz    = self.mu_z0    + self.mu_z1    * z
-            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            sx = get_module_array_scipy(m)
-            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
-            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
-            return gaussian
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
-        def return_mu_sigma_z0(self):
-            return self.mu_z0, self.sigma_z0
-        
-        def return_mu_sigma_z( self):
-            return self.muz, self.sigmaz
-
     def pdf(self,m,z):
 
         xp = get_module_array(m)
@@ -989,10 +870,10 @@ class PowerLaw_GaussianRedshiftLinear():
         else:
             wz = self.mix_z0
 
-        powerlaw_class = PowerLaw_GaussianRedshiftLinear.PowerLawStationary(self.alpha, self.mmin, self.mmax)
+        powerlaw_class = PowerLawStationary(self.alpha, self.mmin, self.mmax)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
-        gaussian_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin)
+        gaussian_class = GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin)
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
@@ -1056,53 +937,6 @@ class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
             if self.redshift_transition == 'sigmoid': self.zt, self.delta_zt = kwargs['zt'], kwargs['delta_zt']
         if self.flag_powerlaw_smoothing: self.delta_m = kwargs['delta_m']
 
-    class PowerLawStationary():
-
-        def __init__(self, alpha, mmin, mmax):
-            self.alpha  = - alpha
-            self.minval = mmin
-            self.maxval = mmax
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact(self.minval, self.maxval, self.alpha))
-            indx = check_bounds_1D(m, self.minval, self.maxval)
-            powerlaw[indx] = -xp.inf
-            return powerlaw
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
-    class GaussianLinear():
-
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
-            self.mu_z0    = mu_z0
-            self.mu_z1    = mu_z1
-            self.sigma_z0 = sigma_z0
-            self.sigma_z1 = sigma_z1
-            self.mmin     = mmin
-            # Linear expansion.
-            self.muz    = self.mu_z0    + self.mu_z1    * z
-            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            sx = get_module_array_scipy(m)
-            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
-            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
-            return gaussian
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-        
-        def return_mu_sigma_z0(self):
-            return self.mu_z0, self.sigma_z0
-        
-        def return_mu_sigma_z( self):
-            return self.muz, self.sigmaz
-
     def pdf(self,m,z):
 
         xp = get_module_array(m)
@@ -1119,11 +953,11 @@ class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
             wz_alpha = self.mix_alpha_z0
             wz_beta  = self.mix_beta_z0
 
-        powerlaw_class = PowerLaw_GaussianRedshiftLinear.PowerLawStationary(self.alpha, self.mmin, self.mmax)
+        powerlaw_class = PowerLawStationary(self.alpha, self.mmin, self.mmax)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
-        gaussian_a_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin)
-        gaussian_b_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin)
+        gaussian_a_class = GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin)
+        gaussian_b_class = GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin)
         powerlaw_part    = powerlaw_class.pdf(m)
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
@@ -1183,60 +1017,6 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
             self.mix_z1 = kwargs['mix_z1']
             if self.redshift_transition == 'sigmoid': self.zt, self.delta_zt = kwargs['zt'], kwargs['delta_zt']
         if self.flag_powerlaw_smoothing: self.delta_m = kwargs['delta_m']
-        
-    class PowerLawLinear():
-
-        def __init__(self, z, alpha_z0, alpha_z1, mmin_z0, mmin_z1, mmax_z0, mmax_z1):
-            self.alpha_z0 = alpha_z0
-            self.alpha_z1 = alpha_z1
-            self.mmin_z0  = mmin_z0
-            self.mmin_z1  = mmin_z1
-            self.mmax_z0  = mmax_z0
-            self.mmax_z1  = mmax_z1
-            # Linear expansion.
-            self.alpha  = - (self.alpha_z0 + self.alpha_z1 * z)
-            self.minval = self.mmin_z0 + self.mmin_z1 * z
-            self.maxval = self.mmax_z0 + self.mmax_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact_z(self.minval, self.maxval, self.alpha))
-            indx = check_bounds_1D(m, self.minval, self.maxval)
-            powerlaw[indx] = -xp.inf
-            return powerlaw
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
-    class GaussianLinear():
-
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
-            self.mu_z0    = mu_z0
-            self.mu_z1    = mu_z1
-            self.sigma_z0 = sigma_z0
-            self.sigma_z1 = sigma_z1
-            self.mmin     = mmin
-            # Linear expansion.
-            self.muz    = self.mu_z0    + self.mu_z1    * z
-            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            sx = get_module_array_scipy(m)
-            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
-            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
-            return gaussian
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-        
-        def return_mu_sigma_z0(self):
-            return self.mu_z0, self.sigma_z0
-        
-        def return_mu_sigma_z( self):
-            return self.muz, self.sigmaz
 
     def pdf(self,m,z):
 
@@ -1251,12 +1031,12 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
         else:
             wz = self.mix_z0
 
-        powerlaw_class = PowerLawRedshiftLinear_GaussianRedshiftLinear.PowerLawLinear(z, self.alpha_z0, self.alpha_z1, self.mmin_z0, self.mmin_z1, self.mmax_z0, self.mmax_z1)
+        powerlaw_class = PowerLawLinear(z, self.alpha_z0, self.alpha_z1, self.mmin_z0, self.mmin_z1, self.mmax_z0, self.mmax_z1)
         # Add left smoothing to the evolving PowerLaw.
         # WARNING: The implementation is very slow, because the integral to normalise the windowed
         # distribution p(m1|z) needs to be computed at all redshifts corresponding to the PE samples and injections.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProbEvolving(powerlaw_class, self.delta_m)
-        gaussian_class = PowerLawRedshiftLinear_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin_z0)
+        gaussian_class = GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin_z0)
         powerlaw_part  = powerlaw_class.pdf(m)
         gaussian_part  = gaussian_class.pdf(m)
 
@@ -1322,31 +1102,6 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear():
             self.mix_alpha_z1 = kwargs['mix_alpha_z1']
             self.mix_beta_z1  = kwargs['mix_beta_z1']
 
-    class PowerLawLinear():
-
-        def __init__(self, z, alpha_z0, alpha_z1, mmin_z0, mmin_z1, mmax_z0, mmax_z1):
-            self.alpha_z0 = alpha_z0
-            self.alpha_z1 = alpha_z1
-            self.mmin_z0  = mmin_z0
-            self.mmin_z1  = mmin_z1
-            self.mmax_z0  = mmax_z0
-            self.mmax_z1  = mmax_z1
-            # Linear expansion.
-            self.alpha  = - (self.alpha_z0 + self.alpha_z1 * z)
-            self.minval = self.mmin_z0 + self.mmin_z1 * z
-            self.maxval = self.mmax_z0 + self.mmax_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact_z(self.minval, self.maxval, self.alpha))
-            indx = check_bounds_1D(m, self.minval, self.maxval)
-            powerlaw[indx] = -xp.inf
-            return powerlaw
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
     def pdf(self,m,z):
 
         xp = get_module_array(m)
@@ -1360,9 +1115,9 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear():
             wz_alpha = self.mix_alpha_z0
             wz_beta  = self.mix_beta_z0
 
-        powerlaw_class_a = PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear.PowerLawLinear(z, self.alpha_a_z0, self.alpha_a_z1, self.mmin_a_z0, self.mmin_a_z1, self.mmax_a_z0, self.mmax_a_z1)
-        powerlaw_class_b = PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear.PowerLawLinear(z, self.alpha_b_z0, self.alpha_b_z1, self.mmin_b_z0, self.mmin_b_z1, self.mmax_b_z0, self.mmax_b_z1)
-        powerlaw_class_c = PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear.PowerLawLinear(z, self.alpha_c_z0, self.alpha_c_z1, self.mmin_c_z0, self.mmin_c_z1, self.mmax_c_z0, self.mmax_c_z1)
+        powerlaw_class_a = PowerLawLinear(z, self.alpha_a_z0, self.alpha_a_z1, self.mmin_a_z0, self.mmin_a_z1, self.mmax_a_z0, self.mmax_a_z1)
+        powerlaw_class_b = PowerLawLinear(z, self.alpha_b_z0, self.alpha_b_z1, self.mmin_b_z0, self.mmin_b_z1, self.mmax_b_z0, self.mmax_b_z1)
+        powerlaw_class_c = PowerLawLinear(z, self.alpha_c_z0, self.alpha_c_z1, self.mmin_c_z0, self.mmin_c_z1, self.mmax_c_z0, self.mmax_c_z1)
         powerlaw_part_a  = powerlaw_class_a.pdf(m)
         powerlaw_part_b  = powerlaw_class_b.pdf(m)
         powerlaw_part_c  = powerlaw_class_c.pdf(m)
@@ -1427,54 +1182,6 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear():
             self.mix_alpha_z1 = kwargs['mix_alpha_z1']
             self.mix_beta_z1  = kwargs['mix_beta_z1']
 
-    class PowerLawLinear():
-
-        def __init__(self, z, alpha_z0, alpha_z1, mmin_z0, mmin_z1, mmax_z0, mmax_z1):
-            self.alpha_z0 = alpha_z0
-            self.alpha_z1 = alpha_z1
-            self.mmin_z0  = mmin_z0
-            self.mmin_z1  = mmin_z1
-            self.mmax_z0  = mmax_z0
-            self.mmax_z1  = mmax_z1
-            # Linear expansion.
-            self.alpha  = - (self.alpha_z0 + self.alpha_z1 * z)
-            self.minval = self.mmin_z0 + self.mmin_z1 * z
-            self.maxval = self.mmax_z0 + self.mmax_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact_z(self.minval, self.maxval, self.alpha))
-            indx = check_bounds_1D(m, self.minval, self.maxval)
-            powerlaw[indx] = -xp.inf
-            return powerlaw
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
-    class GaussianLinear():
-
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
-            self.mu_z0    = mu_z0
-            self.mu_z1    = mu_z1
-            self.sigma_z0 = sigma_z0
-            self.sigma_z1 = sigma_z1
-            self.mmin     = mmin
-            # Linear expansion.
-            self.muz    = self.mu_z0    + self.mu_z1    * z
-            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            sx = get_module_array_scipy(m)
-            a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
-            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
-            return gaussian
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
     def pdf(self,m,z):
 
         xp = get_module_array(m)
@@ -1488,9 +1195,9 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear():
             wz_alpha = self.mix_alpha_z0
             wz_beta  = self.mix_beta_z0
 
-        powerlaw_class_a = PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear.PowerLawLinear(z, self.alpha_a_z0, self.alpha_a_z1, self.mmin_a_z0, self.mmin_a_z1, self.mmax_a_z0, self.mmax_a_z1)
-        powerlaw_class_b = PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear.PowerLawLinear(z, self.alpha_b_z0, self.alpha_b_z1, self.mmin_b_z0, self.mmin_b_z1, self.mmax_b_z0, self.mmax_b_z1)
-        gaussian_class   = PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin_a_z0)
+        powerlaw_class_a = PowerLawLinear(z, self.alpha_a_z0, self.alpha_a_z1, self.mmin_a_z0, self.mmin_a_z1, self.mmax_a_z0, self.mmax_a_z1)
+        powerlaw_class_b = PowerLawLinear(z, self.alpha_b_z0, self.alpha_b_z1, self.mmin_b_z0, self.mmin_b_z1, self.mmax_b_z0, self.mmax_b_z1)
+        gaussian_class   = GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin_a_z0)
         powerlaw_part_a  = powerlaw_class_a.pdf(m)
         powerlaw_part_b  = powerlaw_class_b.pdf(m)
         gaussian_part    = gaussian_class.pdf(m)
@@ -1545,35 +1252,6 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
             self.mix_z1 = kwargs['mix_z1']
             if self.redshift_transition == 'sigmoid': self.zt, self.delta_zt = kwargs['zt'], kwargs['delta_zt']
 
-    class GaussianLinear():
-
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin_g):
-            self.mu_z0    = mu_z0
-            self.mu_z1    = mu_z1
-            self.sigma_z0 = sigma_z0
-            self.sigma_z1 = sigma_z1
-            self.mmin_g   = mmin_g
-            # Linear expansion.
-            self.muz    = self.mu_z0    + self.mu_z1    * z
-            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            sx = get_module_array_scipy(m)
-            a, b = (self.mmin_g - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
-            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
-            return gaussian
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-        
-        def return_mu_sigma_z0(self):
-            return self.mu_z0, self.sigma_z0
-        
-        def return_mu_sigma_z( self):
-            return self.muz, self.sigmaz
-
     def pdf(self,m,z):
 
         xp = get_module_array(m)
@@ -1587,8 +1265,8 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         else:
             wz = self.mix_z0
 
-        gaussian_a_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin_g)
-        gaussian_b_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin_g)
+        gaussian_a_class = GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin_g)
+        gaussian_b_class = GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin_g)
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
 
@@ -1649,35 +1327,6 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
             self.mix_beta_z1  = kwargs['mix_beta_z1']
             if self.redshift_transition == 'sigmoid': self.zt, self.delta_zt = kwargs['zt'], kwargs['delta_zt']
 
-    class GaussianLinear():
-
-        def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin_g):
-            self.mu_z0    = mu_z0
-            self.mu_z1    = mu_z1
-            self.sigma_z0 = sigma_z0
-            self.sigma_z1 = sigma_z1
-            self.mmin_g   = mmin_g
-            # Linear expansion.
-            self.muz    = self.mu_z0    + self.mu_z1    * z
-            self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
-
-        def log_pdf(self,m):
-            xp = get_module_array(m)
-            sx = get_module_array_scipy(m)
-            a, b = (self.mmin_g - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
-            gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
-            return gaussian
-
-        def pdf(self,m):
-            xp = get_module_array(m)
-            return xp.exp(self.log_pdf(m))
-
-        def return_mu_sigma_z0(self):
-            return self.mu_z0, self.sigma_z0
-        
-        def return_mu_sigma_z( self):
-            return self.muz, self.sigmaz
-
     def pdf(self,m,z):
 
         xp = get_module_array(m)
@@ -1694,9 +1343,9 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
             wz_alpha = self.mix_alpha_z0
             wz_beta  = self.mix_beta_z0
 
-        gaussian_a_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin_g)
-        gaussian_b_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin_g)
-        gaussian_c_class = PowerLaw_GaussianRedshiftLinear.GaussianLinear(z, self.mu_z0_c, self.mu_z1_c, self.sigma_z0_c, self.sigma_z1_c, self.mmin_g)
+        gaussian_a_class = GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin_g)
+        gaussian_b_class = GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin_g)
+        gaussian_c_class = GaussianLinear(z, self.mu_z0_c, self.mu_z1_c, self.sigma_z0_c, self.sigma_z1_c, self.mmin_g)
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
         gaussian_c_part  = gaussian_c_class.pdf(m)
