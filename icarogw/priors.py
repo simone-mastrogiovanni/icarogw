@@ -68,7 +68,8 @@ def _lowpass_filter(mass, mmax, delta_max):
 
 def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
     '''
-    A Window function that starts from a float and goes to 0
+    A Window function that starts from mix_x0 at x=0 and goes to mix_z1 at x=1,
+    with a sigmoid transition centered at xt with width delta_xt.
 
     Parameters
     ----------
@@ -79,7 +80,9 @@ def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
     delta_xt: float/np.array
         Width of the transition
     mix_x0: float/np.array
-        Initial value of the window, then it goes to 0.
+        Initial value of the window at x=0
+    mix_x1: float/np.array
+        Final value of the window at x=1
 
     Returns
     -------
@@ -90,15 +93,16 @@ def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
 
 def _mixed_linear_function(x, mix_x0, mix_x1):
     '''
-    A Window function that starts from mix_0 and linearly evolves (x=1 f=miz_x1)
+    A Window function that starts from mix_0 at x=0 and linearly evolves to mix_x1 at x=1.
+
     Parameters
     ----------
     x: np.array
         Array at which evaluate the window
     mix_x0: float/np.array
-        Initial value of the window at x=0.
-    mix_x0: float/np.array
-        Initial value of the window at x=1.
+        Initial value of the window at x=0
+    mix_x1: float/np.array
+        Final value of the window at x=1
 
     Returns
     -------

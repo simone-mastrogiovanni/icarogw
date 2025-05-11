@@ -640,11 +640,10 @@ class spinprior_ECOs_totally_reflective(object):
 
 class PowerLaw_PowerLaw():
     '''
-        Class implementing the mass function model conditioned on redshift p(m1|z),
-        for a stationary PowerLaw and a redshift linearly-dependent Gaussian peak.
+        Class implementing the mass function model for two stationary PowerLaws.
 
         Some options are available:
-            - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            - flag_powerlaw_smoothing applies a left window function to the PowerLaws.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -695,11 +694,10 @@ class PowerLaw_PowerLaw():
 
 class PowerLaw_PowerLaw_PowerLaw():
     '''
-        Class implementing the mass function model conditioned on redshift p(m1|z),
-        for a stationary PowerLaw and a redshift linearly-dependent Gaussian peak.
+        Class implementing the mass function model for three stationary PowerLaws.
 
         Some options are available:
-            - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            - flag_powerlaw_smoothing applies a left window function to the PowerLaws.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -758,11 +756,11 @@ class PowerLaw_PowerLaw_PowerLaw():
 
 class PowerLaw_PowerLaw_Gaussian():
     '''
-        Class implementing the mass function model conditioned on redshift p(m1|z),
-        for a stationary PowerLaw and a redshift linearly-dependent Gaussian peak.
+        Class implementing the mass function model for two stationary PowerLaws
+        and a Gaussian peak.
 
         Some options are available:
-            - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            - flag_powerlaw_smoothing applies a left window function to the PowerLaws.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -825,6 +823,7 @@ class PowerLaw_GaussianRedshiftLinear():
             - redshift_transition sets the function for the redshift transition
             between the PowerLaw and the Gaussian.
             - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            - flag_redshift_mixture allows for the transition function to evolve with redshift.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -894,11 +893,12 @@ class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
         for a stationary PowerLaw and two redshift linearly-dependent Gaussian peaks.
 
         Some options are available:
-            - redshift_transition sets the function for the redshift transition
+            - redshift_transition sets the functions for the redshift transition
             between the PowerLaw and the two Gaussian peaks. The transition is
             the same between the PowerLaw and the first Gaussian a, and the two
             Gaussians a and b.
             - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            - flag_redshift_mixture allows for the transition functions to evolve with redshift.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -983,6 +983,7 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
             between the PowerLaw and the Gaussian.
             - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
             The smoothing slows heavily down the model evaluation.
+            - flag_redshift_mixture allows for the transition function to evolve with redshift.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -1054,13 +1055,14 @@ class PowerLawRedshiftLinear_GaussianRedshiftLinear():
 class PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear():
     '''
         Class implementing the mass function model conditioned on redshift p(m1|z),
-        for both a redshift linearly-dependent PowerLaw and Gaussian peak.
+        for three redshift linearly-dependent PowerLaws.
 
         Some options are available:
             - redshift_transition sets the function for the redshift transition
-            between the PowerLaw and the Gaussian.
-            - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            between the PowerLaws (a, b and c).
+            - flag_powerlaw_smoothing applies a left window function to the PowerLaws.
             The smoothing slows heavily down the model evaluation.
+            - flag_redshift_mixture allows for the transition functions to evolve with redshift.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -1149,13 +1151,14 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear():
 class PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear():
     '''
         Class implementing the mass function model conditioned on redshift p(m1|z),
-        for both a redshift linearly-dependent PowerLaw and Gaussian peak.
+        for both two redshift linearly-dependent PowerLaws and a Gaussian peak.
 
         Some options are available:
             - redshift_transition sets the function for the redshift transition
-            between the PowerLaw and the Gaussian.
-            - flag_powerlaw_smoothing applies a left window function to the PowerLaw.
+            between the PowerLaws (a and b) and the Gaussian.
+            - flag_powerlaw_smoothing applies a left window function to the PowerLaws.
             The smoothing slows heavily down the model evaluation.
+            - flag_redshift_mixture allows for the transition functions to evolve with redshift.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -1245,6 +1248,7 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         Some options are available:
             - redshift_transition sets the function for the redshift transition
             between the PowerLaw and the Gaussian.
+            - flag_redshift_mixture allows for the transition function to evolve with redshift.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -1314,6 +1318,7 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
             - redshift_transition sets the function for the redshift transition
             between the three Gaussian peaks. The transition is the same between the
             first two Gaussians a and b, and the other two Gaussians b and c.
+            - flag_redshift_mixture allows for the transition functions to evolve with redshift.
 
         The module is stand alone and not compatible with other wrappers.
     '''
@@ -1387,13 +1392,14 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
 
 class GaussianEvolving():
     '''
-        Class implementing the mass function model conditioned on redshift p(m|z),
-        for one redshift evolving Gaussian peak with arbitrary redshift expansion.
+        Class implementing the mass function model conditioned on redshift p(m|z), for
+        one redshift evolving Gaussian peak with arbitrary polynomial redshift expansion.
 
         Some options are available:
             - order sets the order of the redshift expansion. The population
             parameters [mu_zx, sigma_zx] are automatically defined from the
             selected order.
+            Ex. order = 2 gives mu_z = mu_z0 + mu_z1*z + mu_z2*z^2
 
         The module is stand alone and not compatible with other wrappers.
     '''
