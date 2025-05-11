@@ -2,6 +2,185 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from .conversions import L2M, M2L
 import copy
 
+
+def _notch_filter(mass, mlow, delta_low, mhigh, delta_high, A):
+    '''
+    This function returns a notch filter based on the one defined in eq. (4) of https://arxiv.org/pdf/2111.03498.pdf, but using low and high pass filters based on the S
+    function defined above
+
+    Parameters
+    ----------
+    mass: xp.array or float
+        array of x or masses values in solar masses
+    mlow, mhigh: float or xp.array (in this case len(mlow or mhigh) == len(mass))
+        maximum value of window function (maximum credible mass of the spectrum)
+    delta_low, delta_high, A: float or xp.array (in this case len(delta_low or delta_high or A) == len(mass))
+        width of the window function
+    A: float
+        Fraction of the signal to substract
+
+    Returns
+    -------
+    Values of the notch filter
+    '''
+
+    to_ret = 1-A*_highpass_filter(mass,mlow,delta_low)*_lowpass_filter(mass,mhigh,delta_high)
+    return to_ret
+
+def _lowpass_filter(mass, mmax, delta_max):
+    '''
+    This function returns a low pass filter based on the S function defined above. Adapts the filter defined in eq. (2) of https://arxiv.org/pdf/2111.03498.pdf with the S function itself
+
+    Parameters
+    ----------
+    mass: xp.array or float
+        array of x or masses values
+    mmax: float or xp.array (in this case len(mmin) == len(mass))
+        maximum value of window function (maximum credible mass of the spectrum)
+    delta_max: float or xp.array (in this case len(delta_m) == len(mass))
+        width of the window function
+
+    Returns
+    -------
+    Values of the window function
+    '''
+
+    xp = get_module_array(mass)
+
+    to_ret = xp.ones_like(mass)
+    if delta_max == 0:
+        return to_ret
+
+    mprime = mmax-mass
+
+    # Defines the different regions of the window function ad in Eq. B6 of  https://arxiv.org/pdf/2010.14533.pdf
+    select_window = (mass<mmax) & (mass>(mmax-delta_max))
+    select_one = mass<=(mmax-delta_max)
+    select_zero = mass>=mmax
+
+    effe_prime = xp.ones_like(mass)
+
+    effe_prime[select_window] = xp.exp(xp.nan_to_num((delta_max/mprime[select_window])+(delta_max/(mprime[select_window]-delta_max))))
+    to_ret = 1./(effe_prime+1)
+    to_ret[select_zero]=0.
+    to_ret[select_one]=1.
+    return to_ret
+
+def _mixed_sigmoid_function(x, xt, delta_xt, mix_x0):
+    '''
+    A Window function that starts from a float and goes to 0
+
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    xt: float/np.array
+        Transition point for the window
+    delta_xt: float/np.array
+        Width of the transition
+    mix_x0: float/np.array
+        Initial value of the window, then it goes to 0.
+
+    Returns
+    -------
+    Values of the window
+    '''
+    sigma = mix_x0 / (1 + np.exp((x-xt)/delta_xt))
+    return sigma
+
+def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
+    '''
+    A Window function that starts from a float and goes to 0
+
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    xt: float/np.array
+        Transition point for the window
+    delta_xt: float/np.array
+        Width of the transition
+    mix_x0: float/np.array
+        Initial value of the window, then it goes to 0.
+
+    Returns
+    -------
+    Values of the window
+    '''
+    sigma = sigma =  mix_x1 + (mix_x0 - mix_x1) / (1 + np.exp((x-xt) / delta_xt))
+    return sigma
+
+def _mixed_linear_function(x, mix_x0, mix_x1):
+    '''
+    A Window function that starts from mix_0 and linearly evolves (x=1 f=miz_x1)
+    Parameters
+    ----------
+    x: np.array
+        Array at which evaluate the window
+    mix_x0: float/np.array
+        Initial value of the window at x=0.
+    mix_x0: float/np.array
+        Initial value of the window at x=1.
+
+    Returns
+    -------
+    Values of the window
+    '''
+    func = (mix_x1 - mix_x0) * x + mix_x0
+    return func
+
+def _mixed_linear_sinusoid_function(x, mix_x0, mix_x1, amp, freq):
+    func = ((mix_x1 - mix_x0) * x + mix_x0) + (amp * np.sin(x * freq))
+    return func
+
+def _mixed_quadratic_function(x, mix_x0, mix_x1, x_saddle):
+    func = (mix_x1 - mix_x0)/(1 - 2 * x_saddle) * x * (x - 2 * x_saddle) + mix_x0
+    return func
+
+# LVK Reviewed
+def _highpass_filter(mass, mmin,delta_m):
+    '''
+    This function returns the value of the window function defined as Eqs B6 and B7 of https://arxiv.org/pdf/2010.14533.pdf
+
+    Parameters
+    ----------
+    mass: xp.array or float
+        array of x or masses values
+    mmin: float or xp.array (in this case len(mmin) == len(mass))
+        minimum value of window function
+    delta_m: float or xp.array (in this case len(delta_m) == len(mass))
+        width of the window function
+
+    Returns
+    -------
+    Values of the window function
+    '''
+
+    xp = get_module_array(mass)
+
+    to_ret = xp.ones_like(mass)
+    if delta_m == 0:
+        return to_ret
+
+    mprime = mass-mmin
+
+    # Defines the different regions of thw window function ad in Eq. B6 of  https://arxiv.org/pdf/2010.14533.pdf
+    select_window = (mass>mmin) & (mass<(delta_m+mmin))
+    select_one = mass>=(delta_m+mmin)
+    select_zero = mass<=mmin
+
+    effe_prime = xp.ones_like(mass)
+
+    # Defines the f function as in Eq. B7 of https://arxiv.org/pdf/2010.14533.pdf
+    # This line might raise a warnig for exp orverflow, however this is not important as it enters at denominator
+    effe_prime[select_window] = xp.exp(xp.nan_to_num((delta_m/mprime[select_window])+(delta_m/(mprime[select_window]-delta_m))))
+    to_ret = 1./(effe_prime+1)
+    to_ret[select_zero]=0.
+    to_ret[select_one]=1.
+    return to_ret
+
+
+
 # LVK Reviewed
 def betadistro_muvar2ab(mu,var):
     '''
@@ -42,47 +221,6 @@ def betadistro_ab2muvar(a,b):
     
     return a/(a+b), a*b/(xp.power(a+b,2.) *(a+b+1.))
 
-# LVK Reviewed
-def _S_factor(mass, mmin,delta_m):
-    '''
-    This function returns the value of the window function defined as Eqs B6 and B7 of https://arxiv.org/pdf/2010.14533.pdf
-
-    Parameters
-    ----------
-    mass: xp.array or float
-        array of x or masses values
-    mmin: float or xp.array (in this case len(mmin) == len(mass))
-        minimum value of window function
-    delta_m: float or xp.array (in this case len(delta_m) == len(mass))
-        width of the window function
-
-    Returns
-    -------
-    Values of the window function
-    '''
-    
-    xp = get_module_array(mass)
-
-    to_ret = xp.ones_like(mass)
-    if delta_m == 0:
-        return to_ret
-
-    mprime = mass-mmin
-
-    # Defines the different regions of thw window function ad in Eq. B6 of  https://arxiv.org/pdf/2010.14533.pdf
-    select_window = (mass>mmin) & (mass<(delta_m+mmin))
-    select_one = mass>=(delta_m+mmin)
-    select_zero = mass<=mmin
-
-    effe_prime = xp.ones_like(mass)
-
-    # Defines the f function as in Eq. B7 of https://arxiv.org/pdf/2010.14533.pdf
-    # This line might raise a warnig for exp orverflow, however this is not important as it enters at denominator
-    effe_prime[select_window] = xp.exp(xp.nan_to_num((delta_m/mprime[select_window])+(delta_m/(mprime[select_window]-delta_m))))
-    to_ret = 1./(effe_prime+1)
-    to_ret[select_zero]=0.
-    to_ret[select_one]=1.
-    return to_ret
 
 # LVK Reviewed
 class basic_1dimpdf(object):
@@ -280,6 +418,29 @@ class paired_2dimpdf(object):
         xp = get_module_array(x1)
         return xp.exp(self.log_pdf(x1,x2))
 
+    def sample(self,Nsamp):
+        '''
+        Samples from the pdf
+        
+        Parameters
+        ----------
+        N: int
+            Number of samples to generate
+        
+        Returns
+        -------
+        Samples: xp.array
+        '''
+
+        x1 = np.random.uniform(self.pdf_base.minval,self.pdf_base.maxval,size=10*Nsamp)
+        x2 = np.random.uniform(self.pdf_base.minval,self.pdf_base.maxval,size=10*Nsamp)
+        prob = self.pdf(x1,x2)
+        idx = np.random.choice(len(x1),size=Nsamp,replace=True,p=prob/prob.sum())
+        return x1[idx], x2[idx]
+
+
+
+
 # LVK Reviewed
 class conditional_2dimpdf(object):
     
@@ -373,17 +534,37 @@ class conditional_2dimpdf(object):
         x1samp=np.interp(randomcdf1,cdfeval1,sarray1)
         x2samp=np.interp(randomcdf2*self.pdf2.cdf(x1samp),cdfeval2,sarray2)
         return x1samp,x2samp
+    
+class conditional_2dimz_pdf(object):
+    
+    def __init__(self,pdf1z,pdf2):
+        self.pdf1z=pdf1z
+        self.pdf2=pdf2
+
+    def log_pdf1_z_marginalized(self,x1,zi):
+        self.pdf1=self.pdf1z.log_pdf_z_marginalized(x1,zi)
+
+    def log_pdf(self,x1,x2):
+        y=self.pdf1+self.pdf2.log_pdf(x2)-self.pdf2.log_cdf(x1)
+        return y 
+    
+    def pdf(self,x1,x2):
+        xp = get_module_array(x1)
+        return xp.exp(self.log_pdf(x1,x2))
+    
 
 # LVK Reviewed
-class SmoothedProb(basic_1dimpdf):
-    
+class LowpassSmoothedProb(basic_1dimpdf):
     def __init__(self,originprob,bottomsmooth):
         '''
         Class for a smoother probability
         
         Parameters
         ----------
-       
+        originprob: class
+            Original probability class
+        bottomsmooth: float
+            float corresponding to the smooth of the prior
         '''
         self.origin_prob = copy.deepcopy(originprob)
         self.bottom_smooth = bottomsmooth
@@ -393,7 +574,7 @@ class SmoothedProb(basic_1dimpdf):
         # Find the values of the integrals in the region of the window function before and after the smoothing
         int_array = np.linspace(originprob.minval,originprob.minval+bottomsmooth,1000)
         integral_before = np.trapz(self.origin_prob.pdf(int_array),int_array)
-        integral_now = np.trapz(self.origin_prob.pdf(int_array)*_S_factor(int_array, self.bottom,self.bottom_smooth),int_array)
+        integral_now = np.trapz(self.origin_prob.pdf(int_array)*_highpass_filter(int_array, self.bottom,self.bottom_smooth),int_array)
 
         self.integral_before = integral_before
         self.integral_now = integral_now
@@ -421,7 +602,7 @@ class SmoothedProb(basic_1dimpdf):
         '''
         xp = get_module_array(x)
         # Return the window function
-        window = _S_factor(x, self.bottom,self.bottom_smooth)
+        window = _highpass_filter(x, self.bottom,self.bottom_smooth)
         # The line below might raise warnings for log(0), however python is able to handle it.
         prob_ret =self.origin_prob.log_pdf(x)+xp.log(window)-xp.log(self.norm)
         return prob_ret
@@ -460,6 +641,206 @@ class SmoothedProb(basic_1dimpdf):
         ravelled[ravelled>=(self.bottom+self.bottom_smooth)])-self.origin_prob.cdf(xp.array([self.bottom+self.bottom_smooth])))/self.norm
         
         return xp.log(toret).reshape(origin)
+    
+class LowpassSmoothedProbEvolving(basic_1dimpdf):
+    def __init__(self,originprob,bottomsmooth):
+        '''
+        Class for a smoother probability
+        
+        Parameters
+        ----------
+        originprob: class
+            Original probability class
+        bottomsmooth: float
+            float corresponding to the smooth of the prior
+        '''
+        self.origin_prob = copy.deepcopy(originprob)
+        self.bottom_smooth = bottomsmooth
+        self.bottom = originprob.minval
+        super().__init__(originprob.minval,originprob.maxval)
+        
+        # Find the values of the integrals in the region of the window function before and after the smoothing
+        int_array = np.linspace(originprob.minval,originprob.minval+bottomsmooth,1000)
+        integral_before = np.trapz(self.origin_prob.pdf(int_array),int_array, axis=0)
+        integral_now = np.trapz(self.origin_prob.pdf(int_array)*_highpass_filter(int_array, self.bottom,self.bottom_smooth),int_array, axis=0)
+
+        self.integral_before = integral_before
+        self.integral_now = integral_now
+        # Renormalize the smoother function.
+        self.norm = 1 - integral_before + integral_now
+        
+    def _log_pdf(self,x):
+        '''
+        Evaluates the log_pdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_pdf
+        
+        Returns
+        -------
+        log_pdf: xp.array
+        '''
+        xp = get_module_array(x)
+        # Return the window function
+        window = _highpass_filter(x, self.bottom,self.bottom_smooth)
+        # The line below might raise warnings for log(0), however python is able to handle it.
+        prob_ret = self.origin_prob.log_pdf(x)+xp.log(window)-xp.log(self.norm)
+        return prob_ret
+
+    def _pdf(self,x):
+        xp = get_module_array(x)
+        return xp.exp(self._log_pdf(x))
+
+class SmoothedPlusDipProb(basic_1dimpdf):
+    def __init__(self, originprob, bottomsmooth, topsmooth, leftdip, rightdip, leftdipsmooth, rightdipsmooth, deep):
+        '''
+        Class for a smoother probability and a well that could represent a forbidden zone of the spectrum
+        
+        Parameters
+        ----------
+        originprob: class
+            Original probability
+        bottomsmooth: float
+            high pass window
+        topsmooth: float
+            low pass window
+        leftdip: float
+            Where to find the start of the dip
+        rightdip: float
+            Where to find the end of the dip
+        leftdipsmooth: float 
+            The window size for the left part of the smooth
+        rightdipsmooth: float
+            The window size for the right part of the smooth
+        deep: float
+            The fraction of pdf to suppress in the dip.
+        '''
+        
+        self.origin_prob = copy.deepcopy(originprob)
+        self.bottom_smooth = bottomsmooth
+        self.bottom = originprob.minval
+        self.top_smooth = topsmooth   
+        self.top = originprob.maxval
+        self.left_dip = leftdip
+        self.left_dip_smooth = leftdipsmooth
+        self.right_dip = rightdip
+        self.right_dip_smooth = rightdipsmooth
+        self.deep = deep
+        super().__init__(originprob.minval,originprob.maxval)
+
+        # Find the values of the integrals in the region of the window function before and after the smoothing
+        int_array = np.linspace(originprob.minval,originprob.minval+bottomsmooth,1000)
+        integral_before = np.trapz(self.origin_prob.pdf(int_array),int_array)
+        integral_now = np.trapz(self.origin_prob.pdf(int_array)*_highpass_filter(int_array, self.bottom,self.bottom_smooth)*_lowpass_filter(int_array, self.top, self.top_smooth)*_notch_filter(int_array, self.left_dip, self.left_dip_smooth, self.right_dip, self.right_dip_smooth, self.deep), int_array)
+        
+        int_array = np.linspace(leftdip,rightdip,1000)
+        integral_before2 = np.trapz(self.origin_prob.pdf(int_array),int_array)
+        integral_now2 = np.trapz(self.origin_prob.pdf(int_array)*_highpass_filter(int_array, self.bottom,self.bottom_smooth)*_lowpass_filter(int_array, self.top, self.top_smooth)*_notch_filter(int_array, self.left_dip, self.left_dip_smooth, self.right_dip, self.right_dip_smooth, self.deep), int_array)
+                       
+        int_array = np.linspace(originprob.maxval-topsmooth,originprob.maxval,1000)
+        integral_before3 = np.trapz(self.origin_prob.pdf(int_array),int_array)
+        integral_now3 = np.trapz(self.origin_prob.pdf(int_array)*_highpass_filter(int_array, self.bottom,self.bottom_smooth)*_lowpass_filter(int_array, self.top,self.top_smooth)*_notch_filter(int_array,     
+                        self.left_dip, self.left_dip_smooth, self.right_dip, self.right_dip_smooth, self.deep), int_array)
+
+        self.integral_before = integral_before 
+        self.integral_now = integral_now 
+        self.integral_before2 = integral_before2 
+        self.integral_now2 = integral_now2 
+        self.integral_before3 = integral_before3
+        self.integral_now3 = integral_now3
+        self.integral_before_tot = integral_before + integral_before2 + integral_before3
+        self.integral_now_tot = integral_now + integral_now2 + integral_now3
+        # Renormalize the smoother+dip function.
+        self.norm = 1 - self.integral_before_tot + self.integral_now_tot
+
+        self.x_eval_cpu = np.linspace(self.bottom,self.bottom+self.bottom_smooth,1000)
+        self.cdf_numeric_cpu = np.cumsum(self.pdf((self.x_eval_cpu[:-1:]+self.x_eval_cpu[1::])*0.5))*(self.x_eval_cpu[1::]-self.x_eval_cpu[:-1:])
+        
+        self.x_eval2_cpu = np.linspace(self.left_dip,self.right_dip ,1000)
+        self.cdf_numeric2_cpu = (self.integral_now + self.origin_prob.cdf(np.array([self.left_dip])) - self.integral_before)/(self.norm) + np.cumsum(self.pdf((self.x_eval2_cpu[:-1:]+self.x_eval2_cpu[1::])*0.5))*(self.x_eval2_cpu[1::]-self.x_eval2_cpu[:-1:])
+        
+        self.x_eval3_cpu = np.linspace(self.top-self.top_smooth, self.top ,1000)
+        self.cdf_numeric3_cpu = (self.integral_now + self.integral_now2 + self.origin_prob.cdf(np.array([self.top-self.top_smooth])) - self.integral_before - self.integral_before2 )/self.norm + np.cumsum(self.pdf((self.x_eval3_cpu[:-1:]+self.x_eval3_cpu[1::])*0.5))*(self.x_eval3_cpu[1::]-self.x_eval3_cpu[:-1:])
+
+        self.x_eval_gpu = np2cp(self.x_eval_cpu)
+        self.cdf_numeric_gpu = np2cp(self.cdf_numeric_cpu)
+
+        self.x_eval2_gpu = np2cp(self.x_eval2_cpu)
+        self.cdf_numeric2_gpu = np2cp(self.cdf_numeric2_cpu)
+
+        self.x_eval3_gpu = np2cp(self.x_eval3_cpu)
+        self.cdf_numeric3_gpu = np2cp(self.cdf_numeric3_cpu)
+        
+    def _log_pdf(self,x):
+        '''
+        Evaluates the log_pdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_pdf
+        
+        Returns
+        -------
+        log_pdf: xp.array
+        '''
+        xp = get_module_array(x)
+        highpass_filter = _highpass_filter(x, self.bottom,self.bottom_smooth)
+        lowpass_filter = _lowpass_filter(x, self.top, self.top_smooth)
+        notch_filter = _notch_filter(x, self.left_dip, self.left_dip_smooth, self.right_dip, self.right_dip_smooth, self.deep)
+        prob_ret = self.origin_prob.log_pdf(x)+xp.log(highpass_filter)+xp.log(lowpass_filter)+xp.log(notch_filter)-xp.log(self.norm)
+        return prob_ret
+
+    def _log_cdf(self,x):
+        '''
+        Evaluates the log_cdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_cdf
+        
+        Returns
+        -------
+        log_cdf: xp.array
+        '''
+
+        xp = get_module_array(x)
+        if iscupy(x):
+            cdf_numeric = self.cdf_numeric_gpu
+            x_eval = self.x_eval_gpu
+            cdf_numeric2 = self.cdf_numeric2_gpu
+            x_eval2 = self.x_eval2_gpu
+            cdf_numeric3 = self.cdf_numeric3_gpu
+            x_eval3 = self.x_eval3_gpu
+        else:
+            cdf_numeric = self.cdf_numeric_cpu
+            x_eval = self.x_eval_cpu
+            cdf_numeric2 = self.cdf_numeric2_cpu
+            x_eval2 = self.x_eval2_cpu
+            cdf_numeric3 = self.cdf_numeric3_cpu
+            x_eval3 = self.x_eval3_cpu
+
+        origin=x.shape
+        ravelled=xp.ravel(x)
+        
+        toret = xp.ones_like(ravelled)
+        
+        toret[ravelled<self.bottom] = 0.
+        
+        toret[(ravelled>=self.bottom) & (ravelled<(self.bottom+self.bottom_smooth))] = xp.interp(ravelled[(ravelled>=self.bottom) & (ravelled<(self.bottom+self.bottom_smooth))], (x_eval[:-1:]+x_eval[1::])*0.5,cdf_numeric) 
+        
+        toret[(ravelled>=(self.bottom+self.bottom_smooth)) & (ravelled<self.left_dip)] = (self.integral_now+self.origin_prob.cdf(ravelled[(ravelled>=(self.bottom+self.bottom_smooth)) & (ravelled<self.left_dip)])-self.integral_before)/self.norm
+        
+        toret[(ravelled>=self.left_dip) & (ravelled<self.right_dip)] = xp.interp(ravelled[(ravelled>=self.left_dip) & (ravelled<self.right_dip)], (x_eval2[:-1:]+x_eval2[1::])*0.5, cdf_numeric2)
+                       
+        toret[ (ravelled>=self.right_dip) & (ravelled<(self.top-self.top_smooth)) ] = (self.integral_now+self.integral_now2+self.origin_prob.cdf(ravelled[(ravelled>=self.right_dip) & (ravelled<(self.top-self.top_smooth))])-self.integral_before-self.integral_before2)/self.norm
+        
+        toret[ravelled>=(self.top-self.top_smooth)] = xp.interp(ravelled[ravelled>=(self.top-self.top_smooth)], (x_eval3[:-1:]+x_eval3[1::])*0.5,cdf_numeric3)
+        
+        return xp.log(toret).reshape(origin)
 
 # LVK Reviewed
 def PL_normfact(minpl,maxpl,alpha):
@@ -475,6 +856,41 @@ def PL_normfact(minpl,maxpl,alpha):
     else:
         norm_fact=(np.power(maxpl,alpha+1.)-np.power(minpl,alpha+1))/(alpha+1)
     return norm_fact
+
+class EvolvingPowerLawPeak(object):
+
+    def __init__(self,mass_wrapper,zt,delta_zt,mu_z0,mu_z1,sigma_z0,sigma_z1):
+        self.mass_wrapper = mass_wrapper
+        self.zt = zt
+        self.delta_zt = delta_zt
+        self.mu_z0 = mu_z0
+        self.mu_z1 = mu_z1
+        self.sigma_z0 = sigma_z0
+        self.sigma_z1 = sigma_z1
+
+    def pdf(self,x,z):
+        xp = get_module_array(x)
+        wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
+        muz = self.mu_z0+self.mu_z1*z
+        sigmaz = self.sigma_z0+self.sigma_z1*z
+        gaussian = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((x-muz)/sigmaz,2.))
+        toret = wz*self.mass_wrapper.pdf(x) + (1-wz)*gaussian   # w(z)*PL + (1-w(z))*G(mug(z),sigmag(z))
+        return toret
+    
+    def log_pdf(self,x,z):
+        xp = get_module_array(x)
+        return xp.log(self.pdf(x,z))
+    
+    def pdf_z_marginalized(self,x,z):
+        xp = get_module_array(x)
+        z_array = np.linspace(z.min(),z.max(),1000)
+        toret   = xp.trapz(self.pdf(x,z), z_array, axis=0)
+        return toret
+    
+    def log_pdf_z_marginalized(self,x,z):
+        xp = get_module_array(x)
+        toret   = xp.log(self.pdf_z_marginalized(x,z))
+        return toret
 
 # LVK Reviewed
 class PowerLaw(basic_1dimpdf):
@@ -716,6 +1132,57 @@ class TruncatedGaussian(basic_1dimpdf):
         min_point = (self.ming-self.meang)/(self.sigmag*xp.sqrt(2.))
         toret = xp.log((0.5*sx.special.erf(max_point)-0.5*sx.special.erf(min_point))/self.norm_fact)
         return toret
+    
+class PositiveGaussian(basic_1dimpdf):
+    
+    def __init__(self,meang,sigmag,ming,maxg):
+        '''
+        Class for a Truncated gaussian probability
+        
+        Parameters
+        ----------
+        meang,sigmag,ming,maxg: float
+            mean, sigma, min value and max value for the gaussian
+        '''
+        super().__init__(ming,maxg)
+        self.meang,self.sigmag,self.ming,self.maxg=meang,sigmag,ming,maxg
+        self.norm_fact= get_gaussian_norm(ming,maxg,meang,sigmag)
+        
+    def _log_pdf(self,x):
+        '''
+        Evaluates the log_pdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_pdf
+        
+        Returns
+        -------
+        log_pdf: xp.array
+        '''
+        xp = get_module_array(x)
+        return xp.log(self.sigmag)-0.5*xp.log(2*xp.pi)-0.5*xp.power((x-self.meang)/self.sigmag,2.)-xp.log(self.norm_fact)
+    
+    def _log_cdf(self,x):
+        '''
+        Evaluates the log_cdf
+        
+        Parameters
+        ----------
+        x: xp.array
+            where to evaluate the log_cdf
+        
+        Returns
+        -------
+        log_cdf: xp.array
+        '''
+        xp = get_module_array(x)
+        sx = get_module_array_scipy(x)
+        max_point = (x-self.meang)/(self.sigmag*xp.sqrt(2.))
+        min_point = (self.ming-self.meang)/(self.sigmag*xp.sqrt(2.))
+        return xp.log((0.5*sx.special.erf(max_point)-0.5*sx.special.erf(min_point))/self.norm_fact)
+
 
 # Overwrite most of the methods of the parent class
 # Idea from https://stats.stackexchange.com/questions/30588/deriving-the-conditional-distributions-of-a-multivariate-normal-distribution
@@ -847,6 +1314,7 @@ class PowerLawGaussian(basic_1dimpdf):
         xp = get_module_array(x)
         toret=xp.log((1-self.lambdag)*self.PL.cdf(x)+self.lambdag*self.TG.cdf(x))
         return toret
+
 
 # LVK Reviewed
 class BrokenPowerLaw(basic_1dimpdf):
@@ -1122,6 +1590,8 @@ class piecewise_constant_2d_distribution_normalized():
         the 1d domain and if x1 < x2 (elementwise). 
         
         """
+
+        xp = get_module_array(x1)
 
         # check whether x1 (or x2) is elementwise outside the domain
         x1_outside = self.outside_domain_1d(x1)

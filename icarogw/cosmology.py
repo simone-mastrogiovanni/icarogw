@@ -2,6 +2,7 @@ from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, is
 from icarogw import cupy_pal
 from scipy.integrate import cumtrapz
 import mpmath
+import scipy.stats, scipy.misc
 
 COST_C= 299792.458 # Speed of light in km/s
 
@@ -377,11 +378,11 @@ class galaxy_MF(object):
         if band is None:
             self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=Mmin,Mmax,Mstar,alpha,phistar
         else:
-            if band=='W1':
+            if (band=='W1-glade+') | (band=='W1-upglade'):
                 self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-28, -16.6, -24.09, -1.12, 1.45e-2*1e9
-            elif band=='bJ':
+            elif band=='bJ-glade+':
                 self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-22.00, -16.5, -19.66, -1.21, 1.61e-2*1e9
-            elif band=='K':
+            elif band=='K-glade+':
                 self.Mmin,self.Mmax,self.Mstar,self.alpha,self.phistar=-27.0, -19.0, -23.39, -1.09, 1.16e-2*1e9
             else:
                 raise ValueError('Band not known')
@@ -544,46 +545,7 @@ class galaxy_MF(object):
                            ,left=effective_density_interpolant[0],right=effective_density_interpolant[-1])
         return xp.reshape(outp,origin)
 
-# LVK Reviewed
-class kcorr(object):
-    def __init__(self,band):
-        '''
-        A class to handle K-corrections
-        
-        Parameters
-        ----------
-        band: string
-            W1, K or bJ band. Others are not implemented
-        '''
-        self.band=band
-        if self.band not in ['W1','K','bJ']:
-            raise ValueError('Band not known, please use W1 or K or bJ')
-    def __call__(self,z):
-        '''
-        Evaluates the K-corrections at a given redshift, See Eq. 2 of https://arxiv.org/abs/astro-ph/0210394
-        
-        Parameters
-        ----------
-        z: xp.array
-            Redshift
-        
-        Returns
-        -------
-        k_corrections: xp.array
-        '''
-        xp = get_module_array(z)
-        if self.band == 'W1':
-            k_corr = -1*(4.44e-2+2.67*z+1.33*(z**2.)-1.59*(z**3.)) #From Maciej email
-        elif self.band == 'K':
-            # https://iopscience.iop.org/article/10.1086/322488/pdf 4th page lhs
-            to_ret=-6.0*xp.log10(1+z)
-            to_ret[z>0.3]=-6.0*xp.log10(1+0.3)
-            k_corr=-6.0*xp.log10(1+z)
-        elif self.band == 'bJ':
-            # Fig 5 caption from https://arxiv.org/pdf/astro-ph/0111011.pdf
-            # Note that these corrections also includes evolution corrections
-            k_corr=(z+6*xp.power(z,2.))/(1+15.*xp.power(z,3.))
-        return k_corr
+
 
 # LVK Reviewed
 class basic_redshift_rate(object):
@@ -624,7 +586,62 @@ class md_rate(basic_redshift_rate):
     def log_evaluate(self,z):
         xp = get_module_array(z)
         return xp.log1p(xp.power(1+self.zp,-self.gamma-self.kappa))+self.gamma*xp.log1p(z)-xp.log1p(xp.power((1+z)/(1+self.zp),self.gamma+self.kappa))
+    
+class md_gamma_rate(basic_redshift_rate):
+    '''
+    Class for a MD + gamma distribution redshift rate
+    '''
+    def __init__(self, gamma, kappa, zp, a, b, c):
+        self.gamma = gamma
+        self.kappa = kappa
+        self.zp    = zp
+        self.a     = a
+        self.b     = b
+        self.c     = c
+    def log_evaluate(self,z):
+        xp = get_module_array(z)
+        md_dist    = xp.log1p(xp.power(1+self.zp,-self.gamma-self.kappa))+self.gamma*xp.log1p(z)-xp.log1p(xp.power((1+z)/(1+self.zp),self.gamma+self.kappa))
+        gamma_dist = self.c * scipy.stats.gamma.pdf(self.b * z, self.a)
+        return md_dist + gamma_dist
 
+class beta_rate():
+    '''
+    Class for a beta distribution redshift rate
+    '''
+    def __init__(self,a,b,c):
+        self.a = a
+        self.b = b
+        self.c = c
+    def log_evaluate(self,z):
+        return self.c * scipy.stats.beta.pdf(z, self.a, self.b)    # We want the log(rate) to be a beta distribution
+
+class beta_rate_line():
+    '''
+    Class for a beta distribution redshift rate with a line C1 attached from z=d
+    '''
+    def __init__(self,a,b,c,d):
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+    def beta_array(self,z):
+        return self.c * scipy.stats.beta.pdf(z, self.a, self.b)    # We want the log(rate) to be a beta distribution
+    def log_evaluate(self,z):
+        xp = get_module_array(z)
+        left = self.beta_array(z)
+        right = scipy.misc.derivative(self.beta_array, self.d, dx=1e-6) * (z - self.d) + self.beta_array(self.d)
+        if z.ndim == 1:
+            res = xp.empty(len(z))
+            idx = xp.array([z <= self.d]).sum()  
+            res[:idx] = left[ z <= self.d]
+            res[idx:] = right[z >  self.d]
+        else:
+            res = xp.empty((len(z), len(z[0])))
+            for i,zi in enumerate(z):
+                idx = xp.array([zi <= self.d]).sum()
+                res[i][:idx] = left[i][ zi <= self.d]
+                res[i][idx:] = right[i][zi >  self.d]
+        return res
 
 # LVK Reviewed
 class basic_absM_rate(object):

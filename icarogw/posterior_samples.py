@@ -1,5 +1,6 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .conversions import radec2indeces
+from .utils import check_posterior_samples_and_prior
 
 # LVK Reviewed
 class posterior_samples_catalog(object):
@@ -103,6 +104,19 @@ class posterior_samples_catalog(object):
         '''
         for i,event in enumerate(list(self.posterior_samples_dict.keys())):
             self.posterior_samples_dict[event].pixelize(nside)
+
+    def pixelize_with_catalog(self,catalog):
+        '''
+        This method pixelize the posterior samples using the UNIQ scheme by a MOC 
+        map of the galaxy catalog
+
+        Parameters
+        ----------
+        catalog: class
+            icarogw catalog class
+        '''
+        for i,event in enumerate(list(self.posterior_samples_dict.keys())):
+            self.posterior_samples_dict[event].pixelize_with_catalog(catalog)
             
     def reweight_PE(self,rate_wrapper,Nsamp,replace=True):
         '''
@@ -137,6 +151,8 @@ class posterior_samples(object):
         prior: np.array
             Prior to use in order to reweight posterior samples written in the same variables that you provide, e.g. if you provide d_l and m1d, then p(d_l,m1d)
         '''
+        check_posterior_samples_and_prior(posterior_dict, prior)
+
         self.posterior_data={key: posterior_dict[key] for key in posterior_dict.keys()}
         self.posterior_data['prior']=prior
         self.nsamples=len(prior)
@@ -152,6 +168,9 @@ class posterior_samples(object):
         '''
         self.posterior_data['sky_indices'] = radec2indeces(self.posterior_data['right_ascension'],self.posterior_data['declination'],nside)
         self.nside=nside
+
+    def pixelize_with_catalog(self,catalog):
+        self.posterior_data['sky_indices'] = catalog.get_NUNIQ_pixel(self.posterior_data['right_ascension'],self.posterior_data['declination'])
         
     def cupyfy(self):
         ''' Converts all the posterior samples to cupy'''
