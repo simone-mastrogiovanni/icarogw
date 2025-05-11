@@ -905,7 +905,7 @@ class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
 
     def __init__(self, redshift_transition = 'linear', flag_powerlaw_smoothing = 1, flag_redshift_mixture = 1):
         
-        self.population_parameters   = ['alpha', 'mmin', 'mmax', 'mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mix_alpha_z0', 'mix_beta_z0']
+        self.population_parameters   = ['alpha', 'mmin', 'mmax', 'mu_a_z0', 'mu_a_z1', 'sigma_a_z0', 'sigma_a_z1', 'mu_b_z0', 'mu_b_z1', 'sigma_b_z0', 'sigma_b_z1', 'mix_alpha_z0', 'mix_beta_z0']
         self.redshift_transition     = redshift_transition
         self.flag_powerlaw_smoothing = flag_powerlaw_smoothing
         self.flag_redshift_mixture   = flag_redshift_mixture
@@ -920,14 +920,14 @@ class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
         self.alpha        = kwargs['alpha']
         self.mmin         = kwargs['mmin']
         self.mmax         = kwargs['mmax']
-        self.mu_z0_a      = kwargs['mu_z0_a']
-        self.mu_z1_a      = kwargs['mu_z1_a']
-        self.sigma_z0_a   = kwargs['sigma_z0_a']
-        self.sigma_z1_a   = kwargs['sigma_z1_a']
-        self.mu_z0_b      = kwargs['mu_z0_b']
-        self.mu_z1_b      = kwargs['mu_z1_b']
-        self.sigma_z0_b   = kwargs['sigma_z0_b']
-        self.sigma_z1_b   = kwargs['sigma_z1_b']
+        self.mu_a_z0      = kwargs['mu_a_z0']
+        self.mu_a_z1      = kwargs['mu_a_z1']
+        self.sigma_a_z0   = kwargs['sigma_a_z0']
+        self.sigma_a_z1   = kwargs['sigma_a_z1']
+        self.mu_b_z0      = kwargs['mu_b_z0']
+        self.mu_b_z1      = kwargs['mu_b_z1']
+        self.sigma_b_z0   = kwargs['sigma_b_z0']
+        self.sigma_b_z1   = kwargs['sigma_b_z1']
         self.mix_alpha_z0 = kwargs['mix_alpha_z0']
         self.mix_beta_z0  = kwargs['mix_beta_z0']
 
@@ -956,8 +956,8 @@ class PowerLaw_GaussianRedshiftLinear_GaussianRedshiftLinear():
         powerlaw_class = PowerLawStationary(self.alpha, self.mmin, self.mmax)
         # Add left smoothing to the evolving PowerLaw.
         if self.flag_powerlaw_smoothing: powerlaw_class = LowpassSmoothedProb(powerlaw_class, self.delta_m)
-        gaussian_a_class = GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin)
-        gaussian_b_class = GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin)
+        gaussian_a_class = GaussianLinear(z, self.mu_a_z0, self.mu_a_z1, self.sigma_a_z0, self.sigma_a_z1, self.mmin)
+        gaussian_b_class = GaussianLinear(z, self.mu_b_z0, self.mu_b_z1, self.sigma_b_z0, self.sigma_b_z1, self.mmin)
         powerlaw_part    = powerlaw_class.pdf(m)
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
@@ -1074,6 +1074,8 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear():
 
         if self.flag_redshift_mixture:
             self.population_parameters += ['mix_alpha_z1', 'mix_beta_z1']
+        if self.flag_powerlaw_smoothing:
+            self.population_parameters += ['delta_m_a', 'delta_m_b', 'delta_m_c']
 
     def update(self,**kwargs):
 
@@ -1101,6 +1103,10 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear():
         if self.flag_redshift_mixture:
             self.mix_alpha_z1 = kwargs['mix_alpha_z1']
             self.mix_beta_z1  = kwargs['mix_beta_z1']
+        if self.flag_powerlaw_smoothing:
+            self.delta_m_a    = kwargs['delta_m_a']
+            self.delta_m_b    = kwargs['delta_m_b']
+            self.delta_m_c    = kwargs['delta_m_c']
 
     def pdf(self,m,z):
 
@@ -1118,6 +1124,13 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_PowerLawRedshiftLinear():
         powerlaw_class_a = PowerLawLinear(z, self.alpha_a_z0, self.alpha_a_z1, self.mmin_a_z0, self.mmin_a_z1, self.mmax_a_z0, self.mmax_a_z1)
         powerlaw_class_b = PowerLawLinear(z, self.alpha_b_z0, self.alpha_b_z1, self.mmin_b_z0, self.mmin_b_z1, self.mmax_b_z0, self.mmax_b_z1)
         powerlaw_class_c = PowerLawLinear(z, self.alpha_c_z0, self.alpha_c_z1, self.mmin_c_z0, self.mmin_c_z1, self.mmax_c_z0, self.mmax_c_z1)
+        # Add left smoothing to the evolving PowerLaw.
+        # WARNING: The implementation is very slow, because the integral to normalise the windowed
+        # distribution p(m1|z) needs to be computed at all redshifts corresponding to the PE samples and injections.
+        if self.flag_powerlaw_smoothing:
+            powerlaw_class_a = LowpassSmoothedProbEvolving(powerlaw_class_a, self.delta_m_a)
+            powerlaw_class_b = LowpassSmoothedProbEvolving(powerlaw_class_b, self.delta_m_b)
+            powerlaw_class_c = LowpassSmoothedProbEvolving(powerlaw_class_c, self.delta_m_c)
         powerlaw_part_a  = powerlaw_class_a.pdf(m)
         powerlaw_part_b  = powerlaw_class_b.pdf(m)
         powerlaw_part_c  = powerlaw_class_c.pdf(m)
@@ -1156,6 +1169,8 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear():
 
         if self.flag_redshift_mixture:
             self.population_parameters += ['mix_alpha_z1', 'mix_beta_z1']
+        if self.flag_powerlaw_smoothing:
+            self.population_parameters += ['delta_m_a', 'delta_m_b']
 
     def update(self,**kwargs):
 
@@ -1181,6 +1196,9 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear():
         if self.flag_redshift_mixture:
             self.mix_alpha_z1 = kwargs['mix_alpha_z1']
             self.mix_beta_z1  = kwargs['mix_beta_z1']
+        if self.flag_powerlaw_smoothing:
+            self.delta_m_a    = kwargs['delta_m_a']
+            self.delta_m_b    = kwargs['delta_m_b']
 
     def pdf(self,m,z):
 
@@ -1198,6 +1216,12 @@ class PowerLawRedshiftLinear_PowerLawRedshiftLinear_GaussianRedshiftLinear():
         powerlaw_class_a = PowerLawLinear(z, self.alpha_a_z0, self.alpha_a_z1, self.mmin_a_z0, self.mmin_a_z1, self.mmax_a_z0, self.mmax_a_z1)
         powerlaw_class_b = PowerLawLinear(z, self.alpha_b_z0, self.alpha_b_z1, self.mmin_b_z0, self.mmin_b_z1, self.mmax_b_z0, self.mmax_b_z1)
         gaussian_class   = GaussianLinear(z, self.mu_z0, self.mu_z1, self.sigma_z0, self.sigma_z1, self.mmin_a_z0)
+        # Add left smoothing to the evolving PowerLaw.
+        # WARNING: The implementation is very slow, because the integral to normalise the windowed
+        # distribution p(m1|z) needs to be computed at all redshifts corresponding to the PE samples and injections.
+        if self.flag_powerlaw_smoothing:
+            powerlaw_class_a = LowpassSmoothedProbEvolving(powerlaw_class_a, self.delta_m_a)
+            powerlaw_class_b = LowpassSmoothedProbEvolving(powerlaw_class_b, self.delta_m_b)
         powerlaw_part_a  = powerlaw_class_a.pdf(m)
         powerlaw_part_b  = powerlaw_class_b.pdf(m)
         gaussian_part    = gaussian_class.pdf(m)
@@ -1227,7 +1251,7 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
 
     def __init__(self, redshift_transition = 'linear', flag_redshift_mixture = 1):
         
-        self.population_parameters = ['mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mix_z0', 'mmin_g']
+        self.population_parameters = ['mu_a_z0', 'mu_a_z1', 'sigma_a_z0', 'sigma_a_z1', 'mu_b_z0', 'mu_b_z1', 'sigma_b_z0', 'sigma_b_z1', 'mix_z0', 'mmin_g']
         self.redshift_transition   = redshift_transition
         self.flag_redshift_mixture = flag_redshift_mixture
         
@@ -1237,14 +1261,14 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
 
     def update(self,**kwargs):
 
-        self.mu_z0_a    = kwargs['mu_z0_a']
-        self.mu_z1_a    = kwargs['mu_z1_a']
-        self.sigma_z0_a = kwargs['sigma_z0_a']
-        self.sigma_z1_a = kwargs['sigma_z1_a']
-        self.mu_z0_b    = kwargs['mu_z0_b']
-        self.mu_z1_b    = kwargs['mu_z1_b']
-        self.sigma_z0_b = kwargs['sigma_z0_b']
-        self.sigma_z1_b = kwargs['sigma_z1_b']
+        self.mu_a_z0    = kwargs['mu_a_z0']
+        self.mu_a_z1    = kwargs['mu_a_z1']
+        self.sigma_a_z0 = kwargs['sigma_a_z0']
+        self.sigma_a_z1 = kwargs['sigma_a_z1']
+        self.mu_b_z0    = kwargs['mu_b_z0']
+        self.mu_b_z1    = kwargs['mu_b_z1']
+        self.sigma_b_z0 = kwargs['sigma_b_z0']
+        self.sigma_b_z1 = kwargs['sigma_b_z1']
         self.mix_z0     = kwargs['mix_z0']
         self.mmin_g     = kwargs['mmin_g']
 
@@ -1265,8 +1289,8 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear():
         else:
             wz = self.mix_z0
 
-        gaussian_a_class = GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin_g)
-        gaussian_b_class = GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin_g)
+        gaussian_a_class = GaussianLinear(z, self.mu_a_z0, self.mu_a_z1, self.sigma_a_z0, self.sigma_a_z1, self.mmin_g)
+        gaussian_b_class = GaussianLinear(z, self.mu_b_z0, self.mu_b_z1, self.sigma_b_z0, self.sigma_b_z1, self.mmin_g)
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
 
@@ -1296,7 +1320,7 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
 
     def __init__(self, redshift_transition = 'linear', flag_redshift_mixture = 1):
 
-        self.population_parameters = ['mu_z0_a', 'mu_z1_a', 'sigma_z0_a', 'sigma_z1_a', 'mu_z0_b', 'mu_z1_b', 'sigma_z0_b', 'sigma_z1_b', 'mu_z0_c', 'mu_z1_c', 'sigma_z0_c', 'sigma_z1_c', 'mix_alpha_z0', 'mix_beta_z0', 'mmin_g']
+        self.population_parameters = ['mu_a_z0', 'mu_a_z1', 'sigma_a_z0', 'sigma_a_z1', 'mu_b_z0', 'mu_b_z1', 'sigma_b_z0', 'sigma_b_z1', 'mu_c_z0', 'mu_c_z1', 'sigma_c_z0', 'sigma_c_z1', 'mix_alpha_z0', 'mix_beta_z0', 'mmin_g']
         self.redshift_transition   = redshift_transition
         self.flag_redshift_mixture = flag_redshift_mixture
 
@@ -1306,18 +1330,18 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
 
     def update(self,**kwargs):
 
-        self.mu_z0_a      = kwargs['mu_z0_a']
-        self.mu_z1_a      = kwargs['mu_z1_a']
-        self.sigma_z0_a   = kwargs['sigma_z0_a']
-        self.sigma_z1_a   = kwargs['sigma_z1_a']
-        self.mu_z0_b      = kwargs['mu_z0_b']
-        self.mu_z1_b      = kwargs['mu_z1_b']
-        self.sigma_z0_b   = kwargs['sigma_z0_b']
-        self.sigma_z1_b   = kwargs['sigma_z1_b']
-        self.mu_z0_c      = kwargs['mu_z0_c']
-        self.mu_z1_c      = kwargs['mu_z1_c']
-        self.sigma_z0_c   = kwargs['sigma_z0_c']
-        self.sigma_z1_c   = kwargs['sigma_z1_c']
+        self.mu_a_z0      = kwargs['mu_a_z0']
+        self.mu_a_z1      = kwargs['mu_a_z1']
+        self.sigma_a_z0   = kwargs['sigma_a_z0']
+        self.sigma_a_z1   = kwargs['sigma_a_z1']
+        self.mu_b_z0      = kwargs['mu_b_z0']
+        self.mu_b_z1      = kwargs['mu_b_z1']
+        self.sigma_b_z0   = kwargs['sigma_b_z0']
+        self.sigma_b_z1   = kwargs['sigma_b_z1']
+        self.mu_c_z0      = kwargs['mu_c_z0']
+        self.mu_c_z1      = kwargs['mu_c_z1']
+        self.sigma_c_z0   = kwargs['sigma_c_z0']
+        self.sigma_c_z1   = kwargs['sigma_c_z1']
         self.mix_alpha_z0 = kwargs['mix_alpha_z0']
         self.mix_beta_z0  = kwargs['mix_beta_z0']
         self.mmin_g       = kwargs['mmin_g']
@@ -1343,9 +1367,9 @@ class GaussianRedshiftLinear_GaussianRedshiftLinear_GaussianRedshiftLinear():
             wz_alpha = self.mix_alpha_z0
             wz_beta  = self.mix_beta_z0
 
-        gaussian_a_class = GaussianLinear(z, self.mu_z0_a, self.mu_z1_a, self.sigma_z0_a, self.sigma_z1_a, self.mmin_g)
-        gaussian_b_class = GaussianLinear(z, self.mu_z0_b, self.mu_z1_b, self.sigma_z0_b, self.sigma_z1_b, self.mmin_g)
-        gaussian_c_class = GaussianLinear(z, self.mu_z0_c, self.mu_z1_c, self.sigma_z0_c, self.sigma_z1_c, self.mmin_g)
+        gaussian_a_class = GaussianLinear(z, self.mu_a_z0, self.mu_a_z1, self.sigma_a_z0, self.sigma_a_z1, self.mmin_g)
+        gaussian_b_class = GaussianLinear(z, self.mu_b_z0, self.mu_b_z1, self.sigma_b_z0, self.sigma_b_z1, self.mmin_g)
+        gaussian_c_class = GaussianLinear(z, self.mu_c_z0, self.mu_c_z1, self.sigma_c_z0, self.sigma_c_z1, self.mmin_g)
         gaussian_a_part  = gaussian_a_class.pdf(m)
         gaussian_b_part  = gaussian_b_class.pdf(m)
         gaussian_c_part  = gaussian_c_class.pdf(m)
