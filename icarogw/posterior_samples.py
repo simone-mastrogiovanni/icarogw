@@ -33,7 +33,7 @@ class posterior_samples_catalog(object):
         nsamps=np.array([self.posterior_samples_dict[key].nsamples for key in self.posterior_samples_dict.keys()])        
         self.nparallel=nparallel
         llev=list(self.posterior_samples_dict.keys()) # Name of events
-        print('Using {:d} samples from each {:d} posteriors'.format(self.nparallel,self.n_ev))
+        print('\n\tUsing {:d} samples from each of the {:d} event posteriors.'.format(self.nparallel,self.n_ev))
         
         key = list(self.posterior_samples_dict[llev[0]].posterior_data.keys())[0]
         xp = get_module_array(self.posterior_samples_dict[llev[0]].posterior_data[key])
