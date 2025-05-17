@@ -899,31 +899,53 @@ def detector2source(mass1,mass2,dl,cosmology):
 # LVK Reviewed
 def detector2source_jacobian(z, cosmology):
     '''
-    Calculates the detector frame to source frame Jacobian d_det/d_sour
+    Calculates the detector frame to source frame Jacobian d_det/d_sour.
+
+    |J_d->s| = |J_(m1d, m2d, dL)->(m1s, m2s, z)| = (1+z)^2 ddL/dz
 
     Parameters
     ----------
-    z: xp. arrays
-        Redshift
+    z:      xp. arrays
+            Redshift
     cosmo:  class from the cosmology module
-        Cosmology class from the cosmology module
+            Cosmology class from the cosmology module
     '''
-    xp=get_module_array(z)
-    return xp.abs(xp.power(1+z,2.)*cosmology.ddl_by_dz_at_z(z))
+    xp = get_module_array(z)
+    return xp.abs( xp.power(1+z, 2.) * cosmology.ddl_by_dz_at_z(z) )
 
 def detector2source_jacobian_q(z, cosmology):
     '''
-    Calculates the detector frame to source frame Jacobian d_det/d_sour
+    Calculates the detector frame to source frame Jacobian d_det/d_sour.
+
+    |J_d->s| = |J_(m1d, q, dL)->(m1s, q, z)| = (1+z) ddL/dz
 
     Parameters
     ----------
-    z: xp. arrays
-        Redshift
+    z:      xp. arrays
+            Redshift
+    ms1:    xp. arrays
+            Primary mass in the source frame
     cosmo:  class from the cosmology module
-        Cosmology class from the cosmology module
+            Cosmology class from the cosmology module
     '''
-    xp=get_module_array(z)
-    return xp.abs(xp.power(1+z,1.)*cosmology.ddl_by_dz_at_z(z))
+    xp = get_module_array(z)
+    return xp.abs( (1+z) * cosmology.ddl_by_dz_at_z(z) )
+
+def detector2source_jacobian_single_mass(z, cosmology):
+    '''
+    Calculates the detector frame to source frame Jacobian d_det/d_sour.
+
+    |J_d->s| = |J_(md, dL)->(ms, z)| = (1+z) ddL/dz
+
+    Parameters
+    ----------
+    z:      xp. arrays
+            Redshift
+    cosmo:  class from the cosmology module
+            Cosmology class from the cosmology module
+    '''
+    xp = get_module_array(z)
+    return xp.abs( (1+z) * cosmology.ddl_by_dz_at_z(z) )
 
 # LVK Reviewed
 def source2detector_jacobian(z, cosmology):

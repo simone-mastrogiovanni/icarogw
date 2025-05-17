@@ -1,11 +1,12 @@
 from .cupy_pal import *
 from .cosmology import astropycosmology
-from .wrappers import massprior_PowerLawPeak
+from .wrappers import massprior_PowerLawPeak, m1m2_conditioned
 from .wrappers import *
 from scipy import stats
 from scipy import interpolate
 from astropy.cosmology import Planck15
 from tqdm import tqdm as _tqdm
+import astropy
 
 def chirp_mass_det(m1,m2,z):
     '''
@@ -146,7 +147,15 @@ def snr_samples(m1,m2,z,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):
     rho_det_squarred = stats.ncx2.rvs(2*numdet,rho_true**2,size=len(rho_true))
     rho_det = np.power(rho_det_squarred,1/2)
     
-    return rho_true , theta, rho_det    
+    return rho_true , theta, rho_det
+
+def snr_samples_flat(z, alpha = 1):
+    '''
+    Function that computes the SNR (approximation), simulating a flat PSD.
+    '''
+    rho_true = alpha / z
+    
+    return rho_true
 
 def chirp_mass_noise(Md,rho_obs):
     '''
@@ -197,6 +206,15 @@ def snr_and_freq_cut(m1,m2,z,snr,snrthr=12,fgw_cut=15):
 
     return indices
 
+def snr_cut_flat(snr, snrthr = 1):
+    '''
+    Apply a cut in snr : snr > snrthr
+    Returns the indices of each event that fits the criterion.
+    '''
+    indices = np.where((snr >= snrthr))[0]
+
+    return indices
+
 def likelihood_evaluation(rhos,qs,Mds,thetas,rho_obs,q_obs,Md_obs,theta_obs,numdet=3):
     '''
     Compute the total likelihood of : the snr, the chirp mass, the mass ratio and theta
@@ -221,16 +239,17 @@ def generate_mass_inj(Nsamp,mass_model,dic_param):
     mass_model : str
         The name of the mass model desired
     dic_param : dict
-        Dictionnary with the param needed for the model inside
+        Dictionary with the param needed for the model inside
     '''
-    
     if mass_model =='PowerLaw':
         mp = massprior_PowerLaw()
+        mp = m1m2_conditioned(mp)
         mp.update(alpha=dic_param['alpha'],beta=dic_param['beta'],mmin=dic_param['mmin'],mmax=dic_param['mmax'])
-        
+
     elif mass_model =='PowerLawPeak':
         mp = massprior_PowerLawPeak()
-        mp.update(alpha=dic_param['alpha'],beta=dic_param['beta'],mmin=dic_param['mmin'],mmax=dic_param['mmax'],delta_m=dic_param['delta_m'],
+        mp = m1m2_conditioned(mp)
+        mp.update(alpha=dic_param['alpha'],beta=dic_param['beta'],mmin=dic_param['mmin'],mmax=dic_param['mmax'],
         mu_g=dic_param['mu_g'],sigma_g=dic_param['sigma_g'],lambda_peak=dic_param['lambda_peak'])
 
     elif mass_model =='MultiPeak':
@@ -240,11 +259,37 @@ def generate_mass_inj(Nsamp,mass_model,dic_param):
         mu_g_high=dic_param['mu_g_high'],sigma_g_high=dic_param['sigma_g_high'],lambda_g=dic_param['lambda_g'])
     else :
         raise ValueError('The model you chose is not available! \n Choose in the following list : PowerLaw, PowerLawPeak, MultiPeak ')
-        
+
     m1,m2 = mp.prior.sample(Nsamp)
     pdf = mp.prior.pdf(m1,m2)
     
     return m1, m2, pdf
+
+def generate_single_mass_inj(Nsamp,mass_model,dic_param):
+    '''
+    Generate Samples of ms the chosen mass_model and compute the prior associated in 
+    the source frame!
+    Models available : PowerLaw, PowerLawPeak, MultiPeak
+    Parameters
+    ----------
+    Nsamp : integer
+        The number of samples for ms you want
+    mass_model : str
+        The name of the mass model desired
+    dic_param : dict
+        Dictionnary with the param needed for the model inside
+    '''
+    
+    if mass_model =='PowerLaw':
+        mp = massprior_PowerLaw()
+        mp.update(alpha=dic_param['alpha'],mmin=dic_param['mmin'],mmax=dic_param['mmax'])
+    else :
+        raise ValueError('The model you chose is not available! \n Choose in the following list : PowerLaw')
+
+    m   = mp.prior.sample(Nsamp)
+    pdf = mp.prior.pdf(m)
+    
+    return m, pdf
 
 def generate_dL_inj(Nsamp,zmax):
     '''
@@ -257,6 +302,33 @@ def generate_dL_inj(Nsamp,zmax):
     dL_sample = stats.powerlaw.rvs(a=3,loc=0.1,scale=beta-10., size=Nsamp)
     pdf = stats.powerlaw.pdf(dL_sample, 3, loc=0.1, scale=beta-10.)
     
+    return dL_sample, pdf
+
+def generate_dL_inj_uniform(Nsamp,zmax):
+    '''
+    Generate Samples of dL propto a uniform distribution.
+    '''   
+    beta = z_to_dl(np.array(zmax))
+
+    dL_sample = stats.uniform.rvs(loc = 0.1, scale = beta, size = Nsamp)
+    pdf = stats.uniform.pdf(dL_sample, loc = 0.1, scale = beta)
+    
+    return dL_sample, pdf
+
+def generate_dL_inj_z_uniform(Nsamp,zmax):
+    '''
+    Generate Samples of dL propto a uniform distribution in redshift.
+    '''   
+    beta = np.array(zmax)
+
+    z_sample  = stats.uniform.rvs(loc=0.1, scale = beta, size = Nsamp)
+    pdf = stats.uniform.pdf(z_sample, loc = 0.1, scale = beta)
+
+    ref_cosmo = astropycosmology(10)
+    ref_cosmo.build_cosmology(astropy.cosmology.FlatLambdaCDM(H0 = 67.7, Om0 = 0.308))
+    dL_sample = z_to_dl(z_sample)
+    pdf /= ref_cosmo.ddl_by_dz_at_z(z_sample)
+
     return dL_sample, pdf
 
 def snr_samples_det(m1,m2,dL,numdet=3,rho_s=9,dL_s=1.5,Md_s=25,theta=None):

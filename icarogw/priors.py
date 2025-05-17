@@ -66,31 +66,10 @@ def _lowpass_filter(mass, mmax, delta_max):
     to_ret[select_one]=1.
     return to_ret
 
-def _mixed_sigmoid_function(x, xt, delta_xt, mix_x0):
-    '''
-    A Window function that starts from a float and goes to 0
-
-    Parameters
-    ----------
-    x: np.array
-        Array at which evaluate the window
-    xt: float/np.array
-        Transition point for the window
-    delta_xt: float/np.array
-        Width of the transition
-    mix_x0: float/np.array
-        Initial value of the window, then it goes to 0.
-
-    Returns
-    -------
-    Values of the window
-    '''
-    sigma = mix_x0 / (1 + np.exp((x-xt)/delta_xt))
-    return sigma
-
 def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
     '''
-    A Window function that starts from a float and goes to 0
+    A Window function that starts from mix_x0 at x=0 and goes to mix_z1 at x=1,
+    with a sigmoid transition centered at xt with width delta_xt.
 
     Parameters
     ----------
@@ -101,26 +80,29 @@ def _mixed_double_sigmoid_function(x, xt, delta_xt, mix_x0, mix_x1):
     delta_xt: float/np.array
         Width of the transition
     mix_x0: float/np.array
-        Initial value of the window, then it goes to 0.
+        Initial value of the window at x=0
+    mix_x1: float/np.array
+        Final value of the window at x=1
 
     Returns
     -------
     Values of the window
     '''
-    sigma = sigma =  mix_x1 + (mix_x0 - mix_x1) / (1 + np.exp((x-xt) / delta_xt))
-    return sigma
+    func = mix_x1 + (mix_x0 - mix_x1) / (1 + np.exp((x-xt) / delta_xt))
+    return func
 
 def _mixed_linear_function(x, mix_x0, mix_x1):
     '''
-    A Window function that starts from mix_0 and linearly evolves (x=1 f=miz_x1)
+    A Window function that starts from mix_0 at x=0 and linearly evolves to mix_x1 at x=1.
+
     Parameters
     ----------
     x: np.array
         Array at which evaluate the window
     mix_x0: float/np.array
-        Initial value of the window at x=0.
-    mix_x0: float/np.array
-        Initial value of the window at x=1.
+        Initial value of the window at x=0
+    mix_x1: float/np.array
+        Final value of the window at x=1
 
     Returns
     -------
@@ -129,13 +111,6 @@ def _mixed_linear_function(x, mix_x0, mix_x1):
     func = (mix_x1 - mix_x0) * x + mix_x0
     return func
 
-def _mixed_linear_sinusoid_function(x, mix_x0, mix_x1, amp, freq):
-    func = ((mix_x1 - mix_x0) * x + mix_x0) + (amp * np.sin(x * freq))
-    return func
-
-def _mixed_quadratic_function(x, mix_x0, mix_x1, x_saddle):
-    func = (mix_x1 - mix_x0)/(1 - 2 * x_saddle) * x * (x - 2 * x_saddle) + mix_x0
-    return func
 
 # LVK Reviewed
 def _highpass_filter(mass, mmin,delta_m):
@@ -857,40 +832,19 @@ def PL_normfact(minpl,maxpl,alpha):
         norm_fact=(np.power(maxpl,alpha+1.)-np.power(minpl,alpha+1))/(alpha+1)
     return norm_fact
 
-class EvolvingPowerLawPeak(object):
-
-    def __init__(self,mass_wrapper,zt,delta_zt,mu_z0,mu_z1,sigma_z0,sigma_z1):
-        self.mass_wrapper = mass_wrapper
-        self.zt = zt
-        self.delta_zt = delta_zt
-        self.mu_z0 = mu_z0
-        self.mu_z1 = mu_z1
-        self.sigma_z0 = sigma_z0
-        self.sigma_z1 = sigma_z1
-
-    def pdf(self,x,z):
-        xp = get_module_array(x)
-        wz = _lowpass_filter(z,self.zt,self.delta_zt)/_lowpass_filter(xp.array([0.]),self.zt,self.delta_zt)
-        muz = self.mu_z0+self.mu_z1*z
-        sigmaz = self.sigma_z0+self.sigma_z1*z
-        gaussian = (xp.power(2*xp.pi,-0.5)/sigmaz) * xp.exp(-.5*xp.power((x-muz)/sigmaz,2.))
-        toret = wz*self.mass_wrapper.pdf(x) + (1-wz)*gaussian   # w(z)*PL + (1-w(z))*G(mug(z),sigmag(z))
-        return toret
+def PL_normfact_z(minpl,maxpl,alpha):
+    '''
+    Returns the Powerlaw normalization factor
     
-    def log_pdf(self,x,z):
-        xp = get_module_array(x)
-        return xp.log(self.pdf(x,z))
-    
-    def pdf_z_marginalized(self,x,z):
-        xp = get_module_array(x)
-        z_array = np.linspace(z.min(),z.max(),1000)
-        toret   = xp.trapz(self.pdf(x,z), z_array, axis=0)
-        return toret
-    
-    def log_pdf_z_marginalized(self,x,z):
-        xp = get_module_array(x)
-        toret   = xp.log(self.pdf_z_marginalized(x,z))
-        return toret
+    Parameters
+    ----------
+    minpl, maxpl, alpha: Minimum, maximum and power law exponent of the distribution
+    '''
+    if alpha.any() == -1:
+        norm_fact=np.log(maxpl/minpl)
+    else:
+        norm_fact=(np.power(maxpl,alpha+1.)-np.power(minpl,alpha+1))/(alpha+1)
+    return norm_fact
 
 # LVK Reviewed
 class PowerLaw(basic_1dimpdf):
@@ -1132,56 +1086,6 @@ class TruncatedGaussian(basic_1dimpdf):
         min_point = (self.ming-self.meang)/(self.sigmag*xp.sqrt(2.))
         toret = xp.log((0.5*sx.special.erf(max_point)-0.5*sx.special.erf(min_point))/self.norm_fact)
         return toret
-    
-class PositiveGaussian(basic_1dimpdf):
-    
-    def __init__(self,meang,sigmag,ming,maxg):
-        '''
-        Class for a Truncated gaussian probability
-        
-        Parameters
-        ----------
-        meang,sigmag,ming,maxg: float
-            mean, sigma, min value and max value for the gaussian
-        '''
-        super().__init__(ming,maxg)
-        self.meang,self.sigmag,self.ming,self.maxg=meang,sigmag,ming,maxg
-        self.norm_fact= get_gaussian_norm(ming,maxg,meang,sigmag)
-        
-    def _log_pdf(self,x):
-        '''
-        Evaluates the log_pdf
-        
-        Parameters
-        ----------
-        x: xp.array
-            where to evaluate the log_pdf
-        
-        Returns
-        -------
-        log_pdf: xp.array
-        '''
-        xp = get_module_array(x)
-        return xp.log(self.sigmag)-0.5*xp.log(2*xp.pi)-0.5*xp.power((x-self.meang)/self.sigmag,2.)-xp.log(self.norm_fact)
-    
-    def _log_cdf(self,x):
-        '''
-        Evaluates the log_cdf
-        
-        Parameters
-        ----------
-        x: xp.array
-            where to evaluate the log_cdf
-        
-        Returns
-        -------
-        log_cdf: xp.array
-        '''
-        xp = get_module_array(x)
-        sx = get_module_array_scipy(x)
-        max_point = (x-self.meang)/(self.sigmag*xp.sqrt(2.))
-        min_point = (self.ming-self.meang)/(self.sigmag*xp.sqrt(2.))
-        return xp.log((0.5*sx.special.erf(max_point)-0.5*sx.special.erf(min_point))/self.norm_fact)
 
 
 # Overwrite most of the methods of the parent class
@@ -1280,7 +1184,7 @@ class PowerLawGaussian(basic_1dimpdf):
         self.minpl,self.maxpl,self.alpha,self.lambdag,self.meang,self.sigmag,self.ming,self.maxg=minpl,maxpl,alpha,lambdag,meang,sigmag,ming,maxg
         self.PL=PowerLaw(minpl,maxpl,alpha)
         self.TG=TruncatedGaussian(meang,sigmag,ming,maxg)
-        
+
     def _log_pdf(self,x):
         '''
         Evaluates the log_pdf
@@ -1759,3 +1663,97 @@ class piecewise_constant_2d_distribution_normalized():
         
         return (n1, n2)
 
+
+# ------------------------------------ #
+# Used in the Redshift evolving models #
+# ------------------------------------ #
+
+class PowerLawStationary():
+
+    def __init__(self, alpha, mmin, mmax):
+        self.alpha  = - alpha
+        self.minval = mmin
+        self.maxval = mmax
+
+    def log_pdf(self,m):
+        xp = get_module_array(m)
+        powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact(self.minval, self.maxval, self.alpha))
+        indx = check_bounds_1D(m, self.minval, self.maxval)
+        powerlaw[indx] = -xp.inf
+        return powerlaw
+
+    def pdf(self,m):
+        xp = get_module_array(m)
+        return xp.exp(self.log_pdf(m))
+
+class PowerLawLinear():
+
+    def __init__(self, z, alpha_z0, alpha_z1, mmin_z0, mmin_z1, mmax_z0, mmax_z1):
+        self.alpha_z0 = alpha_z0
+        self.alpha_z1 = alpha_z1
+        self.mmin_z0  = mmin_z0
+        self.mmin_z1  = mmin_z1
+        self.mmax_z0  = mmax_z0
+        self.mmax_z1  = mmax_z1
+        # Linear expansion.
+        self.alpha  = - (self.alpha_z0 + self.alpha_z1 * z)
+        self.minval = self.mmin_z0 + self.mmin_z1 * z
+        self.maxval = self.mmax_z0 + self.mmax_z1 * z
+
+    def log_pdf(self,m):
+        xp = get_module_array(m)
+        powerlaw = self.alpha * xp.log(m) - xp.log(PL_normfact_z(self.minval, self.maxval, self.alpha))
+        indx = check_bounds_1D(m, self.minval, self.maxval)
+        powerlaw[indx] = -xp.inf
+        return powerlaw
+
+    def pdf(self,m):
+        xp = get_module_array(m)
+        return xp.exp(self.log_pdf(m))
+
+class GaussianStationary():
+
+    def __init__(self, mu, sigma, mmin_g):
+        self.mu     = mu
+        self.sigma  = sigma
+        self.mmin_g = mmin_g
+
+    def log_pdf(self,m):
+        xp = get_module_array(m)
+        sx = get_module_array_scipy(m)
+        a, b = (self.mmin_g - self.mu) / self.sigma, (xp.inf - self.mu) / self.sigma 
+        gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.mu, scale = self.sigma) )
+        return gaussian
+
+    def pdf(self,m):
+        xp = get_module_array(m)
+        return xp.exp(self.log_pdf(m))
+
+class GaussianLinear():
+
+    def __init__(self, z, mu_z0, mu_z1, sigma_z0, sigma_z1, mmin):
+        self.mu_z0    = mu_z0
+        self.mu_z1    = mu_z1
+        self.sigma_z0 = sigma_z0
+        self.sigma_z1 = sigma_z1
+        self.mmin     = mmin
+        # Linear expansion.
+        self.muz    = self.mu_z0    + self.mu_z1    * z
+        self.sigmaz = self.sigma_z0 + self.sigma_z1 * z
+
+    def log_pdf(self,m):
+        xp = get_module_array(m)
+        sx = get_module_array_scipy(m)
+        a, b = (self.mmin - self.muz) / self.sigmaz, (xp.inf - self.muz) / self.sigmaz 
+        gaussian = xp.log( sx.stats.truncnorm.pdf(m, a, b, loc = self.muz, scale = self.sigmaz) )
+        return gaussian
+
+    def pdf(self,m):
+        xp = get_module_array(m)
+        return xp.exp(self.log_pdf(m))
+    
+    def return_mu_sigma_z0(self):
+        return self.mu_z0, self.sigma_z0
+    
+    def return_mu_sigma_z( self):
+        return self.muz, self.sigmaz
