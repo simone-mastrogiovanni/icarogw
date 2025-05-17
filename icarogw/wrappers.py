@@ -7,6 +7,12 @@ from .priors import _lowpass_filter, _mixed_sigmoid_function, _mixed_double_sigm
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM, Flatw0waCDM
 
+modgravity_wrappers = ['eps0_mod_wrap','Xi0_mod_wrap','extraD_mod_wrap',
+                      'cM_mod_wrap','alphalog_mod_wrap']
+
+
+lcdm_wrappers = ['FlatLambdaCDM_wrap','FlatwCDM_wrap',
+                'Flatw0waCDM_wrap']
 
 class mixed_mass_redshift_evolving(object):
 
@@ -376,6 +382,7 @@ class rateevolution_beta_line(rate_default):
     def update(self,**kwargs):
         self.rate=beta_rate_line(**kwargs)
 
+
 # LVK Reviewed
 class FlatLambdaCDM_wrap(object):
     def __init__(self,zmax):
@@ -410,6 +417,7 @@ class eps0_mod_wrap(object):
         self.cosmology=eps0_astropycosmology(bgwrap.cosmology.zmax)
     def update(self,**kwargs):
         bgdict={key:kwargs[key] for key in self.bgwrap.population_parameters}
+        self.bgwrap.update(**bgdict)
         self.cosmology.build_cosmology(self.bgwrap.astropycosmo(**bgdict),eps0=kwargs['eps0'])
 
 # LVK Reviewed
@@ -420,6 +428,7 @@ class Xi0_mod_wrap(object):
         self.cosmology=Xi0_astropycosmology(bgwrap.cosmology.zmax)
     def update(self,**kwargs):
         bgdict={key:kwargs[key] for key in self.bgwrap.population_parameters}
+        self.bgwrap.update(**bgdict)
         self.cosmology.build_cosmology(self.bgwrap.astropycosmo(**bgdict),Xi0=kwargs['Xi0'],n=kwargs['n'])
 
 # LVK Reviewed
@@ -430,6 +439,7 @@ class extraD_mod_wrap(object):
         self.cosmology=extraD_astropycosmology(bgwrap.cosmology.zmax)
     def update(self,**kwargs):
         bgdict={key:kwargs[key] for key in self.bgwrap.population_parameters}
+        self.bgwrap.update(**bgdict)
         self.cosmology.build_cosmology(self.bgwrap.astropycosmo(**bgdict),D=kwargs['D'],n=kwargs['n'],Rc=kwargs['Rc'])
 
 # LVK Reviewed
@@ -440,6 +450,7 @@ class cM_mod_wrap(object):
         self.cosmology=cM_astropycosmology(bgwrap.cosmology.zmax)
     def update(self,**kwargs):
         bgdict={key:kwargs[key] for key in self.bgwrap.population_parameters}
+        self.bgwrap.update(**bgdict)
         self.cosmology.build_cosmology(self.bgwrap.astropycosmo(**bgdict),cM=kwargs['cM'])
 
 # LVK Reviewed
@@ -450,6 +461,7 @@ class alphalog_mod_wrap(object):
         self.cosmology=alphalog_astropycosmology(bgwrap.cosmology.zmax)
     def update(self,**kwargs):
         bgdict={key:kwargs[key] for key in self.bgwrap.population_parameters}
+        self.bgwrap.update(**bgdict)
         self.cosmology.build_cosmology(self.bgwrap.astropycosmo(**bgdict),alphalog_1=kwargs['alphalog_1']
                                        ,alphalog_2=kwargs['alphalog_2'],alphalog_3=kwargs['alphalog_3'])
 

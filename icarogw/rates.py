@@ -1,6 +1,7 @@
 from .cupy_pal import cp2np, np2cp, get_module_array, get_module_array_scipy, iscupy, np, sn
 from .conversions import detector2source_jacobian, detector2source, detector2source_jacobian_q
 from scipy.stats import gaussian_kde
+from .wrappers import modgravity_wrappers, lcdm_wrappers
 
 class CBC_mixte_pop_rate(object):
     '''
@@ -155,7 +156,18 @@ class CBC_catalog_vanilla_rate_skymap(object):
         '''
         self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
         self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
-        self.catalog.sch_fun.build_MF(self.cw.cosmology)
+
+        if self.cw.__class__.__name__ in modgravity_wrappers:
+            self.cw_bgwrap = self.cw.bgwrap
+        elif self.cw.__class__.__name__ in lcdm_wrappers:
+            self.cw_bgwrap = self.cw
+        else:
+            raise ValueError('Please pass a LCDM or Mod gravity wrapper')
+        
+        self.catalog.sch_fun.build_MF(self.cw_bgwrap.cosmology)
+
+        
+            
             
         if not self.scale_free:
             self.Rgal = kwargs['Rgal']
@@ -175,8 +187,7 @@ class CBC_catalog_vanilla_rate_skymap(object):
         sx = get_module_array_scipy(prior)
         
         z = self.cw.cosmology.dl2z(kwargs['luminosity_distance'])
-        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
-                                                    ,dl=kwargs['luminosity_distance'])
+        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw_bgwrap.cosmology,average=False)
 
         # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
         dNgaleff=dNgal_cat+dNgal_bg
@@ -195,6 +206,7 @@ class CBC_catalog_vanilla_rate_skymap(object):
     def log_rate_injections(self,prior,**kwargs):
         '''
         This method calculates the weights (CBC merger rate per year at detector) for the injections.
+        FIX-ME this method should be made consistent with the galaxy catalog below
         
         Parameters
         ----------
@@ -1223,8 +1235,15 @@ class CBC_catalog_vanilla_rate(object):
         self.cw.update(**{key: kwargs[key] for key in self.cw.population_parameters})
         self.mw.update(**{key: kwargs[key] for key in self.mw.population_parameters})
         self.rw.update(**{key: kwargs[key] for key in self.rw.population_parameters})
-        self.catalog.sch_fun.build_MF(self.cw.cosmology)
 
+        if self.cw.__class__.__name__ in modgravity_wrappers:
+            self.cw_bgwrap = self.cw.bgwrap
+        elif self.cw.__class__.__name__ in lcdm_wrappers:
+            self.cw_bgwrap = self.cw
+        else:
+            raise ValueError('Please pass a LCDM or Mod gravity wrapper')
+        
+        self.catalog.sch_fun.build_MF(self.cw_bgwrap.cosmology)
         
         if self.sw is not None:
             self.sw.update(**{key: kwargs[key] for key in self.sw.population_parameters})
@@ -1247,8 +1266,7 @@ class CBC_catalog_vanilla_rate(object):
         xp = get_module_array(prior)
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology)
-        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
-                                                    ,dl=kwargs['luminosity_distance'],average=False)
+        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw_bgwrap.cosmology,average=False)
 
         # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
         dNgaleff=dNgal_cat+dNgal_bg
@@ -1281,8 +1299,7 @@ class CBC_catalog_vanilla_rate(object):
         xp = get_module_array(prior)
         
         ms1, ms2, z = detector2source(kwargs['mass_1'],kwargs['mass_2'],kwargs['luminosity_distance'],self.cw.cosmology)
-        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw.cosmology
-                                                    ,dl=kwargs['luminosity_distance'],average=True)
+        dNgal_cat,dNgal_bg=self.catalog.effective_galaxy_number_interpolant(z,kwargs['sky_indices'],self.cw_bgwrap.cosmology,average=True)
 
         # Effective number density of galaxies (Eq. 2.19 on the overleaf document)
         dNgaleff=dNgal_cat+dNgal_bg

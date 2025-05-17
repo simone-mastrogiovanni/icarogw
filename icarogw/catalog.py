@@ -710,7 +710,7 @@ class  icarogw_catalog(object):
         # LOS prior we do not need to account them anymore
         return m2M(mthr_arrays,dl, xp.zeros_like(dl))
 
-    def effective_galaxy_number_interpolant(self,z,skypos,cosmology,dl=None,average=False):
+    def effective_galaxy_number_interpolant(self,z,skypos,cosmology,average=False):
         '''
         Returns an evaluation of dNgal/dzdOmega, it requires `calc_dN_by_dzdOmega_interpolant` to be called first.
         It needs the schecter function to be updated
@@ -722,9 +722,7 @@ class  icarogw_catalog(object):
         skypos: xp.array
             Array containing the healpix indeces where to evaluate the interpolant
         cosmology: class
-            cosmology class to use for the computations
-        dl: xp.array
-            Luminosity distance in Mpc
+            cosmology class to use for the computations, cosmology must be background cosmology, not MOD GRAVITY
         average: bool
             Use the sky averaged differential of effective number of galaxies in each pixel
         '''
@@ -735,9 +733,8 @@ class  icarogw_catalog(object):
         originshape=z.shape
         z=z.flatten()
         skypos=skypos.flatten()
-        
-        if dl is None:
-            dl=cosmology.z2dl(z)
+        # This is the EM dl, it corresponds to GW if not mod gravity
+        dl=cosmology.z2dl(z)
         dl=dl.flatten()
         
         z_grid = self.z_grid
