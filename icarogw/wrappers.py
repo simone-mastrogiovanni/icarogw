@@ -4,6 +4,7 @@ from .cosmology import  md_rate, md_gamma_rate, powerlaw_rate, beta_rate, beta_r
 from .priors import LowpassSmoothedProb, LowpassSmoothedProbEvolving, PowerLaw, BetaDistribution, TruncatedBetaDistribution, TruncatedGaussian, Bivariate2DGaussian, SmoothedPlusDipProb, BrokenPowerLawMultiPeak
 from .priors import PowerLawGaussian, BrokenPowerLaw, PowerLawTwoGaussians, conditional_2dimpdf, conditional_2dimz_pdf, piecewise_constant_2d_distribution_normalized,paired_2dimpdf
 from .priors import PowerLawStationary, PowerLawLinear, GaussianStationary, GaussianLinear, _mixed_linear_function, _mixed_double_sigmoid_function
+from .priors import BrokenPowerLawTripleMultiPeak
 import copy
 from astropy.cosmology import FlatLambdaCDM, FlatwCDM, Flatw0waCDM
 
@@ -218,6 +219,18 @@ class massprior_BrokenPowerLawMultiPeak(pm_prob):
                                              kwargs['sigma_g_low'],kwargs['mmin'],kwargs['mu_g_low']+5*kwargs['sigma_g_low'],
                                              kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high'])
 
+# New class for TripleMultipeak \(multipopulation model\)
+class massprior_BrokenPowerLawTripleMultiPeak(pm_prob):
+    def __init__(self):
+        self.population_parameters=['alpha_1','alpha_2','mmin','mmax','b','mu_g_1','sigma_g_1','lambda_g','mu_g_2','sigma_g_2','lambda_1','mu_g_3','sigma_g_3','lambda_2']
+    def update(self,**kwargs):
+        self.prior=BrokenPowerLawTripleMultiPeak(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha_1'],-kwargs['alpha_2'],kwargs['b'],
+                                                 kwargs['lambda_g'],kwargs['lambda_1'],kwargs['lambda_2'],
+                                                 kwargs['mu_g_1'],kwargs['sigma_g_1'],kwargs['mmin'],kwargs['mu_g_1']+5*kwargs['sigma_g_1'],
+                                                 kwargs['mu_g_2'],kwargs['sigma_g_2'],kwargs['mmin'],kwargs['mu_g_2']+5*kwargs['sigma_g_2'],
+                                                 kwargs['mu_g_3'],kwargs['sigma_g_3'],kwargs['mmin'],kwargs['mu_g_3']+5*kwargs['sigma_g_3'])
+
+
 class m1m2_conditioned(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters+['beta']
@@ -327,6 +340,38 @@ class m1m2_paired_massratio_bpl_dip_farah_2022(pm1m2_prob):
         
         self.prior=paired_2dimpdf(p,pairing_function)
 
+# Class for the BPLMultipopTriplePeak_dip
+class m1m2_paired_bpl_triplepeak_dip(pm1m2_prob):
+    def __init__(self):
+        wrapper_m = massprior_BrokenPowerLawTripleMultiPeak()
+        wrapper_m.population_parameters.remove('b')
+        self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
+                                                                        'leftdip','rightdip','leftdipsmooth', 
+                                                                        'rightdipsmooth','deep']
+        self.wrapper_m = wrapper_m
+    
+    def update(self,**kwargs):
+        mbreak_NS = kwargs['leftdip'] + kwargs['leftdipsmooth']
+        mbreak_BH = kwargs['rightdip'] - kwargs['rightdipsmooth']
+        mbreak = 0.5*(mbreak_NS+mbreak_BH)
+        kwargs['b'] = (mbreak-kwargs['mmin'])/(kwargs['mmax']-kwargs['mmin'])
+        self.wrapper_m.update(**{key:kwargs[key] for key in self.wrapper_m.population_parameters+['b']})
+        p = SmoothedPlusDipProb(self.wrapper_m.prior,**{key:kwargs[key] for key in ['bottomsmooth', 'topsmooth', 
+                                                                        'leftdip', 'rightdip', 
+                                                                        'leftdipsmooth','rightdipsmooth','deep']})
+        
+        def pairing_function(m1,m2,beta_bottom=kwargs['beta_bottom'],beta_top=kwargs['beta_top'],mbreak=mbreak):
+            xp = get_module_array(m1)
+            q = m2/m1
+            toret = xp.ones_like(q)
+            idx = m2<=mbreak
+            toret[idx] = xp.power(q[idx],beta_bottom)
+            idx = m2>mbreak
+            toret[idx] = xp.power(q[idx],beta_top)
+            toret[q>1] = 0.
+            return toret
+        
+        self.prior=paired_2dimpdf(p,pairing_function)
 
 class m1m2_paired_massratio_bplmulti_dip(pm1m2_prob):
     def __init__(self):
