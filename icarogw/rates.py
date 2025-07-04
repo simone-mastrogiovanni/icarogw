@@ -1241,6 +1241,53 @@ class CBC_vanilla_rate(object):
         return log_out
 
 
+class CBC_vanilla_rate_pseob(CBC_vanilla_rate):
+    def __init__(self,cosmology_wrapper,mass_wrapper,rate_wrapper,pseob_wrapper,spin_wrapper=None,scale_free=False):
+
+        super().__init__(cosmology_wrapper=cosmology_wrapper,
+                         mass_wrapper=mass_wrapper,rate_wrapper=rate_wrapper,
+                         spin_wrapper=spin_wrapper,scale_free=scale_free)
+
+        self.pseobw = pseob_wrapper
+        self.population_parameters = self.population_parameters + self.pseobw.population_parameters
+                    
+        self.PEs_parameters = self.PEs_parameters + ['domega220','dtau220']
+        self.injections_parameters = self.injections_parameters + ['domega220','dtau220']
+            
+    def update(self,**kwargs):
+        super().update(**kwargs)
+        self.pseobw.update(**kwargs)
+        
+    def log_rate_PE(self,prior,**kwargs):
+        return super().log_rate_PE(prior,**kwargs) + self.pseobw.log_pdf(kwargs['domega220'],kwargs['dtau220'])
+    
+    def log_rate_injections(self,prior,**kwargs):           
+        return super().log_rate_injections(prior,**kwargs) + self.pseobw.log_pdf(kwargs['domega220'],kwargs['dtau220'])
+
+class CBC_vanilla_rate_pseob_dummy(CBC_vanilla_rate):
+    def __init__(self,cosmology_wrapper,mass_wrapper,rate_wrapper,pseob_wrapper,spin_wrapper=None,scale_free=False):
+
+        super().__init__(cosmology_wrapper=cosmology_wrapper,
+                         mass_wrapper=mass_wrapper,rate_wrapper=rate_wrapper,
+                         spin_wrapper=spin_wrapper,scale_free=scale_free)
+
+        self.pseobw = pseob_wrapper
+        self.population_parameters = self.population_parameters + self.pseobw.population_parameters
+                    
+        self.PEs_parameters = self.PEs_parameters + ['domega220','dtau220']
+        self.injections_parameters = self.injections_parameters
+            
+    def update(self,**kwargs):
+        super().update(**kwargs)
+        self.pseobw.update(**kwargs)
+        
+    def log_rate_PE(self,prior,**kwargs):
+        return super().log_rate_PE(prior,**kwargs) + self.pseobw.log_pdf(kwargs['domega220'],kwargs['dtau220'])
+    
+    def log_rate_injections(self,prior,**kwargs):           
+        return super().log_rate_injections(prior,**kwargs) 
+
+
 class CBC_vanilla_rate_spins(CBC_vanilla_rate):
     def __init__(self,cosmology_wrapper,mass_wrapper,rate_wrapper,spin_wrapper=None,scale_free=False):
         
