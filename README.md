@@ -1,4 +1,4 @@
-![icarogw2.0](/docs/logo.png)
+![icarogw2.0.2](/docs/logo.png)
 
 Special thanks LIGO-Virgo-KAGRA / Aaron Geller / Northwestern who made possible the cool logo with the masses in the [Stellar graveyard](https://media.ligo.northwestern.edu/gallery/mass-plot)
 
@@ -16,8 +16,11 @@ Then, simply run
 pip install git+https://github.com/simone-mastrogiovanni/icarogw.git
 ```
 
-To install the latest version of icarogw
+or your favourite branch/tag with
 
+```
+pip install git+https://github.com/simone-mastrogiovanni/icarogw.git@tag
+```
 
 ### Installing the GPU CUDA version
 
