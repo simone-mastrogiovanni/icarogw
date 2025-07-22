@@ -1,10 +1,10 @@
-![icarogw2.0.2](/docs/logo.png)
+![icarogw](logo.png)
 
 Special thanks LIGO-Virgo-KAGRA / Aaron Geller / Northwestern who made possible the cool logo with the masses in the [Stellar graveyard](https://media.ligo.northwestern.edu/gallery/mass-plot)
 
 [![DOI](https://zenodo.org/badge/615814860.svg)](https://zenodo.org/badge/latestdoi/615814860)
 
-# icarogw 2.0 
+# icarogw 
 
 ## Installation
 
