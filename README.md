@@ -13,7 +13,7 @@ You will need a `python 3.10` environment created with conda.
 Then, simply run
 
 ```
-pip install git+https://github.com/simone-mastrogiovanni/icarogw.git
+pip install git+https://github.com/icarogw-developers/icarogw.git
 ```
 
 or your favourite branch/tag with
