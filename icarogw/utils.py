@@ -1,6 +1,7 @@
 import os as _os
 import os as os
 import numpy as np
+from .cupy_pal import get_module_array
 
 def write_condor_files(home_folder,uname='simone.mastrogiovanni',
 agroup='ligo.dev.o4.cbc.hubble.icarogw',memory=10000,cpus=1,disk=10000):
@@ -43,9 +44,9 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw',memory=10000,cpus=1,disk=10000):
             f.write('accounting_group = '+agroup+'\n')
             f.write('accounting_group_user = '+uname)
             f.write('\n')
-            f.write('request_memory ='+str(memory)+'\n')
+            f.write('request_memory ='+str(memory)+'M\n')
             f.write('request_cpus ='+str(cpus)+'\n')
-            f.write('request_disk ='+str(disk)+'\n')    
+            f.write('request_disk ='+str(disk)+'M\n')    
             f.write('output = '+home_folder+fname+'.stdout\n')
             f.write('error = '+home_folder+fname+'.stderr\n')
             f.write('log = '+home_folder+fname+'.log\n')
@@ -58,7 +59,7 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw',memory=10000,cpus=1,disk=10000):
 def check_posterior_samples_and_prior(posterior_samples, prior):
     """
     This function asserts whether all entries of the posterior_samples
-    dictionary have the same length as the prior array. 
+    dictionary have the same length as the prior array. It will also check if the prior has non-zero values.
 
     Parameters
     ----------
@@ -84,7 +85,12 @@ def check_posterior_samples_and_prior(posterior_samples, prior):
         if(n_posterior_samples!=n_prior):
             print(f'{param} does not contain as many samples as the prior. ')
             raise ValueError
-        
+            
+    xp = get_module_array(prior)
+    idx_zero = prior==0.
+    if xp.any(idx_zero):
+        print('The zero values are in position ', xp.where(idx_zero)[0])
+        raise ValueError('Prior can not have 0 values')
     return None
 
 def write_condor_files_catalog(home_folder,outfolder,nside,uname='simone.mastrogiovanni',
@@ -420,7 +426,7 @@ agroup='ligo.dev.o4.cbc.hubble.icarogw'):
     fp.write('z_grid = np.genfromtxt(\'{:s}\') \n'.format(
         os.path.join(outfolder,'{:s}_common_zgrid.txt'.format(grouping))))
     fp.write('filled_pixels = filled_pixels[bot_pix:top_pix] \n')
-    fp.write('for pix in tqdm(filled_pixels,desc=\'Cleaning pixel\'):\n')
+    fp.write('for pix in tqdm(filled_pixels,desc=\'Calculating interpolant\'):\n')
     fp.write('\ticarogw.catalog.calculate_interpolant_files(outfolder,z_grid,pix,grouping,subgrouping,band,cosmo_ref,epsilon,ptype=ptype)\n')
     fp.close()
 

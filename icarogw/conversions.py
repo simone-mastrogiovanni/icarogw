@@ -5,6 +5,10 @@ from scipy.special import spence as PL
 from ligo.skymap.io.fits import read_sky_map
 import astropy_healpix as ah
 from astropy import units as u
+from tqdm import tqdm
+
+COST_C= 299792.458 # Speed of light in km/s
+
 
 def cred_interval(sigma):
     '''
@@ -556,7 +560,7 @@ def joint_prior_from_isotropic_spins(q,aMax,xeffs,xps,ndraws=10000,bw_method='sc
     p_chi_eff = chi_effective_prior_from_isotropic_spins(q,aMax,xeffs)
     p_chi_p_given_chi_eff = xp.zeros(len(p_chi_eff))
     
-    for i in range(len(p_chi_eff)):
+    for i in tqdm(range(len(p_chi_eff)),desc='Calculating prior'):
         p_chi_p_given_chi_eff[i] = chi_p_prior_given_chi_eff_q(q[i],aMax,xeffs[i],xps[i],ndraws,bw_method)
     joint_p_chi_p_chi_eff = p_chi_eff*p_chi_p_given_chi_eff
 
@@ -896,31 +900,53 @@ def detector2source(mass1,mass2,dl,cosmology):
 # LVK Reviewed
 def detector2source_jacobian(z, cosmology):
     '''
-    Calculates the detector frame to source frame Jacobian d_det/d_sour
+    Calculates the detector frame to source frame Jacobian d_det/d_sour.
+
+    |J_d->s| = |J_(m1d, m2d, dL)->(m1s, m2s, z)| = (1+z)^2 ddL/dz
 
     Parameters
     ----------
-    z: xp. arrays
-        Redshift
+    z:      xp. arrays
+            Redshift
     cosmo:  class from the cosmology module
-        Cosmology class from the cosmology module
+            Cosmology class from the cosmology module
     '''
-    xp=get_module_array(z)
-    return xp.abs(xp.power(1+z,2.)*cosmology.ddl_by_dz_at_z(z))
+    xp = get_module_array(z)
+    return xp.abs( xp.power(1+z, 2.) * cosmology.ddl_by_dz_at_z(z) )
 
 def detector2source_jacobian_q(z, cosmology):
     '''
-    Calculates the detector frame to source frame Jacobian d_det/d_sour
+    Calculates the detector frame to source frame Jacobian d_det/d_sour.
+
+    |J_d->s| = |J_(m1d, q, dL)->(m1s, q, z)| = (1+z) ddL/dz
 
     Parameters
     ----------
-    z: xp. arrays
-        Redshift
+    z:      xp. arrays
+            Redshift
+    ms1:    xp. arrays
+            Primary mass in the source frame
     cosmo:  class from the cosmology module
-        Cosmology class from the cosmology module
+            Cosmology class from the cosmology module
     '''
-    xp=get_module_array(z)
-    return xp.abs(xp.power(1+z,1.)*cosmology.ddl_by_dz_at_z(z))
+    xp = get_module_array(z)
+    return xp.abs( (1+z) * cosmology.ddl_by_dz_at_z(z) )
+
+def detector2source_jacobian_single_mass(z, cosmology):
+    '''
+    Calculates the detector frame to source frame Jacobian d_det/d_sour.
+
+    |J_d->s| = |J_(md, dL)->(ms, z)| = (1+z) ddL/dz
+
+    Parameters
+    ----------
+    z:      xp. arrays
+            Redshift
+    cosmo:  class from the cosmology module
+            Cosmology class from the cosmology module
+    '''
+    xp = get_module_array(z)
+    return xp.abs( (1+z) * cosmology.ddl_by_dz_at_z(z) )
 
 # LVK Reviewed
 def source2detector_jacobian(z, cosmology):
