@@ -659,6 +659,24 @@ class spinprior_default_gaussian(object):
 
 
 
+########### TGR Implementation ######################
+class pseobprior_gaussian(object):
+    def __init__(self):
+        self.population_parameters=['mu_domega220','sigma_domega220','mu_dtau220','sigma_dtau220','rho_pseob']
+    def update(self,**kwargs):
+        # Note, the bounds below are set to be consistent with Lorenzo's injections
+        self.pdf_evaluator=Bivariate2DGaussian(x1min=-10,x1max=10.,x1mean=kwargs['mu_domega220'],
+                                               x2min=-10,x2max=10.,x2mean=kwargs['mu_dtau220'],
+                                               x1variance=kwargs['sigma_domega220']**2.,x12covariance=kwargs['rho_pseob']*kwargs['sigma_domega220']*kwargs['sigma_dtau220'],
+                                               x2variance=kwargs['sigma_dtau220']**2.)
+    def log_pdf(self,domega220,dtau220):
+        return self.pdf_evaluator.log_pdf(domega220,dtau220)
+    def pdf(self,domega220,dtau220):
+        xp = get_module_array(domega220)
+        return xp.exp(self.log_pdf(domega220,dtau220))
+#####################################################
+
+
 # LVK Reviewed
 class spinprior_gaussian(object):
     def __init__(self):

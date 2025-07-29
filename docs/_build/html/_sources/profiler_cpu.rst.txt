@@ -1,7 +1,0 @@
-profiler\_cpu module
-====================
-
-.. automodule:: profiler_cpu
-   :members:
-   :undoc-members:
-   :show-inheritance:
