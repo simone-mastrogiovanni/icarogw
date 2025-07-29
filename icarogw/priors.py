@@ -1219,6 +1219,50 @@ class PowerLawGaussian(basic_1dimpdf):
         toret=xp.log((1-self.lambdag)*self.PL.cdf(x)+self.lambdag*self.TG.cdf(x))
         return toret
 
+class BrokenPowerLawTripleMultiPeak(basic_1dimpdf):
+    def __init__(self,minpl,maxpl,alpha_1,alpha_2,b,lambdag,lambda1,lambda2,meang1,sigmag1,ming1,maxg1,meang2,sigmag2,ming2,maxg2,meang3,sigmag3,
+                 ming3,maxg3):
+        super().__init__(min(minpl,ming1,ming2,ming3),max(maxpl,maxg1,maxg2,maxg3))
+        self.minpl=minpl
+        self.maxpl=maxpl
+        self.alpha_1=alpha_1
+        self.alpha_2=alpha_2
+        self.b=b
+        self.lambdag=lambdag
+        self.lambda1=lambda1
+        self.lambda2=lambda2
+        self.meang1=meang1
+        self.sigmag1=sigmag1
+        self.meang2=meang2
+        self.sigmag2=sigmag2
+        self.meang3=meang3
+        self.sigmag3=sigmag3
+        self.ming1=ming1
+        self.maxg1=maxg1
+        self.ming2=ming2
+        self.maxg2=maxg2
+        self.ming3=ming3
+        self.maxg3=maxg3
+        self.BPL=BrokenPowerLaw(minpl,maxpl,alpha_1,alpha_2,b)
+        self.TG1=TruncatedGaussian(meang1,sigmag1,ming1,maxg1)
+        self.TG2=TruncatedGaussian(meang2,sigmag2,ming2,maxg2)
+        self.TG3=TruncatedGaussian(meang3,sigmag3,ming3,maxg3)
+
+    def _log_pdf(self, x):
+        xp = get_module_array(x) 
+        log_bpl = xp.log1p(-self.lambdag) + self.BPL.log_pdf(x)
+        log_g1  = xp.log(self.lambdag) + xp.log(self.lambda1) + self.TG1.log_pdf(x)
+        log_g2  = xp.log(self.lambdag) + xp.log1p(-self.lambda1) + self.TG2.log_pdf(x)
+        log_g3  = xp.log(self.lambdag) + xp.log1p(-self.lambda1) + xp.log1p(-self.lambda2) + self.TG3.log_pdf(x)
+        return xp.logaddexp(xp.logaddexp(xp.logaddexp(log_bpl,log_g1),log_g2),log_g3)
+    
+    def _log_cdf(self, x):
+        xp = get_module_array(x)
+        bpl_part = (1.-self.lambdag)*self.BPL.cdf(x)
+        g_part =self.TG1.cdf(x)*self.lambdag*self.lambda1 + self.TG2.cdf(x)*self.lambdag*(1-self.lambda1)*self.lambda2 + self.TG3.cdf(x)*self.lambdag*(1-self.lambda1)*(1-self.lambda2)
+        return xp.log(bpl_part+g_part)
+
+
 
 class BrokenPowerLawMultiPeak(basic_1dimpdf):
     
