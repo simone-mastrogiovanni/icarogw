@@ -113,6 +113,7 @@ class hierarchical_likelihood(bilby.Likelihood):
         return float(cp2np(log_likeli))
 
 
+#LVK reviewed
 class hierarchical_likelihood_v1(bilby.Likelihood):
     def __init__(self, posterior_samples_dict, injections, rate_model, nparallel=None, neffPE=20,neffINJ=None,likelihood_variance_thr=None):
         '''

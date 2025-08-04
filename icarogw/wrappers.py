@@ -181,12 +181,14 @@ class pm1m2z_prob(object):
     def log_pdf(self,mass_1_source,mass_2_source,z):
         return self.prior.log_pdf(mass_1_source,mass_2_source,z)
 
+#LVK reviewed
 class massprior_PowerLaw(pm_prob):
     def __init__(self):
         self.population_parameters=['alpha','mmin','mmax']
     def update(self,**kwargs):
         self.prior=PowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'])
         
+#LVK reviewed
 class massprior_PowerLawPeak(pm_prob):
     def __init__(self):
         self.population_parameters=['alpha','mmin','mmax','mu_g','sigma_g','lambda_peak']
@@ -194,12 +196,14 @@ class massprior_PowerLawPeak(pm_prob):
         self.prior=PowerLawGaussian(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha'],kwargs['lambda_peak'],kwargs['mu_g'],
                                          kwargs['sigma_g'],kwargs['mmin'],kwargs['mu_g']+5*kwargs['sigma_g'])
         
+#LVK reviewed
 class massprior_BrokenPowerLaw(pm_prob):
     def __init__(self):
         self.population_parameters=['alpha_1','alpha_2','mmin','mmax','b']
     def update(self,**kwargs):
         self.prior=BrokenPowerLaw(kwargs['mmin'],kwargs['mmax'],-kwargs['alpha_1'],-kwargs['alpha_2'],kwargs['b'])
         
+#LVK reviewed
 class massprior_MultiPeak(pm_prob):
     def __init__(self):
         self.population_parameters=['alpha','mmin','mmax','mu_g_low','sigma_g_low','lambda_g_low','mu_g_high','sigma_g_high','lambda_g']
@@ -210,6 +214,7 @@ class massprior_MultiPeak(pm_prob):
                                              kwargs['mu_g_high'],kwargs['sigma_g_high'],kwargs['mmin'],kwargs['mu_g_high']+5*kwargs['sigma_g_high'])
 
 
+#LVK reviewed
 class massprior_BrokenPowerLawMultiPeak(pm_prob):
     def __init__(self):
         self.population_parameters=['alpha_1','alpha_2','mmin','mmax','b','mu_g_low','sigma_g_low','lambda_g_low','mu_g_high','sigma_g_high','lambda_g']
@@ -231,6 +236,7 @@ class massprior_BrokenPowerLawTripleMultiPeak(pm_prob):
                                                  kwargs['mu_g_3'],kwargs['sigma_g_3'],kwargs['mmin'],kwargs['mu_g_3']+5*kwargs['sigma_g_3'])
 
 
+#LVK reviewed
 class m1m2_conditioned(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters+['beta']
@@ -241,6 +247,7 @@ class m1m2_conditioned(pm1m2_prob):
         p2 = PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta'])
         self.prior=conditional_2dimpdf(p1,p2)
 
+#LVK reviewed
 class m1m2_conditioned_lowpass_m2(pm1m2z_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters+['beta']
@@ -251,6 +258,7 @@ class m1m2_conditioned_lowpass_m2(pm1m2z_prob):
         p2 = LowpassSmoothedProb(PowerLaw(kwargs['mmin'],kwargs['mmax'],kwargs['beta']),kwargs['delta_m'])
         self.prior=conditional_2dimz_pdf(p1,p2)
 
+#LVK reviewed
 class m1m2_conditioned_lowpass(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters+['beta','delta_m']
@@ -262,6 +270,7 @@ class m1m2_conditioned_lowpass(pm1m2_prob):
         self.prior=conditional_2dimpdf(p1,p2)
 
 
+#LVK reviewed
 class m1m2_paired_massratio_dip(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters + ['beta','bottomsmooth', 'topsmooth', 
@@ -283,6 +292,7 @@ class m1m2_paired_massratio_dip(pm1m2_prob):
         self.prior=paired_2dimpdf(p,pairing_function)
 
 
+#LVK reviewed
 class m1m2_paired_massratio_dip_general(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters + ['beta_bottom','beta_top','bottomsmooth', 'topsmooth', 
@@ -373,6 +383,7 @@ class m1m2_paired_bpl_triplepeak_dip(pm1m2_prob):
         
         self.prior=paired_2dimpdf(p,pairing_function)
 
+#LVK reviewed
 class m1m2_paired_massratio_bplmulti_dip(pm1m2_prob):
     def __init__(self):
         wrapper_m = massprior_BrokenPowerLawMultiPeak()
@@ -408,6 +419,7 @@ class m1m2_paired_massratio_bplmulti_dip(pm1m2_prob):
 
 
 
+#LVK reviewed
 class m1m2_paired_massratio_bplmulti_dip_conditioned(pm1m2_prob):
     def __init__(self):
         wrapper_m = massprior_BrokenPowerLawMultiPeak()
@@ -432,6 +444,7 @@ class m1m2_paired_massratio_bplmulti_dip_conditioned(pm1m2_prob):
         
         self.prior=conditional_2dimpdf(p1,p2)
 
+#LVK reviewed
 class m1m2_paired(pm1m2_prob):
     def __init__(self,wrapper_m):
         self.population_parameters = wrapper_m.population_parameters + ['beta']
@@ -610,6 +623,7 @@ class spinprior_default_beta_window_beta(object):
         return xp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2,mass_1_source,mass_2_source))
 
         
+#LVK reviewed
 class spinprior_default(object):
     def __init__(self):
         self.population_parameters=['alpha_chi','beta_chi','sigma_t','csi_spin']
@@ -636,6 +650,7 @@ class spinprior_default(object):
         return xp.exp(self.log_pdf(chi_1,chi_2,cos_t_1,cos_t_2))
 
 
+#LVK reviewed
 class spinprior_default_gaussian(object):
     def __init__(self):
         self.population_parameters=['mu_chi_1','mu_chi_2','sigma_chi_1','sigma_chi_2','sigma_t','csi_spin']

@@ -15,7 +15,7 @@ import mpmath
 
 LOWERL=np.nan_to_num(-np.inf)
 
-
+#LVK reviewed
 def create_pixelated_catalogs(outfolder,nside,groups_dict,fields_to_take=None,batch=100000,nest=False):
     '''
     Divide a galaxy catlalog file into pixelated files
@@ -94,6 +94,7 @@ def create_pixelated_catalogs(outfolder,nside,groups_dict,fields_to_take=None,ba
     istart = 0
     np.savetxt(os.path.join(outfolder,'checkpoint_creation.txt'),np.array([istart]),fmt='%d')    
 
+#LVK reviewed
 def clear_empty_pixelated_files(outfolder,nside):
     '''
     This function deletes the files with empty pixels and also saves a 
@@ -118,6 +119,7 @@ def clear_empty_pixelated_files(outfolder,nside):
                 os.remove(os.path.join(outfolder,'pixel_{:d}.hdf5'.format(pix)))
     np.savetxt(os.path.join(outfolder,'filled_pixels.txt'),np.array(filled_pixels),fmt='%d')
 
+#LVK reviewed
 def remove_nans_pixelated_files(outfolder,pixel,fields_to_take,grouping):
     '''
     The function creates a group in the pixelated files and record what galaxies have 
@@ -145,6 +147,7 @@ def remove_nans_pixelated_files(outfolder,pixel,fields_to_take,grouping):
             gg.create_dataset('not_NaN_indices',data=tokeep)
             gg.attrs['NaNs_removed'] = True
         
+#LVK reviewed
 def calculate_mthr_pixelated_files(outfolder,
                                    pixel,
                                    apparent_magnitude_flag,grouping,nside_mthr,
@@ -218,6 +221,7 @@ def calculate_mthr_pixelated_files(outfolder,
             subcat.attrs['mthr_calculated'] = True
 
 
+#LVK reviewed
 def get_redshift_grid_for_files(outfolder,pixel,grouping,cosmo_ref,
                                Nintegration=10,Numsigma=3,zcut=None):
     '''
@@ -334,6 +338,7 @@ def get_redshift_grid_for_files(outfolder,pixel,grouping,cosmo_ref,
                 subcat.attrs['z_grid_calculated'] = True
 
 
+#LVK reviewed
 def initialize_icarogw_catalog(outfolder,outfile,grouping):
     '''
     Iintialize the grouping of the icarogw catalog
@@ -460,6 +465,7 @@ def initialize_icarogw_catalog(outfolder,outfile,grouping):
     np.savetxt(os.path.join(outfolder,'{:s}_common_zgrid.txt'.format(grouping)),z_grid)    
         
 
+#LVK reviewed
 def calculate_interpolant_files(outfolder,z_grid,pixel,grouping,subgrouping,
                                 band,cosmo_ref,epsilon,ptype='gaussian'):
         '''
@@ -543,6 +549,7 @@ def calculate_interpolant_files(outfolder,z_grid,pixel,grouping,subgrouping,
                 subcat.attrs['interpolant_calculated'] = True
 
 
+#LVK reviewed
 class  icarogw_catalog(object):
     '''
     This is the class used to handle the icarogw catalog
@@ -917,6 +924,7 @@ class gwcosmo_catalog(object):
 
 # ---------------------------------------------------------------------------------------
 
+#LVK reviewed
 class kcorr(object):
     def __init__(self,band):
         '''

@@ -3,6 +3,7 @@ from .conversions import L2M, M2L
 import copy
 
 
+#LVK reviewed
 def _notch_filter(mass, mlow, delta_low, mhigh, delta_high, A):
     '''
     This function returns a notch filter based on the one defined in eq. (4) of https://arxiv.org/pdf/2111.03498.pdf, but using low and high pass filters based on the S
@@ -27,6 +28,7 @@ def _notch_filter(mass, mlow, delta_low, mhigh, delta_high, A):
     to_ret = 1-A*_highpass_filter(mass,mlow,delta_low)*_lowpass_filter(mass,mhigh,delta_high)
     return to_ret
 
+#LVK reviewed
 def _lowpass_filter(mass, mmax, delta_max):
     '''
     This function returns a low pass filter based on the S function defined above. Adapts the filter defined in eq. (2) of https://arxiv.org/pdf/2111.03498.pdf with the S function itself
@@ -335,6 +337,7 @@ class basic_1dimpdf(object):
         randomcdf=np.random.rand(N)
         return np.interp(randomcdf,cdfeval,sarray)
 
+#LVK reviewed
 class paired_2dimpdf(object):
     
     def __init__(self,pdf,pairing_function):
@@ -668,6 +671,7 @@ class LowpassSmoothedProbEvolving(basic_1dimpdf):
         xp = get_module_array(x)
         return xp.exp(self._log_pdf(x))
 
+#LVK reviewed
 class SmoothedPlusDipProb(basic_1dimpdf):
     def __init__(self, originprob, bottomsmooth, topsmooth, leftdip, rightdip, leftdipsmooth, rightdipsmooth, deep):
         '''
@@ -1263,7 +1267,7 @@ class BrokenPowerLawTripleMultiPeak(basic_1dimpdf):
         return xp.log(bpl_part+g_part)
 
 
-
+#LVK reviewed
 class BrokenPowerLawMultiPeak(basic_1dimpdf):
     
     def __init__(self,minpl,maxpl,alpha_1,alpha_2,b,lambdag,lambdaglow,meanglow,sigmaglow,minglow,maxglow,

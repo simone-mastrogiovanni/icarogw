@@ -70,6 +70,7 @@ def f_GW_ISCO(m1,m2):
     return to_ret
 
 
+#LVK reviewed
 class ligo_skymap(object):
     
     def __init__(self,skymapname):
