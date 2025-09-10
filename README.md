@@ -8,7 +8,7 @@ Special thanks LIGO-Virgo-KAGRA / Aaron Geller / Northwestern who made possible 
 
 ## Installation
 
-You will need a `python 3.10` environment created with conda. 
+You will need a `python 3.12` environment created with conda. 
 
 Then, simply run
 
